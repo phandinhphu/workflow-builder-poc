@@ -1,0 +1,32 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "9router": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "omniroute",
+      "options": {
+        "baseURL": "http://127.0.0.1:20128/v1"
+      },
+      "models": {
+        "antigravity/gemini-3.5-flash-high": {
+          "name": "Gemini-3.5-flash"
+        },
+        "antigravity/gemini-3.1-pro-high": {
+          "name": "Gemini-3.1-pro"
+        },
+        "antigravity/claude-sonnet-5": {
+          "name": "Claude-sonnet-5"
+        },
+        "antigravity/claude-opus-4-6-thinking": {
+          "name": "Claude-opus-4.6"
+        },
+        "antigravity/claude-sonnet-4-6": {
+          "name": "Claude-sonnet-4.6"
+        },
+        "antigravity/gemini-2.5-pro": {
+          "name": "Gemini-2.5-pro"
+        }
+      }
+    }
+  }
+}
