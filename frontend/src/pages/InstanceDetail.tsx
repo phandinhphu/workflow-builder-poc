@@ -59,7 +59,7 @@ function maskContext(value: unknown, depth = 0): unknown {
 
 export default function InstanceDetail() {
   const { id } = useParams();
-  const [activeTab, setActiveTab] = useState<'info' | 'flow' | 'audit' | 'tasks'>('flow');
+  const [activeTab, setActiveTab] = useState<'info' | 'flow' | 'audit' | 'tasks' | 'participants'>('flow');
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
   const toasts = useToasts();
 
@@ -147,6 +147,7 @@ export default function InstanceDetail() {
             { id: 'flow', name: 'View Flow' },
             { id: 'audit', name: 'Audit & History' },
             { id: 'tasks', name: 'Tasks' },
+            ...(instance.participants ? [{ id: 'participants' as const, name: `Người tham gia (${instance.participantCount ?? instance.participants.length})` }] : []),
           ].map((tab) => (
             <button
               key={tab.id}
@@ -331,6 +332,75 @@ export default function InstanceDetail() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'participants' && instance.participants && (
+            <div className="p-6 max-w-4xl mx-auto space-y-6">
+              <div className="bg-white border border-border rounded-lg p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-2">
+                  <h3 className="text-base font-bold text-navy">Participant Snapshot</h3>
+                  <span className="text-xs text-muted">Kỳ: {instance.period ?? '—'} — chốt khi instance bắt đầu</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-gray-50 border border-border rounded-lg p-4 text-center">
+                    <span className="block text-2xl font-bold text-navy">{instance.participantCount ?? instance.participants.length}</span>
+                    <span className="text-xs text-muted">Tổng participants</span>
+                  </div>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                    <span className="block text-2xl font-bold text-green-700">{instance.participants.filter(p => p.status === 'COMPLETED').length}</span>
+                    <span className="text-xs text-green-600">Completed</span>
+                  </div>
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
+                    <span className="block text-2xl font-bold text-yellow-700">{instance.participants.filter(p => p.status === 'IN_PROGRESS').length}</span>
+                    <span className="text-xs text-yellow-600">In progress</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white border border-border rounded-lg p-6 shadow-sm">
+                <h3 className="text-base font-bold text-navy mb-4">Danh sách người tham gia</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 font-semibold text-muted text-xs uppercase tracking-wider border-b border-border">Participant</th>
+                        <th className="px-3 py-2 font-semibold text-muted text-xs uppercase tracking-wider border-b border-border">Bước hiện tại</th>
+                        <th className="px-3 py-2 font-semibold text-muted text-xs uppercase tracking-wider border-b border-border">Assignee hiện tại</th>
+                        <th className="px-3 py-2 font-semibold text-muted text-xs uppercase tracking-wider border-b border-border">Trạng thái</th>
+                        <th className="px-3 py-2 font-semibold text-muted text-xs uppercase tracking-wider border-b border-border">Hoàn thành</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {instance.participants.map(p => (
+                        <tr key={p.id} className="border-b border-border hover:bg-gray-50">
+                          <td className="px-3 py-2">
+                            <span className="text-sm font-medium text-navy">{p.displayName}</span>
+                            <span className="block text-xs text-muted">{p.department}</span>
+                          </td>
+                          <td className="px-3 py-2 text-sm text-gray-600">{p.currentStepLabel ?? '—'}</td>
+                          <td className="px-3 py-2 text-sm text-gray-600">{p.currentAssignee ?? '—'}</td>
+                          <td className="px-3 py-2">
+                            <span className={clsx(
+                              "inline-flex items-center px-2 py-1 rounded-full text-[10px] font-medium",
+                              p.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                              p.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                            )}>
+                              {p.status === 'COMPLETED' ? 'Completed' : p.status === 'IN_PROGRESS' ? 'In Progress' : 'Not started'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-sm text-gray-600">{p.completedAt ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {(instance.participantCount ?? 0) > instance.participants.length && (
+                  <p className="text-xs text-muted mt-3">
+                    * Hiển thị {instance.participants.length} / {instance.participantCount} participants trong snapshot.
+                  </p>
+                )}
               </div>
             </div>
           )}

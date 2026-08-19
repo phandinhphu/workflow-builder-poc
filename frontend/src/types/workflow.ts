@@ -70,9 +70,24 @@ export interface TriggerDefinition {
 
 export interface ParticipantScope {
   enabled: boolean;
+  source: 'ORGANIZATION_DIRECTORY' | 'EXTERNAL';
+  scopeKind: 'all_active' | 'department' | 'role' | 'fixed_users' | 'condition';
   selectorType: 'fixed' | 'group' | 'role' | 'department' | 'condition' | 'expression' | 'external';
-  selectorConfig: Record<string, unknown>;
+  selectorConfig: {
+    department?: string;
+    role?: string;
+    userIds?: string[];
+    rule?: string;
+    [key: string]: unknown;
+  };
   snapshotPolicy: 'AT_INSTANCE_START' | 'LIVE_REFRESH';
+}
+
+export interface ParticipantNotification {
+  enabled: boolean;
+  channels: ('inapp' | 'email' | 'teams')[];
+  titleTemplate: string;
+  bodyTemplate: string;
 }
 
 export interface WorkflowDefinition {
@@ -88,12 +103,27 @@ export interface WorkflowDefinition {
   updatedAt: string;
   trigger?: TriggerDefinition;
   participantScope?: ParticipantScope;
+  participantNotification?: ParticipantNotification;
   variables: WorkflowVariable[];
   nodes: NodeDefinition[];
   connections: ConnectionDefinition[];
 }
 
 export type InstanceStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
+
+export type ParticipantStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
+
+export interface WorkflowParticipantEntry {
+  id: string;
+  userId: string;
+  displayName: string;
+  department?: string;
+  currentStepLabel?: string;
+  currentAssignee?: string;
+  status: ParticipantStatus;
+  startedAt?: string;
+  completedAt?: string;
+}
 
 export interface WorkflowInstanceSummary {
   id: string;
@@ -108,6 +138,9 @@ export interface WorkflowInstanceSummary {
   activeAssignees: string[];
   startedAt: string;
   slaStatus?: 'ON_TIME' | 'OVERDUE';
+  period?: string;
+  participantCount?: number;
+  participants?: WorkflowParticipantEntry[];
 }
 
 export interface OrgUser {

@@ -3,7 +3,7 @@ import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon, UsersIcon, CheckCircleIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 import { useDesignerStore } from '../stores/designerStore';
-import { getWorkflowTypeOptions, getModuleOptions, orgUsers } from '../data/mockData';
+import { getWorkflowTypeOptions, getModuleOptions, orgUsers, resolveParticipantScope } from '../data/mockData';
 import type { WorkflowVariable } from '../types/workflow';
 
 interface WorkflowSettingsModalProps {
@@ -15,7 +15,7 @@ const VAR_TYPES = ['STRING', 'NUMBER', 'BOOLEAN', 'DATE', 'OBJECT', 'LIST'];
 
 export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'info' | 'scope' | 'vars'>('info');
-  const { workflowData, setWorkflowData, participantScope, setParticipantScope, variables, setVariables } = useDesignerStore();
+  const { workflowData, setWorkflowData, participantScope, setParticipantScope, participantNotification, setParticipantNotification, variables, setVariables } = useDesignerStore();
 
   const [newVarKey, setNewVarKey] = useState('');
   const [newVarType, setNewVarType] = useState('STRING');
@@ -25,17 +25,11 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
   const [varError, setVarError] = useState('');
 
   const scopeEnabled = participantScope.enabled;
+  const notificationEnabled = participantNotification.enabled;
 
-  const previewFixedUsers = orgUsers.slice(0, 5).map(u => u.displayName);
-  const scopePreviewCount = participantScope.enabled
-    ? participantScope.selectorType === 'fixed'
-      ? orgUsers.length
-      : participantScope.selectorType === 'group'
-        ? orgUsers.filter(u => u.department === participantScope.selectorConfig?.department).length || 12
-        : participantScope.selectorType === 'condition'
-          ? 45
-          : null
-    : null;
+  const resolvedScopeUsers = resolveParticipantScope(participantScope);
+  const previewFixedUsers = resolvedScopeUsers.slice(0, 5).map(u => u.displayName);
+  const scopePreviewCount = resolvedScopeUsers.length;
 
   const addVariable = () => {
     const key = newVarKey.trim();
@@ -196,80 +190,269 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
                   )}
 
                   {activeTab === 'scope' && (
-                    <div className="space-y-5 bg-white p-5 rounded-lg border border-border shadow-sm">
-                      <div className="flex items-center justify-between border-b border-border pb-4">
-                        <div>
-                          <h3 className="text-sm font-bold text-navy">Workflow có tập đối tượng tham gia</h3>
-                          <p className="text-xs text-muted mt-0.5">Xác định tập hợp người tham gia vào luồng quy trình này</p>
+                    <div className="space-y-6">
+                      <div className="bg-white p-5 rounded-lg border border-border shadow-sm space-y-5">
+                        <div className="flex items-center justify-between border-b border-border pb-4">
+                          <div>
+                            <h3 className="text-sm font-bold text-navy">ĐỐI TƯỢNG THAM GIA</h3>
+                            <p className="text-xs text-muted mt-0.5">Xác định tập hợp người tham gia vào luồng quy trình này (khác với Assignee của từng bước)</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              className="sr-only peer"
+                              checked={scopeEnabled}
+                              onChange={e => setParticipantScope({ enabled: e.target.checked })}
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                          </label>
                         </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="sr-only peer"
-                            checked={scopeEnabled}
-                            onChange={e => setParticipantScope({ enabled: e.target.checked })}
-                          />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                        </label>
-                      </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Chọn loại đối tượng tham gia</label>
-                        <select
-                          className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                          value={participantScope.selectorType}
-                          onChange={e => setParticipantScope({ selectorType: e.target.value as any })}
-                          disabled={!scopeEnabled}
-                        >
-                          <option value="fixed">Tất cả người dùng (Fixed List)</option>
-                          <option value="group">Nhóm / Vai trò / Phòng ban</option>
-                          <option value="condition">Điều kiện tổ chức</option>
-                          <option value="expression">Dynamic expression / External query</option>
-                        </select>
-                      </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Nguồn đối tượng</label>
+                          <select
+                            className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                            value={participantScope.source}
+                            onChange={e => setParticipantScope({ source: e.target.value as any })}
+                            disabled={!scopeEnabled}
+                          >
+                            <option value="ORGANIZATION_DIRECTORY">Tổ chức / Nhân sự (Organization Directory)</option>
+                            <option value="EXTERNAL">Nguồn bên ngoài (External)</option>
+                          </select>
+                        </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Chính sách snapshot</label>
-                        <select
-                          className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                          value={participantScope.snapshotPolicy}
-                          onChange={e => setParticipantScope({ snapshotPolicy: e.target.value as any })}
-                          disabled={!scopeEnabled}
-                        >
-                          <option value="AT_INSTANCE_START">Chốt danh sách tại thời điểm instance bắt đầu</option>
-                          <option value="LIVE_REFRESH">Resolve động mỗi khi đến bước cần participant</option>
-                        </select>
-                      </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Phạm vi</label>
+                          <div className="space-y-2">
+                            {([
+                              { kind: 'all_active', label: 'Tất cả nhân viên đang hoạt động' },
+                              { kind: 'department', label: 'Theo phòng ban' },
+                              { kind: 'role', label: 'Theo vai trò' },
+                              { kind: 'fixed_users', label: 'Chọn người cụ thể' },
+                              { kind: 'condition', label: 'Theo điều kiện động (rule)' },
+                            ] as const).map(opt => (
+                              <label key={opt.kind} className={clsx(
+                                "flex items-start gap-3 border rounded-md p-3 cursor-pointer transition-colors",
+                                participantScope.scopeKind === opt.kind ? "border-primary bg-primary/5" : "border-border hover:border-gray-300"
+                              )}>
+                                <input
+                                  type="radio"
+                                  name="scopeKind"
+                                  className="mt-0.5 w-4 h-4 text-primary focus:ring-primary border-gray-300"
+                                  checked={participantScope.scopeKind === opt.kind}
+                                  onChange={() => setParticipantScope({ scopeKind: opt.kind })}
+                                  disabled={!scopeEnabled}
+                                />
+                                <span className="text-sm font-medium text-gray-800">{opt.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
 
-                      {scopeEnabled && (
-                        <div className="bg-gray-50 rounded-md p-4 border border-border">
-                          <h4 className="text-sm font-medium text-navy flex items-center gap-2 mb-3">
-                            <UsersIcon className="w-4 h-4 text-primary" /> Kết quả xem trước
-                          </h4>
-                          {participantScope.selectorType === 'fixed' ? (
+                        {scopeEnabled && participantScope.scopeKind === 'department' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Phòng ban</label>
+                            <select
+                              className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+                              value={participantScope.selectorConfig.department ?? ''}
+                              onChange={e => setParticipantScope({ selectorConfig: { ...participantScope.selectorConfig, department: e.target.value } })}
+                            >
+                              <option value="">Chọn phòng ban...</option>
+                              {Array.from(new Set(orgUsers.map(u => u.department))).map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                          </div>
+                        )}
+
+                        {scopeEnabled && participantScope.scopeKind === 'role' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Vai trò</label>
+                            <select
+                              className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+                              value={participantScope.selectorConfig.role ?? ''}
+                              onChange={e => setParticipantScope({ selectorConfig: { ...participantScope.selectorConfig, role: e.target.value } })}
+                            >
+                              <option value="">Chọn vai trò...</option>
+                              {Array.from(new Set(orgUsers.map(u => u.role))).map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                          </div>
+                        )}
+
+                        {scopeEnabled && participantScope.scopeKind === 'fixed_users' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Người tham gia cụ thể</label>
+                            <div className="flex flex-wrap gap-2">
+                              {orgUsers.map(u => {
+                                const selected = participantScope.selectorConfig.userIds?.includes(u.id) ?? false;
+                                return (
+                                  <button
+                                    key={u.id}
+                                    type="button"
+                                    onClick={() => setParticipantScope({
+                                      selectorConfig: {
+                                        ...participantScope.selectorConfig,
+                                        userIds: selected
+                                          ? (participantScope.selectorConfig.userIds ?? []).filter(id => id !== u.id)
+                                          : [...(participantScope.selectorConfig.userIds ?? []), u.id],
+                                      },
+                                    })}
+                                    className={clsx(
+                                      "px-3 py-1.5 rounded-full border text-xs font-medium transition-colors",
+                                      selected ? "border-primary bg-primary text-white" : "border-border bg-white text-gray-600 hover:border-primary"
+                                    )}
+                                  >
+                                    {u.displayName}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {scopeEnabled && participantScope.scopeKind === 'condition' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Điều kiện động <span className="text-muted font-normal">(rule được resolve mỗi khi instance bắt đầu)</span>
+                            </label>
+                            <textarea
+                              rows={3}
+                              className="w-full border border-border rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                              placeholder={'Ví dụ:\nemployee.status == ACTIVE\nemployee.department == IT'}
+                              value={participantScope.selectorConfig.rule ?? ''}
+                              onChange={e => setParticipantScope({ selectorConfig: { ...participantScope.selectorConfig, rule: e.target.value } })}
+                            />
+                            <p className="text-[11px] text-muted mt-1 italic">
+                              Tháng 8 có 100 người → instance tháng 8 có 100 participants; tháng 9 công ty có 107 người → instance tháng 9 tự resolve thành 107.
+                            </p>
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Chính sách snapshot</label>
+                          <div className="space-y-2">
+                            <label className={clsx("flex items-start gap-3 border rounded-md p-3 cursor-pointer transition-colors", participantScope.snapshotPolicy === 'AT_INSTANCE_START' ? "border-primary bg-primary/5" : "border-border hover:border-gray-300")}>
+                              <input
+                                type="radio"
+                                name="snapshotPolicy"
+                                className="mt-0.5 w-4 h-4 text-primary focus:ring-primary border-gray-300"
+                                checked={participantScope.snapshotPolicy === 'AT_INSTANCE_START'}
+                                onChange={() => setParticipantScope({ snapshotPolicy: 'AT_INSTANCE_START' })}
+                                disabled={!scopeEnabled}
+                              />
+                              <span className="text-sm">
+                                <span className="font-medium text-gray-800">Chốt danh sách khi workflow bắt đầu</span>
+                                <span className="block text-xs text-muted">Resolve một lần và lưu snapshot — lịch sử ổn định, dễ audit. Người mới vào giữa kỳ không bị nhét vào kỳ đang chạy.</span>
+                              </span>
+                            </label>
+                            <label className={clsx("flex items-start gap-3 border rounded-md p-3 cursor-pointer transition-colors", participantScope.snapshotPolicy === 'LIVE_REFRESH' ? "border-primary bg-primary/5" : "border-border hover:border-gray-300")}>
+                              <input
+                                type="radio"
+                                name="snapshotPolicy"
+                                className="mt-0.5 w-4 h-4 text-primary focus:ring-primary border-gray-300"
+                                checked={participantScope.snapshotPolicy === 'LIVE_REFRESH'}
+                                onChange={() => setParticipantScope({ snapshotPolicy: 'LIVE_REFRESH' })}
+                                disabled={!scopeEnabled}
+                              />
+                              <span className="text-sm">
+                                <span className="font-medium text-gray-800">Resolve động mỗi lần cần participant</span>
+                                <span className="block text-xs text-muted">Danh sách luôn theo rule hiện tại — dùng khi cần phản ánh tổ chức theo thời gian thực.</span>
+                              </span>
+                            </label>
+                          </div>
+                        </div>
+
+                        {scopeEnabled && (
+                          <div className="bg-gray-50 rounded-md p-4 border border-border">
+                            <h4 className="text-sm font-medium text-navy flex items-center gap-2 mb-3">
+                              <UsersIcon className="w-4 h-4 text-primary" /> Kết quả xem trước
+                            </h4>
+                            <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                              <CheckCircleIcon className="w-3 h-3 text-success" />
+                              <span><strong className="text-navy">{scopePreviewCount}</strong> người sẽ tham gia khi instance bắt đầu</span>
+                            </div>
                             <ul className="text-sm text-gray-700 space-y-1.5 list-disc list-inside bg-white p-3 border border-border rounded">
                               {previewFixedUsers.map((user, idx) => (
                                 <li key={idx}>{user}</li>
                               ))}
-                              {orgUsers.length > previewFixedUsers.length && (
-                                <li className="text-muted">...và {orgUsers.length - previewFixedUsers.length} người khác</li>
+                              {scopePreviewCount > previewFixedUsers.length && (
+                                <li className="text-muted">...và {scopePreviewCount - previewFixedUsers.length} người khác</li>
                               )}
                             </ul>
-                          ) : scopePreviewCount !== null ? (
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <span>
-                                <CheckCircleIcon className="w-3 h-3 text-success mr-1" />
-                                {scopePreviewCount} người sẽ tham gia workflow này khi instance bắt đầu
-                              </span>
-                            </div>
-                          ) : (
-                            <p className="text-sm text-gray-500">Danh sách sẽ được resolve khi workflow chạy</p>
-                          )}
-                          <p className="text-[11px] text-muted mt-3 italic">
-                            * Danh sách này sẽ được chốt tại thời điểm Workflow Instance bắt đầu.
+                            <p className="text-[11px] text-muted mt-3 italic">
+                              * Đây là rule, không phải danh sách cố định. Danh sách thực tế được resolve và chốt tại thời điểm instance bắt đầu.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="bg-white p-5 rounded-lg border border-border shadow-sm space-y-5">
+                        <div className="flex items-center justify-between border-b border-border pb-4">
+                          <div>
+                            <h3 className="text-sm font-bold text-navy">THÔNG BÁO NGƯỜI THAM GIA</h3>
+                            <p className="text-xs text-muted mt-0.5">Thông báo cấp workflow khi đợt bắt đầu — khác với thông báo khi giao task cụ thể</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              className="sr-only peer"
+                              checked={notificationEnabled}
+                              onChange={e => setParticipantNotification({ enabled: e.target.checked })}
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                          </label>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Kênh</label>
+                          <div className="flex gap-4">
+                            {([
+                              { id: 'inapp', label: 'In-app' },
+                              { id: 'email', label: 'Email' },
+                              { id: 'teams', label: 'Teams' },
+                            ] as const).map(ch => (
+                              <label key={ch.id} className="flex items-center gap-2 text-sm text-gray-700">
+                                <input
+                                  type="checkbox"
+                                  className="w-4 h-4 text-primary focus:ring-primary border-gray-300 rounded"
+                                  checked={participantNotification.channels.includes(ch.id)}
+                                  onChange={e => {
+                                    const next = e.target.checked
+                                      ? [...participantNotification.channels, ch.id]
+                                      : participantNotification.channels.filter(c => c !== ch.id);
+                                    setParticipantNotification({ channels: next });
+                                  }}
+                                  disabled={!notificationEnabled}
+                                />
+                                {ch.label}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Tiêu đề</label>
+                          <input
+                            type="text"
+                            className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary disabled:bg-gray-50 disabled:text-gray-400"
+                            value={participantNotification.titleTemplate}
+                            onChange={e => setParticipantNotification({ titleTemplate: e.target.value })}
+                            disabled={!notificationEnabled}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Nội dung</label>
+                          <textarea
+                            rows={3}
+                            className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none disabled:bg-gray-50 disabled:text-gray-400"
+                            value={participantNotification.bodyTemplate}
+                            onChange={e => setParticipantNotification({ bodyTemplate: e.target.value })}
+                            disabled={!notificationEnabled}
+                          />
+                          <p className="text-[11px] text-muted mt-1 italic">
+                            Hỗ trợ biến: {'{{workflow.period}}'}, {'{{workflow.dueDate}}'} — khi instance được tạo, hệ thống gửi notification cho từng participant trong snapshot.
                           </p>
                         </div>
-                      )}
+                      </div>
                     </div>
                   )}
 

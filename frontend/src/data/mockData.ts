@@ -6,6 +6,7 @@ import type {
   WorkflowVariable,
   InstanceTimelineEntry,
   InstanceTask,
+  ParticipantScope,
 } from '../types/workflow';
 
 const CURRENT_USER = { id: 'U000', name: 'Nguyễn Văn B', role: 'Admin' };
@@ -31,6 +32,43 @@ export function findUser(id: string): OrgUser | undefined {
 
 export function userDisplayName(id: string): string {
   return findUser(id)?.displayName ?? id;
+}
+
+export function resolveParticipantScope(scope?: ParticipantScope | null): OrgUser[] {
+  if (!scope?.enabled) return [];
+  const cfg = scope.selectorConfig ?? {};
+  switch (scope.scopeKind) {
+    case 'department':
+      return orgUsers.filter(u => cfg.department ? u.department === cfg.department : false);
+    case 'role':
+      return orgUsers.filter(u => cfg.role ? u.role === cfg.role : false);
+    case 'fixed_users':
+      return orgUsers.filter(u => cfg.userIds?.includes(u.id) ?? false);
+    case 'condition': {
+      const rule = (cfg.rule ?? '').toLowerCase();
+      if (rule.includes('active')) return orgUsers.filter(u => u.status === 'Active');
+      const dept = orgUsers.find(u => rule.includes(u.department.toLowerCase()));
+      if (dept) return orgUsers.filter(u => u.department === dept.department);
+      const role = orgUsers.find(u => rule.includes(u.role.toLowerCase()));
+      if (role) return orgUsers.filter(u => u.role === role.role);
+      return orgUsers.filter(u => u.status === 'Active');
+    }
+    case 'all_active':
+    default:
+      return orgUsers.filter(u => u.status === 'Active');
+  }
+}
+
+export function scopeDescription(scope?: ParticipantScope | null): string {
+  if (!scope?.enabled) return 'Không bật';
+  switch (scope.scopeKind) {
+    case 'department': return `Phòng ban: ${scope.selectorConfig.department ?? '—'}`;
+    case 'role': return `Vai trò: ${scope.selectorConfig.role ?? '—'}`;
+    case 'fixed_users': return `Chọn ${scope.selectorConfig.userIds?.length ?? 0} người cụ thể`;
+    case 'condition': return scope.selectorConfig.rule ?? 'Điều kiện động';
+    case 'all_active':
+    default: return 'Tất cả nhân viên đang hoạt động';
+  }
 }
 
 export const workflowTemplates = [
@@ -137,8 +175,14 @@ export const workflows: WorkflowDefinition[] = [
     draftVersion: '1.0',
     createdAt: '2024-12-10',
     updatedAt: '2024-12-10 09:00',
-    trigger: { type: 'manual', config: {} },
-    participantScope: { enabled: true, selectorType: 'fixed', selectorConfig: {}, snapshotPolicy: 'AT_INSTANCE_START' },
+    trigger: { type: 'schedule', config: { cron: '0 8 1 * *', label: '08:00 ngày 01 hàng tháng' } },
+    participantScope: { enabled: true, source: 'ORGANIZATION_DIRECTORY', scopeKind: 'all_active', selectorType: 'fixed', selectorConfig: { rule: 'employee.status == ACTIVE' }, snapshotPolicy: 'AT_INSTANCE_START' },
+    participantNotification: {
+      enabled: true,
+      channels: ['inapp', 'email'],
+      titleTemplate: 'Đợt đánh giá {{workflow.period}} đã bắt đầu',
+      bodyTemplate: 'Bạn là người tham gia đợt đánh giá {{workflow.period}}. Thời gian hoàn thành: {{workflow.dueDate}}',
+    },
     variables: [
       { key: 'period', dataType: 'STRING', defaultValue: { kind: 'CONSTANT', value: 'Q4-2024' }, required: true, description: 'Kỳ đánh giá' },
       { key: 'evaluationValid', dataType: 'BOOLEAN', defaultValue: { kind: 'CONSTANT', value: false }, required: true, description: 'HR xác nhận kết quả đánh giá hợp lệ' },
@@ -222,6 +266,13 @@ export const instances: WorkflowInstanceSummary[] = [
   { id: 'inst-1052', requestCode: 'REQ-1052', workflowId: '1', workflowName: 'Phê duyệt mua sắm', workflowVersion: '2.2', creatorId: 'U004', creatorName: 'Phạm Hồng Đăng', status: 'COMPLETED', currentStepLabels: ['Hoàn tất quy trình'], activeAssignees: [], startedAt: '2024-11-18 10:15', slaStatus: 'ON_TIME' },
   { id: 'inst-1049', requestCode: 'REQ-1049', workflowId: '2', workflowName: 'Phê duyệt nghỉ phép', workflowVersion: '1.4', creatorId: 'U008', creatorName: 'Bùi Phương Thảo', status: 'REJECTED', currentStepLabels: ['Phê duyệt Cấp 1'], activeAssignees: ['U003'], startedAt: '2024-11-17 16:45', slaStatus: 'ON_TIME' },
   { id: 'inst-1030', requestCode: 'REQ-1030', workflowId: '1', workflowName: 'Phê duyệt mua sắm', workflowVersion: '2.2', creatorId: 'U007', creatorName: 'Hoàng Quốc Việt', status: 'CANCELLED', currentStepLabels: ['Hủy bỏ'], activeAssignees: ['U007'], startedAt: '2024-11-15 08:20', slaStatus: 'ON_TIME' },
+  { id: 'inst-1100', requestCode: 'EVAL-0806', workflowId: '6', workflowName: 'Đánh giá hiệu quả công việc', workflowVersion: '1.0', creatorId: 'U000', creatorName: 'Nguyễn Văn B', status: 'RUNNING', currentStepLabels: ['Tự đánh giá', 'Quản lý đánh giá', 'HR kiểm tra'], activeAssignees: ['U001', 'U002', 'U005'], startedAt: '2026-08-01 08:00', slaStatus: 'ON_TIME', period: '08/2026', participantCount: 100, participants: [
+    { id: 'p-1', userId: 'U001', displayName: 'Nguyễn Thị Mai', department: 'Phòng Nhân sự', currentStepLabel: 'HR kiểm tra', currentAssignee: 'Nguyễn Thị Mai', status: 'IN_PROGRESS', startedAt: '2026-08-01 08:00' },
+    { id: 'p-2', userId: 'U002', displayName: 'Trần Hoàng Bách', department: 'Phòng Công nghệ', currentStepLabel: 'Quản lý đánh giá', currentAssignee: 'Phạm Hồng Đăng', status: 'IN_PROGRESS', startedAt: '2026-08-01 08:00' },
+    { id: 'p-3', userId: 'U003', displayName: 'Lê Minh Tâm', department: 'Phòng Kinh doanh', currentStepLabel: 'Hoàn tất', currentAssignee: '', status: 'COMPLETED', startedAt: '2026-08-01 08:00', completedAt: '2026-08-05 15:30' },
+    { id: 'p-4', userId: 'U004', displayName: 'Phạm Hồng Đăng', department: 'Phòng Tài chính', currentStepLabel: 'Tự đánh giá', currentAssignee: 'Phạm Hồng Đăng', status: 'NOT_STARTED', startedAt: '2026-08-01 08:00' },
+    { id: 'p-5', userId: 'U005', displayName: 'Vũ Ngọc Trinh', department: 'Phòng Marketing', currentStepLabel: 'HR kiểm tra', currentAssignee: 'Nguyễn Thị Mai', status: 'IN_PROGRESS', startedAt: '2026-08-01 08:00' },
+  ] },
 ];
 
 export function getInstancesByWorkflow(workflowId?: string): WorkflowInstanceSummary[] {
@@ -284,3 +335,38 @@ export function getWorkflowTypeOptions() {
 export function getModuleOptions() {
   return ['Operations', 'HR', 'Finance'];
 }
+
+export interface SyncLogEntry {
+  id: string;
+  time: string;
+  mode: 'Full' | 'Incremental';
+  recordsUpserted: number;
+  recordsInactivated: number;
+  errors: number;
+  status: 'SUCCESS' | 'ERROR' | 'RUNNING';
+  detail?: string;
+}
+
+export const syncLogs: SyncLogEntry[] = [
+  { id: 'sl-1', time: '2024-12-10 08:30', mode: 'Incremental', recordsUpserted: 3, recordsInactivated: 1, errors: 0, status: 'SUCCESS', detail: 'Cập nhật managerId cho 2 user; vô hiệu hóa 1 user (Hoàng Quốc Việt) theo nguồn.' },
+  { id: 'sl-2', time: '2024-12-09 08:30', mode: 'Full', recordsUpserted: 8, recordsInactivated: 0, errors: 0, status: 'SUCCESS', detail: 'Đồng bộ đầy đủ directory theo external id.' },
+  { id: 'sl-3', time: '2024-12-08 08:30', mode: 'Incremental', recordsUpserted: 0, recordsInactivated: 0, errors: 2, status: 'ERROR', detail: '2 record thiếu external id — bỏ qua và ghi audit.' },
+  { id: 'sl-4', time: '2024-12-07 08:30', mode: 'Full', recordsUpserted: 8, recordsInactivated: 0, errors: 0, status: 'SUCCESS', detail: 'Đồng bộ đầy đủ directory theo external id.' },
+];
+
+export interface ConnectorDefinition {
+  id: string;
+  name: string;
+  type: 'HR Source' | 'Webhook' | 'Email' | 'Legacy';
+  baseUrl: string;
+  auth: 'OAuth 2.0' | 'API Key' | 'Basic Auth';
+  status: 'CONNECTED' | 'DISABLED';
+  lastChecked: string;
+}
+
+export const connectors: ConnectorDefinition[] = [
+  { id: 'conn-1', name: 'SAP SuccessFactors', type: 'HR Source', baseUrl: 'https://api.successfactors.example.com', auth: 'OAuth 2.0', status: 'CONNECTED', lastChecked: '2024-12-10 08:30' },
+  { id: 'conn-2', name: 'Webhook Inbound', type: 'Webhook', baseUrl: 'https://api.workflow-builder.local/webhooks', auth: 'API Key', status: 'CONNECTED', lastChecked: '2024-12-10 08:31' },
+  { id: 'conn-3', name: 'Email Gateway', type: 'Email', baseUrl: 'smtp://mail.company.com', auth: 'Basic Auth', status: 'DISABLED', lastChecked: '2024-11-28 14:20' },
+  { id: 'conn-4', name: 'HRIS v2 (Legacy)', type: 'Legacy', baseUrl: 'https://hris-legacy.company.com/api', auth: 'API Key', status: 'DISABLED', lastChecked: '2024-10-02 09:00' },
+];

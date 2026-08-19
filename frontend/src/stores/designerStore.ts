@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { applyNodeChanges, applyEdgeChanges, type Node, type Edge, type Connection, type NodeChange, type EdgeChange } from '@xyflow/react';
-import type { WorkflowVariable, ParticipantScope, TriggerDefinition, WorkflowStatus } from '../types/workflow';
+import type { WorkflowVariable, ParticipantScope, ParticipantNotification, TriggerDefinition, WorkflowStatus } from '../types/workflow';
 
 export interface DesignerPanelState {
   workflowId: string | null;
@@ -17,6 +17,7 @@ export interface DesignerPanelState {
   edges: Edge[];
   trigger?: TriggerDefinition;
   participantScope: ParticipantScope;
+  participantNotification: ParticipantNotification;
   variables: WorkflowVariable[];
   selectedElement: Node | Edge | null;
   selectedElementType: 'node' | 'edge' | null;
@@ -39,6 +40,7 @@ export interface DesignerActions {
     status: WorkflowStatus;
     trigger?: TriggerDefinition;
     participantScope?: ParticipantScope;
+    participantNotification?: ParticipantNotification;
     variables: WorkflowVariable[];
     nodes?: Node[];
     edges?: Edge[];
@@ -56,6 +58,7 @@ export interface DesignerActions {
   removeEdge: (id: string) => void;
   setTrigger: (trigger: TriggerDefinition) => void;
   setParticipantScope: (scope: Partial<ParticipantScope>) => void;
+  setParticipantNotification: (notif: Partial<ParticipantNotification>) => void;
   setVariables: (variables: WorkflowVariable[]) => void;
   setSelectedElement: (element: Node | Edge | null, type: 'node' | 'edge' | null) => void;
   setIsDirty: (dirty: boolean) => void;
@@ -84,9 +87,17 @@ const initialState: DesignerPanelState = {
   trigger: undefined,
   participantScope: {
     enabled: false,
+    source: 'ORGANIZATION_DIRECTORY',
+    scopeKind: 'all_active',
     selectorType: 'fixed',
     selectorConfig: {},
     snapshotPolicy: 'AT_INSTANCE_START',
+  },
+  participantNotification: {
+    enabled: false,
+    channels: ['inapp', 'email'],
+    titleTemplate: 'Đợt đánh giá {{workflow.period}} đã bắt đầu',
+    bodyTemplate: 'Bạn là người tham gia đợt đánh giá {{workflow.period}}. Thời gian hoàn thành: {{workflow.dueDate}}',
   },
   variables: [],
   selectedElement: null,
@@ -114,6 +125,7 @@ export const useDesignerStore = create<DesignerStore>((set) => ({
     },
     trigger: wf.trigger,
     participantScope: wf.participantScope ?? { ...initialState.participantScope },
+    participantNotification: wf.participantNotification ?? { ...initialState.participantNotification },
     variables: wf.variables,
     nodes: wf.nodes ?? [],
     edges: wf.edges ?? [],
@@ -181,15 +193,21 @@ export const useDesignerStore = create<DesignerStore>((set) => ({
     isDirty: true,
   })),
 
-  updateNodeData: (id, data) => set((state) => ({
-    nodes: state.nodes.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n),
-    isDirty: true,
-  })),
+  updateNodeData: (id, data) => set((state) => {
+    const nodes = state.nodes.map(n => n.id === id ? { ...n, data: { ...n.data, ...data } } : n);
+    const selectedElement = state.selectedElementType === 'node' && state.selectedElement?.id === id
+      ? nodes.find(n => n.id === id) ?? state.selectedElement
+      : state.selectedElement;
+    return { nodes, selectedElement, isDirty: true };
+  }),
 
-  updateEdgeData: (id, data) => set((state) => ({
-    edges: state.edges.map(e => e.id === id ? { ...e, data: { ...e.data, ...data } } : e),
-    isDirty: true,
-  })),
+  updateEdgeData: (id, data) => set((state) => {
+    const edges = state.edges.map(e => e.id === id ? { ...e, data: { ...e.data, ...data } } : e);
+    const selectedElement = state.selectedElementType === 'edge' && state.selectedElement?.id === id
+      ? edges.find(e => e.id === id) ?? state.selectedElement
+      : state.selectedElement;
+    return { edges, selectedElement, isDirty: true };
+  }),
 
   removeEdge: (id) => set((state) => ({
     edges: state.edges.filter(e => e.id !== id),
@@ -205,6 +223,11 @@ export const useDesignerStore = create<DesignerStore>((set) => ({
 
   setParticipantScope: (scope) => set((state) => ({
     participantScope: { ...state.participantScope, ...scope },
+    isDirty: true,
+  })),
+
+  setParticipantNotification: (notif) => set((state) => ({
+    participantNotification: { ...state.participantNotification, ...notif },
     isDirty: true,
   })),
 
@@ -230,5 +253,6 @@ export const getDesignerSnapshot = (state: DesignerStore) => ({
   edges: state.edges,
   trigger: state.trigger,
   participantScope: state.participantScope,
+  participantNotification: state.participantNotification,
   variables: state.variables,
 });

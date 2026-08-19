@@ -155,6 +155,8 @@ export default function WorkflowBuilder() {
       version: wf?.draftVersion ?? '1.0',
       status: wf?.status ?? 'DRAFT',
       trigger: triggerDef,
+      participantScope: wf?.participantScope ?? (createState as any).participantScope,
+      participantNotification: wf?.participantNotification ?? (createState as any).participantNotification,
       variables: wf?.variables ?? [],
       nodes: n,
       edges: e,

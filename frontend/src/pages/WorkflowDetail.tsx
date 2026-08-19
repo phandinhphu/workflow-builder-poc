@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import VersionHistoryModal from '../components/VersionHistoryModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Toast, { useToasts } from '../components/Toast';
-import { getWorkflow, getInstancesByWorkflow, userDisplayName, hasRunningInstances, workflowVersions } from '../data/mockData';
+import { getWorkflow, getInstancesByWorkflow, userDisplayName, hasRunningInstances, workflowVersions, scopeDescription } from '../data/mockData';
 
 export default function WorkflowDetail() {
   const { id } = useParams();
@@ -177,9 +177,15 @@ export default function WorkflowDetail() {
                   </div>
                   <div className="flex justify-between py-2 border-b border-gray-100">
                     <span className="text-muted">Đối tượng tham gia</span>
-                    <span className="font-medium text-navy">
-                      {workflow.participantScope?.enabled
-                        ? workflow.participantScope.selectorType === 'fixed' ? 'Tất cả người dùng' : workflow.participantScope.selectorType
+                    <span className="font-medium text-navy text-right">
+                      {workflow.participantScope?.enabled ? scopeDescription(workflow.participantScope) : 'Không bật'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b border-gray-100">
+                    <span className="text-muted">Thông báo người tham gia</span>
+                    <span className="font-medium text-navy text-right">
+                      {workflow.participantNotification?.enabled
+                        ? `${workflow.participantNotification.channels.join(', ')}`
                         : 'Không bật'}
                     </span>
                   </div>

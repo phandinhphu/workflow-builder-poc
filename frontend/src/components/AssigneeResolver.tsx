@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDownIcon, MagnifyingGlassIcon, UserIcon, UsersIcon, BriefcaseIcon, HomeIcon, ArrowRightIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { ChevronDownIcon, MagnifyingGlassIcon, UserIcon, UsersIcon, BriefcaseIcon, HomeIcon, ArrowRightIcon, CheckIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 import { orgUsers } from '../data/mockData';
 
@@ -41,53 +41,62 @@ const MOCK_GROUPS = [
   { id: 'GRP_FINANCE_TEAM', name: 'Finance Team' },
 ];
 
+const VALUE_LESS_TYPES: AssigneeResolverConfig['type'][] = ['current_participant', 'participant_manager', 'creator_manager', 'department_head'];
+
 export default function AssigneeResolver({ config, onChange, participants }: AssigneeResolverProps) {
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const selectedUser = config.value || null;
   const selectedType = RESOLVER_TYPES.find(t => t.value === config.type) ?? RESOLVER_TYPES[0];
 
-  const getDisplayLabel = (type: string, value: string): string => {
-    switch (type) {
-      case 'fixed':
-        const user = MOCK_USERS.find(u => u.id === value);
-        return user ? user.name : value;
-      case 'role':
-        const role = MOCK_ROLES.find(r => r.id === value);
-        return role ? role.name : value;
-      case 'group':
-        const group = MOCK_GROUPS.find(g => g.id === value);
-        return group ? group.name : value;
-      case 'dynamic':
-        return `\${${value}}`;
-      default:
-        return value;
-    }
-  };
-
-  const filteredUsers = MOCK_USERS.filter(u => 
+  const filteredUsers = MOCK_USERS.filter(u =>
     u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const selectedSummary = (): string => {
+    switch (config.type) {
+      case 'fixed': {
+        const user = MOCK_USERS.find(u => u.id === config.value);
+        return user ? `Đã chọn: ${user.name}` : 'Chưa chọn người dùng';
+      }
+      case 'role': {
+        const role = MOCK_ROLES.find(r => r.id === config.value);
+        return role ? `Đã chọn: ${role.name}` : 'Chưa chọn vai trò';
+      }
+      case 'group': {
+        const group = MOCK_GROUPS.find(g => g.id === config.value);
+        return group ? `Đã chọn: ${group.name}` : 'Chưa chọn nhóm';
+      }
+      case 'dynamic':
+        return config.value ? `Biểu thức: ${config.value}` : 'Chưa nhập biểu thức';
+      case 'current_participant':
+        return participants && participants.length > 0 ? `Mỗi participant (${participants.length}) nhận task riêng` : 'Mỗi participant nhận task riêng';
+      case 'participant_manager':
+        return 'Resolve participant.managerId';
+      case 'creator_manager':
+        return 'Resolve manager của người tạo';
+      case 'department_head':
+        return 'Resolve theo org metadata';
+      default:
+        return '';
+    }
+  };
+
   const handleTypeChange = (newType: AssigneeResolverConfig['type']) => {
     onChange({ type: newType, value: '', label: '' });
-    setIsDropdownOpen(false);
   };
 
   const handleValueChange = (type: AssigneeResolverConfig['type'], value: string) => {
-    const label = getDisplayLabel(type, value);
-    onChange({ type, value, label });
-    setIsDropdownOpen(false);
+    onChange({ type, value, label: value });
   };
 
-  const renderDropdownContent = () => {
+  const renderValueConfig = () => {
     switch (config.type) {
       case 'fixed':
         return (
-          <div className="max-h-60 overflow-y-auto">
-            <div className="p-2 border-b border-gray-100">
-              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <div className="border border-border rounded-md overflow-hidden">
+            <div className="relative p-2 border-b border-gray-100 bg-white">
+              <MagnifyingGlassIcon className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
                 placeholder="Tìm kiếm người dùng..."
@@ -96,20 +105,22 @@ export default function AssigneeResolver({ config, onChange, participants }: Ass
                 className="w-full pl-9 pr-4 py-2 text-sm border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
-            <div className="py-1">
+            <div className="max-h-56 overflow-y-auto py-1 bg-white">
+              {filteredUsers.length === 0 && <p className="px-3 py-3 text-sm text-muted text-center">Không tìm thấy người dùng</p>}
               {filteredUsers.map(user => (
                 <button
                   key={user.id}
                   onClick={() => handleValueChange('fixed', user.id)}
-                  className={clsx("w-full flex items-center gap-3 px-3 py-2 text-left text-sm rounded hover:bg-gray-100", selectedUser === user.id && "bg-primary/10 text-primary")}
+                  className={clsx("w-full flex items-center gap-3 px-3 py-2 text-left text-sm hover:bg-gray-100", config.value === user.id && "bg-primary/10 text-primary")}
                 >
-                  <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-bold">
+                  <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-bold shrink-0">
                     {user.avatar}
                   </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{user.name}</p>
-                    <p className="text-xs text-gray-500">{user.email}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 truncate">{user.name}</p>
+                    <p className="text-xs text-gray-500 truncate">{user.email}</p>
                   </div>
+                  {config.value === user.id && <CheckIcon className="w-4 h-4 text-primary shrink-0" />}
                 </button>
               ))}
             </div>
@@ -117,51 +128,53 @@ export default function AssigneeResolver({ config, onChange, participants }: Ass
         );
       case 'role':
         return (
-          <div className="py-1 max-h-60 overflow-y-auto">
+          <div className="border border-border rounded-md overflow-hidden max-h-56 overflow-y-auto py-1 bg-white">
             {MOCK_ROLES.map(role => (
               <button
                 key={role.id}
                 onClick={() => handleValueChange('role', role.id)}
-                className={clsx("w-full flex items-center gap-3 px-3 py-2 text-left text-sm rounded hover:bg-gray-100", config.value === role.id && "bg-primary/10 text-primary")}
+                className={clsx("w-full flex items-center gap-3 px-3 py-2 text-left text-sm hover:bg-gray-100", config.value === role.id && "bg-primary/10 text-primary")}
               >
-                <BriefcaseIcon className="w-5 h-5 text-gray-400" />
-                <span>{role.name}</span>
+                <BriefcaseIcon className="w-5 h-5 text-gray-400 shrink-0" />
+                <span className="flex-1">{role.name}</span>
+                {config.value === role.id && <CheckIcon className="w-4 h-4 text-primary shrink-0" />}
               </button>
             ))}
           </div>
         );
       case 'group':
         return (
-          <div className="py-1 max-h-60 overflow-y-auto">
+          <div className="border border-border rounded-md overflow-hidden max-h-56 overflow-y-auto py-1 bg-white">
             {MOCK_GROUPS.map(group => (
               <button
                 key={group.id}
                 onClick={() => handleValueChange('group', group.id)}
-                className={clsx("w-full flex items-center gap-3 px-3 py-2 text-left text-sm rounded hover:bg-gray-100", config.value === group.id && "bg-primary/10 text-primary")}
+                className={clsx("w-full flex items-center gap-3 px-3 py-2 text-left text-sm hover:bg-gray-100", config.value === group.id && "bg-primary/10 text-primary")}
               >
-                <UsersIcon className="w-5 h-5 text-gray-400" />
-                <span>{group.name}</span>
+                <UsersIcon className="w-5 h-5 text-gray-400 shrink-0" />
+                <span className="flex-1">{group.name}</span>
+                {config.value === group.id && <CheckIcon className="w-4 h-4 text-primary shrink-0" />}
               </button>
             ))}
           </div>
         );
       case 'dynamic':
         return (
-          <div className="p-3">
+          <div className="border border-border rounded-md p-3 bg-white">
             <input
               type="text"
-              placeholder="Ví dụ: \${nodes.lookup.output.ownerId}"
+              placeholder="Ví dụ: ${nodes.lookup.output.ownerId}"
               value={config.value || ''}
               onChange={(e) => handleValueChange('dynamic', e.target.value)}
-              className="w-full border border-border rounded-md px-3 py-2 text-sm font-mono text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full border border-border rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary"
             />
             <p className="text-xs text-muted mt-2">Nhập đường dẫn context hoặc biểu thức trả về userId</p>
           </div>
         );
       default:
         return (
-          <div className="p-3 text-center text-gray-500">
-            <p className="text-sm">Loại này không cần cấu hình thêm</p>
+          <div className="border border-border rounded-md p-3 bg-white text-center">
+            <p className="text-sm text-gray-600">Loại này không cần cấu hình thêm — hệ thống resolve tự động khi tạo task.</p>
             {participants && participants.length > 0 && (
               <p className="text-xs text-muted mt-1">Sẽ resolve cho {participants.length} participant</p>
             )}
@@ -171,50 +184,50 @@ export default function AssigneeResolver({ config, onChange, participants }: Ass
   };
 
   return (
-    <div className="relative">
+    <div className="space-y-2">
       <button
-        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+        onClick={() => setIsExpanded(!isExpanded)}
         className="w-full flex items-center justify-between px-3 py-2 border border-border rounded-md bg-white text-sm focus:outline-none focus:ring-1 focus:ring-primary"
       >
-        <div className="flex items-center gap-2">
-          <selectedType.icon className="w-4 h-4 text-gray-400" />
-          <span className="font-medium text-navy">{selectedType.label}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <selectedType.icon className="w-4 h-4 text-gray-400 shrink-0" />
+          <span className="font-medium text-navy truncate">{selectedType.label}</span>
         </div>
-        <ChevronDownIcon className={clsx("w-4 h-4 text-gray-400 transition-transform", isDropdownOpen && "rotate-180")} />
+        <ChevronDownIcon className={clsx("w-4 h-4 text-gray-400 transition-transform shrink-0", isExpanded && "rotate-180")} />
       </button>
 
-      {isDropdownOpen && (
-        <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-border rounded-md shadow-lg overflow-hidden">
-          {/* Type selector */}
-          <div className="p-2 border-b border-gray-100">
-            <p className="text-xs font-semibold text-muted uppercase tracking-wide px-2 py-1">Chọn loại resolver</p>
-            <div className="space-y-1 max-h-48 overflow-y-auto">
+      <p className={clsx("text-xs px-1", config.value || !VALUE_LESS_TYPES.includes(config.type) ? 'text-gray-700' : 'text-muted')}>
+        {selectedSummary()}
+      </p>
+
+      {isExpanded && (
+        <div className="space-y-3 p-3 border border-border rounded-md bg-gray-50">
+          <div>
+            <p className="text-xs font-semibold text-muted uppercase tracking-wide px-1 mb-1.5">Chọn loại resolver</p>
+            <div className="grid gap-1">
               {RESOLVER_TYPES.map(type => (
                 <button
                   key={type.value}
                   onClick={() => handleTypeChange(type.value as any)}
                   className={clsx(
                     "w-full flex items-center gap-3 px-3 py-2 text-left text-sm rounded hover:bg-gray-100",
-                    config.type === type.value && "bg-primary/10 text-primary"
+                    config.type === type.value ? "bg-primary/10 text-primary" : "bg-white border border-border"
                   )}
                 >
-                  <type.icon className="w-4 h-4 text-gray-400" />
-                  <div className="flex-1">
+                  <type.icon className="w-4 h-4 text-gray-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900">{type.label}</p>
-                    <p className="text-xs text-gray-500">{type.description}</p>
+                    <p className="text-xs text-gray-500 truncate">{type.description}</p>
                   </div>
-                  {config.type === type.value && <XMarkIcon className="w-4 h-4 text-primary" />}
+                  {config.type === type.value && <CheckIcon className="w-4 h-4 text-primary shrink-0" />}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Value configuration */}
-          <div className="p-2 border-b border-gray-100 bg-gray-50">
-            <p className="text-xs font-semibold text-muted uppercase tracking-wide px-2 py-1">Cấu hình giá trị</p>
-          </div>
-          <div className="p-2">
-            {renderDropdownContent()}
+          <div>
+            <p className="text-xs font-semibold text-muted uppercase tracking-wide px-1 mb-1.5">Cấu hình giá trị</p>
+            {renderValueConfig()}
           </div>
         </div>
       )}

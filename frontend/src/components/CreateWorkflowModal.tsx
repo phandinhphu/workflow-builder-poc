@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { workflowTemplates, orgUsers, getCurrentUser } from '../data/mockData';
+import { workflowTemplates, orgUsers, getCurrentUser, resolveParticipantScope } from '../data/mockData';
+import type { ParticipantScope, ParticipantNotification } from '../types/workflow';
 
 export default function CreateWorkflowModal({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
@@ -18,6 +19,20 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
     owner: currentUser.id,
     version: '1.0',
   });
+  const [participantScope, setParticipantScope] = useState<ParticipantScope>({
+    enabled: false,
+    source: 'ORGANIZATION_DIRECTORY',
+    scopeKind: 'all_active',
+    selectorType: 'fixed',
+    selectorConfig: { rule: 'employee.status == ACTIVE' },
+    snapshotPolicy: 'AT_INSTANCE_START',
+  });
+  const [participantNotification, setParticipantNotification] = useState<ParticipantNotification>({
+    enabled: false,
+    channels: ['inapp', 'email'],
+    titleTemplate: 'Đợt đánh giá {{workflow.period}} đã bắt đầu',
+    bodyTemplate: 'Bạn là người tham gia đợt đánh giá {{workflow.period}}. Thời gian hoàn thành: {{workflow.dueDate}}',
+  });
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,6 +43,8 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
       type: formData.type,
       module: formData.module,
       owner: formData.owner,
+      participantScope,
+      participantNotification,
     };
     if (createType === 'template' && formData.templateId) {
       navigate(`/workflows/new/designer?template=${formData.templateId}`, { state });
@@ -199,6 +216,139 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
                       className="w-full border border-border rounded-md px-3 py-2 text-sm bg-gray-50 text-gray-500 cursor-not-allowed"
                     />
                   </div>
+                </div>
+              </div>
+
+              <div className="pt-4 mt-2">
+                <h3 className="text-base font-semibold text-navy mb-4 border-b border-gray-100 pb-2">ĐỐI TƯỢNG THAM GIA</h3>
+
+                <label className="flex items-center gap-2 mb-4 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={participantScope.enabled}
+                    onChange={e => setParticipantScope({ ...participantScope, enabled: e.target.checked })}
+                    className="w-4 h-4 text-primary focus:ring-primary border-gray-300 rounded"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Workflow có tập đối tượng tham gia (participant scope)</span>
+                </label>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Nguồn đối tượng</label>
+                    <select
+                      disabled={!participantScope.enabled}
+                      value={participantScope.source}
+                      onChange={e => setParticipantScope({ ...participantScope, source: e.target.value as any })}
+                      className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                    >
+                      <option value="ORGANIZATION_DIRECTORY">Tổ chức / Nhân sự</option>
+                      <option value="EXTERNAL">Nguồn bên ngoài</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phạm vi</label>
+                    <select
+                      disabled={!participantScope.enabled}
+                      value={participantScope.scopeKind}
+                      onChange={e => setParticipantScope({ ...participantScope, scopeKind: e.target.value as any })}
+                      className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                    >
+                      <option value="all_active">Tất cả nhân viên đang hoạt động</option>
+                      <option value="department">Theo phòng ban</option>
+                      <option value="role">Theo vai trò</option>
+                      <option value="fixed_users">Chọn người cụ thể</option>
+                      <option value="condition">Theo điều kiện động (rule)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {participantScope.enabled && participantScope.scopeKind === 'condition' && (
+                  <div className="mt-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Điều kiện rule</label>
+                    <input
+                      type="text"
+                      value={participantScope.selectorConfig.rule ?? ''}
+                      onChange={e => setParticipantScope({ ...participantScope, selectorConfig: { ...participantScope.selectorConfig, rule: e.target.value } })}
+                      placeholder="employee.status == ACTIVE"
+                      className="w-full border border-border rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <p className="text-[11px] text-muted mt-1 italic">Rule được resolve mỗi khi instance bắt đầu — tháng sau có thêm người, instance tháng sau tự có thêm participant.</p>
+                  </div>
+                )}
+
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Chính sách snapshot</label>
+                  <select
+                    disabled={!participantScope.enabled}
+                    value={participantScope.snapshotPolicy}
+                    onChange={e => setParticipantScope({ ...participantScope, snapshotPolicy: e.target.value as any })}
+                    className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  >
+                    <option value="AT_INSTANCE_START">Chốt danh sách khi workflow bắt đầu (khuyến nghị)</option>
+                    <option value="LIVE_REFRESH">Resolve động mỗi khi cần participant</option>
+                  </select>
+                </div>
+
+                {participantScope.enabled && (
+                  <div className="mt-3 bg-gray-50 border border-border rounded-md p-3 text-sm text-gray-600">
+                    Khi instance bắt đầu: resolve <strong className="text-navy">{resolveParticipantScope(participantScope).length} người</strong> → chốt snapshot → tạo instance → thông báo cho từng participant.
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-4 mt-2">
+                <h3 className="text-base font-semibold text-navy mb-4 border-b border-gray-100 pb-2">THÔNG BÁO NGƯỜI THAM GIA</h3>
+
+                <label className="flex items-center gap-2 mb-4 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={participantNotification.enabled}
+                    onChange={e => setParticipantNotification({ ...participantNotification, enabled: e.target.checked })}
+                    className="w-4 h-4 text-primary focus:ring-primary border-gray-300 rounded"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Thông báo cho người tham gia khi đợt workflow bắt đầu</span>
+                </label>
+
+                <div className="flex gap-4 mb-3">
+                  {(['inapp', 'email', 'teams'] as const).map(ch => (
+                    <label key={ch} className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        disabled={!participantNotification.enabled}
+                        checked={participantNotification.channels.includes(ch)}
+                        onChange={e => {
+                          const next = e.target.checked
+                            ? [...participantNotification.channels, ch]
+                            : participantNotification.channels.filter(c => c !== ch);
+                          setParticipantNotification({ ...participantNotification, channels: next });
+                        }}
+                        className="w-4 h-4 text-primary focus:ring-primary border-gray-300 rounded"
+                      />
+                      {ch === 'inapp' ? 'In-app' : ch === 'email' ? 'Email' : 'Teams'}
+                    </label>
+                  ))}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tiêu đề</label>
+                  <input
+                    type="text"
+                    disabled={!participantNotification.enabled}
+                    value={participantNotification.titleTemplate}
+                    onChange={e => setParticipantNotification({ ...participantNotification, titleTemplate: e.target.value })}
+                    className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
+
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nội dung</label>
+                  <textarea
+                    rows={2}
+                    disabled={!participantNotification.enabled}
+                    value={participantNotification.bodyTemplate}
+                    onChange={e => setParticipantNotification({ ...participantNotification, bodyTemplate: e.target.value })}
+                    className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none disabled:bg-gray-50 disabled:text-gray-400"
+                  />
                 </div>
               </div>
             </form>
