@@ -4,7 +4,7 @@ import { MagnifyingGlassIcon, PlayIcon, PlusIcon, XMarkIcon, CheckCircleIcon, Be
 import clsx from 'clsx';
 import Pagination from '../components/Pagination';
 import Toast, { useToasts } from '../components/Toast';
-import { getInstancesByWorkflow, getWorkflow, resolveParticipantScope } from '../data/mockData';
+import { getInstancesByWorkflow, getWorkflow, resolveParticipantScope, findUser, orgUsers } from '../data/mockData';
 import type { WorkflowInstanceSummary, WorkflowParticipantEntry } from '../types/workflow';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -35,6 +35,10 @@ function nextId(prefix: string) {
   return `${prefix}-${Date.now()}`;
 }
 
+function nextSeq() {
+  return Math.floor(100 + Math.random() * 900);
+}
+
 export default function InstancesList() {
   const { id } = useParams<{ id: string }>();
   const [searchTerm, setSearchTerm] = useState('');
@@ -43,13 +47,20 @@ export default function InstancesList() {
   const [createOpen, setCreateOpen] = useState(false);
   const [period, setPeriod] = useState('');
   const [notifyEnabled, setNotifyEnabled] = useState(true);
+  const [empId, setEmpId] = useState('U009');
+  const [startDate, setStartDate] = useState('01/09/2026');
+  const [needType, setNeedType] = useState('Cấp máy mới');
+  const [notes, setNotes] = useState('');
   const toasts = useToasts();
 
   const workflow = id ? getWorkflow(id) : undefined;
   const allInstances = getInstancesByWorkflow(id);
   const [localInstances, setLocalInstances] = useState<WorkflowInstanceSummary[]>(allInstances);
 
-  const resolvedUsers = resolveParticipantScope(workflow?.participantScope);
+  const isFromTrigger = workflow?.participantScope?.scopeKind === 'from_trigger';
+  const resolvedUsers = isFromTrigger
+    ? (workflow && findUser(empId) ? [findUser(empId)!] : [])
+    : resolveParticipantScope(workflow?.participantScope);
 
   const filtered = useMemo(() => {
     return localInstances.filter(inst => {
@@ -68,7 +79,9 @@ export default function InstancesList() {
 
   const handleCreateInstance = () => {
     if (!workflow) return;
-    const p = period.trim() || `Kỳ ${nowStamp().slice(0, 7)}`;
+    const p = isFromTrigger
+      ? `${needType} — ${startDate}`
+      : (period.trim() || `Kỳ ${nowStamp().slice(0, 7)}`);
     const participants: WorkflowParticipantEntry[] = resolvedUsers.map((u, idx) => ({
       id: nextId(`p-${idx}`),
       userId: u.id,
@@ -80,9 +93,10 @@ export default function InstancesList() {
     }));
     const firstNodeLabel = workflow.nodes[0]?.name ?? 'Bước đầu tiên';
     const notif = workflow.participantNotification;
+    const seq = nextSeq();
     const newInstance: WorkflowInstanceSummary = {
       id: nextId('inst'),
-      requestCode: `EVAL-${p.replace(/\D/g, '').slice(0, 6) || nowStamp().slice(2, 10).replace(/\D/g, '')}`,
+      requestCode: isFromTrigger ? `REQ-PC-${seq}` : `EVAL-${p.replace(/\D/g, '').slice(0, 6) || nowStamp().slice(2, 10).replace(/\D/g, '')}`,
       workflowId: workflow.id,
       workflowName: workflow.name,
       workflowVersion: workflow.draftVersion,
@@ -104,8 +118,7 @@ export default function InstancesList() {
       toasts.pushToast('success', `Đã tạo instance "${p}" — ${resolvedUsers.length} participants được snapshot và thông báo qua ${notif.channels.join(', ')}`);
     } else {
       toasts.pushToast('success', `Đã tạo instance "${p}" với ${resolvedUsers.length} participants (snapshot đã chốt)`);
-    }
-  };
+    }  };
 
   return (
     <div className="h-full flex flex-col p-6">
@@ -251,29 +264,86 @@ export default function InstancesList() {
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Kỳ đánh giá <span className="text-danger">*</span></label>
-                <input
-                  type="text"
-                  placeholder="VD: 08/2026"
-                  value={period}
-                  onChange={e => setPeriod(e.target.value)}
-                  className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-              </div>
-
-              <div className="bg-gray-50 border border-border rounded-md p-4">
-                <h4 className="text-sm font-medium text-navy mb-2">Bước 1 — Resolve participants (rule)</h4>
-                <p className="text-xs text-muted mb-2 font-mono">{workflow.participantScope?.selectorConfig?.rule ?? 'employee.status == ACTIVE'}</p>
-                <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                  <CheckCircleIcon className="w-4 h-4 text-success" />
-                  <span><strong className="text-navy">{resolvedUsers.length} người</strong> sẽ được resolve khi instance bắt đầu</span>
+              {isFromTrigger ? (
+                <div className="bg-gray-50 border border-border rounded-md p-4 space-y-3">
+                  <h4 className="text-sm font-medium text-navy">Bước 1 — HR tạo yêu cầu (form trigger)</h4>
+                  <p className="text-xs text-muted">Người khởi tạo: <strong>HR</strong> (Allowed Initiator: {String((workflow.trigger?.config.allowedInitiator as any)?.role ?? 'HR')})</p>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Nhân viên cần cấp PC <span className="text-danger">*</span></label>
+                    <select
+                      value={empId}
+                      onChange={e => setEmpId(e.target.value)}
+                      className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+                    >
+                      {orgUsers.filter(u => u.status === 'Active').map(u => (
+                        <option key={u.id} value={u.id}>{u.displayName} — {u.externalId}</option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-muted mt-1 italic font-mono">Participant = {'${trigger.body.' + String(workflow.participantScope?.selectorConfig?.triggerField ?? 'employeeId') + '}'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Ngày bắt đầu</label>
+                    <input
+                      type="text"
+                      value={startDate}
+                      onChange={e => setStartDate(e.target.value)}
+                      className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Loại nhu cầu</label>
+                    <select
+                      value={needType}
+                      onChange={e => setNeedType(e.target.value)}
+                      className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+                    >
+                      <option>Cấp máy mới</option>
+                      <option>Thay thế máy cũ</option>
+                      <option>Cấp bổ sung</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Ghi chú</label>
+                    <textarea
+                      rows={2}
+                      value={notes}
+                      onChange={e => setNotes(e.target.value)}
+                      placeholder="Ghi chú của HR..."
+                      className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-600 bg-white border border-border rounded p-3">
+                    <CheckCircleIcon className="w-4 h-4 text-success" />
+                    <span>Participant sẽ resolve thành <strong className="text-navy">{resolvedUsers[0]?.displayName ?? '—'}</strong></span>
+                  </div>
                 </div>
-                <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside bg-white p-3 border border-border rounded">
-                  {resolvedUsers.slice(0, 5).map(u => <li key={u.id}>{u.displayName} — {u.department}</li>)}
-                  {resolvedUsers.length > 5 && <li className="text-muted">...và {resolvedUsers.length - 5} người khác</li>}
-                </ul>
-              </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Kỳ đánh giá <span className="text-danger">*</span></label>
+                    <input
+                      type="text"
+                      placeholder="VD: 08/2026"
+                      value={period}
+                      onChange={e => setPeriod(e.target.value)}
+                      className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+
+                  <div className="bg-gray-50 border border-border rounded-md p-4">
+                    <h4 className="text-sm font-medium text-navy mb-2">Bước 1 — Resolve participants (rule)</h4>
+                    <p className="text-xs text-muted mb-2 font-mono">{workflow.participantScope?.selectorConfig?.rule ?? 'employee.status == ACTIVE'}</p>
+                    <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                      <CheckCircleIcon className="w-4 h-4 text-success" />
+                      <span><strong className="text-navy">{resolvedUsers.length} người</strong> sẽ được resolve khi instance bắt đầu</span>
+                    </div>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside bg-white p-3 border border-border rounded">
+                      {resolvedUsers.slice(0, 5).map(u => <li key={u.id}>{u.displayName} — {u.department}</li>)}
+                      {resolvedUsers.length > 5 && <li className="text-muted">...và {resolvedUsers.length - 5} người khác</li>}
+                    </ul>
+                  </div>
+                </>
+              )}
 
               <div className="bg-gray-50 border border-border rounded-md p-4">
                 <h4 className="text-sm font-medium text-navy mb-2">Bước 2 — Snapshot & tạo instance</h4>
@@ -289,17 +359,20 @@ export default function InstancesList() {
                     onChange={e => setNotifyEnabled(e.target.checked)}
                     className="w-4 h-4 text-primary focus:ring-primary border-gray-300 rounded"
                   />
-                  <BellIcon className="w-4 h-4 text-primary" /> Gửi thông báo khi đợt bắt đầu
+                  <BellIcon className="w-4 h-4 text-primary" /> {isFromTrigger ? 'Thông báo cho participant khi instance được tạo' : 'Gửi thông báo khi đợt bắt đầu'}
                 </label>
                 {notifyEnabled && workflow.participantNotification?.enabled && (
                   <div className="text-xs text-gray-600 space-y-1 bg-white border border-border rounded p-3">
                     <p className="font-medium text-navy">
-                      {workflow.participantNotification.titleTemplate.replace('{{workflow.period}}', period.trim() || '08/2026')}
+                      {workflow.participantNotification.titleTemplate
+                        .replace('{{workflow.period}}', period.trim() || '08/2026')
+                        .replace('{{instance.requestCode}}', `REQ-PC-${resolvedUsers.length}`)}
                     </p>
                     <p>
                       {workflow.participantNotification.bodyTemplate
                         .replace('{{workflow.period}}', period.trim() || '08/2026')
-                        .replace('{{workflow.dueDate}}', '31/08/2026')}
+                        .replace('{{workflow.dueDate}}', '31/08/2026')
+                        .replace('{{instance.requestCode}}', `REQ-PC-${resolvedUsers.length}`)}
                     </p>
                     <p className="text-muted">Kênh: {workflow.participantNotification.channels.join(', ')} → {resolvedUsers.length} thông báo</p>
                   </div>

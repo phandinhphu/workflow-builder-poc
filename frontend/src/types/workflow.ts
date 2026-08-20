@@ -70,14 +70,15 @@ export interface TriggerDefinition {
 
 export interface ParticipantScope {
   enabled: boolean;
-  source: 'ORGANIZATION_DIRECTORY' | 'EXTERNAL';
-  scopeKind: 'all_active' | 'department' | 'role' | 'fixed_users' | 'condition';
+  source: 'ORGANIZATION_DIRECTORY' | 'FROM_TRIGGER' | 'EXTERNAL';
+  scopeKind: 'all_active' | 'department' | 'role' | 'fixed_users' | 'condition' | 'from_trigger';
   selectorType: 'fixed' | 'group' | 'role' | 'department' | 'condition' | 'expression' | 'external';
   selectorConfig: {
     department?: string;
     role?: string;
     userIds?: string[];
     rule?: string;
+    triggerField?: string;
     [key: string]: unknown;
   };
   snapshotPolicy: 'AT_INSTANCE_START' | 'LIVE_REFRESH';

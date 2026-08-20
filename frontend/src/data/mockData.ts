@@ -53,6 +53,7 @@ export function resolveParticipantScope(scope?: ParticipantScope | null): OrgUse
       if (role) return orgUsers.filter(u => u.role === role.role);
       return orgUsers.filter(u => u.status === 'Active');
     }
+    case 'from_trigger':
     case 'all_active':
     default:
       return orgUsers.filter(u => u.status === 'Active');
@@ -66,6 +67,7 @@ export function scopeDescription(scope?: ParticipantScope | null): string {
     case 'role': return `Vai trò: ${scope.selectorConfig.role ?? '—'}`;
     case 'fixed_users': return `Chọn ${scope.selectorConfig.userIds?.length ?? 0} người cụ thể`;
     case 'condition': return scope.selectorConfig.rule ?? 'Điều kiện động';
+    case 'from_trigger': return `Từ dữ liệu Trigger: ${scope.selectorConfig.triggerField ?? '—'}`;
     case 'all_active':
     default: return 'Tất cả nhân viên đang hoạt động';
   }

@@ -43,7 +43,13 @@ function formatValue(value: unknown): string {
 }
 
 function substitute(template: string, ctx: Record<string, unknown>): string {
-  return template.replace(/\$\{([^}]+)\}/g, (_, path: string) => formatValue(get(ctx, path.trim())));
+  return template.replace(/\$\{([^}]+)\}/g, (_, expr: string) => {
+    const parts = expr.split('??');
+    const value = get(ctx, parts[0].trim());
+    if (value !== null && value !== undefined && value !== '') return formatValue(value);
+    if (parts.length > 1) return parts.slice(1).join('??').trim().replace(/^["']|["']$/g, '');
+    return formatValue(value);
+  });
 }
 
 function splitTopLevel(input: string, separator: 'AND' | 'OR'): string[] {
@@ -141,16 +147,29 @@ function evaluate(expr: string, ctx: Record<string, unknown>): boolean {
 }
 
 export default function TestRunnerDrawer({ isOpen, onClose, nodes, edges, trigger: _trigger, variables }: TestRunnerDrawerProps) {
-  const [triggerPayload, setTriggerPayload] = useState(() => JSON.stringify({
-    body: {
-      requesterId: 'U001',
-      evaluationValid: false,
-      selfScore: 8,
-      selfAchievements: 'Hoàn thành KPI quý, dẫn đầu team về doanh thu',
-    },
-  }, null, 2));
+  const isPcRequest = _trigger?.type === 'form' && (_trigger.config?.formId === 'FORM-004' || (_trigger.config?.participantField === 'employeeId'));
+  const defaultPayload = isPcRequest
+    ? JSON.stringify({
+        body: {
+          requesterId: 'U001',
+          employeeId: 'U009',
+          employeeName: 'Nguyễn Văn A',
+          startDate: '01/09/2026',
+          needType: 'Cấp máy mới',
+          notes: 'Nhân viên mới nhập môn',
+        },
+      }, null, 2)
+    : JSON.stringify({
+        body: {
+          requesterId: 'U001',
+          evaluationValid: false,
+          selfScore: 8,
+          selfAchievements: 'Hoàn thành KPI quý, dẫn đầu team về doanh thu',
+        },
+      }, null, 2);
+  const [triggerPayload, setTriggerPayload] = useState(() => defaultPayload);
   const [variableValues, setVariableValues] = useState('');
-  const [participantId, setParticipantId] = useState('U003');
+  const [participantId, setParticipantId] = useState(isPcRequest ? 'U009' : 'U003');
   const [runResult, setRunResult] = useState<RunStep[] | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
 
@@ -236,6 +255,12 @@ export default function TestRunnerDrawer({ isOpen, onClose, nodes, edges, trigge
             value = body[f.outputMapping] ?? value;
           }
           outputs[f.outputMapping] = value;
+          if (String(f.outputMapping).includes('.')) {
+            const [ns, field] = String(f.outputMapping).split('.');
+            const nsObj = ((ctx as Record<string, unknown>)[ns] ?? {}) as Record<string, unknown>;
+            nsObj[field] = value;
+            (ctx as Record<string, unknown>)[ns] = nsObj;
+          }
         });
         (ctx.nodes as Record<string, unknown>)[node.id] = outputs;
       }

@@ -257,10 +257,25 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
                       <option value="department">Theo phòng ban</option>
                       <option value="role">Theo vai trò</option>
                       <option value="fixed_users">Chọn người cụ thể</option>
+                      <option value="from_trigger">Từ dữ liệu Trigger (form)</option>
                       <option value="condition">Theo điều kiện động (rule)</option>
                     </select>
                   </div>
                 </div>
+
+                {participantScope.enabled && participantScope.scopeKind === 'from_trigger' && (
+                  <div className="mt-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Field trong trigger chứa participant</label>
+                    <input
+                      type="text"
+                      value={participantScope.selectorConfig.triggerField ?? ''}
+                      onChange={e => setParticipantScope({ ...participantScope, selectorConfig: { ...participantScope.selectorConfig, triggerField: e.target.value } })}
+                      placeholder="employeeId"
+                      className="w-full border border-border rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <p className="text-[11px] text-muted mt-1 italic">Participant = {'${trigger.body.' + (participantScope.selectorConfig.triggerField ?? 'employeeId') + '}'} — HR chọn ai, instance chạy cho người đó.</p>
+                  </div>
+                )}
 
                 {participantScope.enabled && participantScope.scopeKind === 'condition' && (
                   <div className="mt-3">
@@ -291,7 +306,9 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
 
                 {participantScope.enabled && (
                   <div className="mt-3 bg-gray-50 border border-border rounded-md p-3 text-sm text-gray-600">
-                    Khi instance bắt đầu: resolve <strong className="text-navy">{resolveParticipantScope(participantScope).length} người</strong> → chốt snapshot → tạo instance → thông báo cho từng participant.
+                    {participantScope.scopeKind === 'from_trigger'
+                      ? <>Khi instance bắt đầu: resolve participant từ <strong className="text-navy font-mono">${'{trigger.body.' + (participantScope.selectorConfig.triggerField ?? 'employeeId') + '}'}</strong> → chốt snapshot → tạo instance → thông báo cho participant.</>
+                      : <>Khi instance bắt đầu: resolve <strong className="text-navy">{resolveParticipantScope(participantScope).length} người</strong> → chốt snapshot → tạo instance → thông báo cho từng participant.</>}
                   </div>
                 )}
               </div>

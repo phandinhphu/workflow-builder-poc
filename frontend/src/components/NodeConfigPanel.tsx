@@ -21,7 +21,10 @@ const MOCK_FORMS = [
   { id: 'FORM-001', name: 'Yêu cầu nghỉ phép' },
   { id: 'FORM-002', name: 'Yêu cầu mua sắm' },
   { id: 'FORM-003', name: 'Đánh giá rủi ro CNTT' },
+  { id: 'FORM-004', name: 'PC Request Form' },
 ];
+
+const INITIATOR_ROLES = ['HR', 'Manager', 'Finance', 'Everyone'];
 
 const nodeConfig: Record<string, { title: string, desc: string, icon: any, color: string }> = {
   start: { title: 'TRIGGER', desc: 'Bắt đầu workflow', icon: MousePointer2, color: 'text-indigo-500' },
@@ -214,17 +217,42 @@ export default function NodeConfigPanel({ node, onClose, onUpdate }: { node: Nod
                     </>
                   )}
                   {triggerType === 'form' && (
-                    <div>
-                      <span className="text-xs text-muted block mb-1">Biểu mẫu kết nối</span>
-                      <select
-                        className="w-full border border-border rounded px-3 py-2 text-sm"
-                        value={String(triggerConfig.formId || '')}
-                        onChange={e => updateTriggerConfig({ formId: e.target.value })}
-                      >
-                        <option value="">Chọn biểu mẫu...</option>
-                        {MOCK_FORMS.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                      </select>
-                    </div>
+                    <>
+                      <div>
+                        <span className="text-xs text-muted block mb-1">Biểu mẫu kết nối</span>
+                        <select
+                          className="w-full border border-border rounded px-3 py-2 text-sm"
+                          value={String(triggerConfig.formId || '')}
+                          onChange={e => updateTriggerConfig({ formId: e.target.value })}
+                        >
+                          <option value="">Chọn biểu mẫu...</option>
+                          {MOCK_FORMS.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <span className="text-xs text-muted block mb-1">Người được phép khởi tạo (Allowed Initiator)</span>
+                        <select
+                          className="w-full border border-border rounded px-3 py-2 text-sm"
+                          value={String((triggerConfig.allowedInitiator as any)?.role ?? 'HR')}
+                          onChange={e => updateTriggerConfig({ allowedInitiator: { type: 'ROLE', role: e.target.value } })}
+                        >
+                          {INITIATOR_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <span className="text-xs text-muted block mb-1">Participant (field trong form)</span>
+                        <input
+                          type="text"
+                          className="w-full border border-border rounded px-3 py-2 text-sm font-mono"
+                          value={String(triggerConfig.participantField || '')}
+                          placeholder="employeeId"
+                          onChange={e => updateTriggerConfig({ participantField: e.target.value })}
+                        />
+                        <p className="text-[11px] text-muted mt-1 italic">
+                          Resolve: Participant = {'${form.' + (String(triggerConfig.participantField || 'employeeId')) + '}'} — HR chọn ai, instance chạy cho người đó.
+                        </p>
+                      </div>
+                    </>
                   )}
                   {triggerType === 'webhook' && (
                     <>

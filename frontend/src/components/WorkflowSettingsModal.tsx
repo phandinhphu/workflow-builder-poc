@@ -15,7 +15,7 @@ const VAR_TYPES = ['STRING', 'NUMBER', 'BOOLEAN', 'DATE', 'OBJECT', 'LIST'];
 
 export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'info' | 'scope' | 'vars'>('info');
-  const { workflowData, setWorkflowData, participantScope, setParticipantScope, participantNotification, setParticipantNotification, variables, setVariables } = useDesignerStore();
+  const { workflowData, setWorkflowData, trigger, participantScope, setParticipantScope, participantNotification, setParticipantNotification, variables, setVariables } = useDesignerStore();
 
   const [newVarKey, setNewVarKey] = useState('');
   const [newVarType, setNewVarType] = useState('STRING');
@@ -26,6 +26,8 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
 
   const scopeEnabled = participantScope.enabled;
   const notificationEnabled = participantNotification.enabled;
+
+  const triggerFieldOptions = Object.keys((trigger?.inputSchema as Record<string, unknown>) ?? {});
 
   const resolvedScopeUsers = resolveParticipantScope(participantScope);
   const previewFixedUsers = resolvedScopeUsers.slice(0, 5).map(u => u.displayName);
@@ -229,6 +231,7 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
                               { kind: 'department', label: 'Theo phòng ban' },
                               { kind: 'role', label: 'Theo vai trò' },
                               { kind: 'fixed_users', label: 'Chọn người cụ thể' },
+                              { kind: 'from_trigger', label: 'Từ dữ liệu Trigger (form)' },
                               { kind: 'condition', label: 'Theo điều kiện động (rule)' },
                             ] as const).map(opt => (
                               <label key={opt.kind} className={clsx(
@@ -308,6 +311,23 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
                           </div>
                         )}
 
+                        {scopeEnabled && participantScope.scopeKind === 'from_trigger' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Field trong trigger chứa participant</label>
+                            <select
+                              className="w-full border border-border rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary bg-white"
+                              value={participantScope.selectorConfig.triggerField ?? ''}
+                              onChange={e => setParticipantScope({ selectorConfig: { ...participantScope.selectorConfig, triggerField: e.target.value } })}
+                            >
+                              <option value="">Chọn field...</option>
+                              {triggerFieldOptions.length > 0 ? triggerFieldOptions.map(f => <option key={f} value={f}>${'{trigger.body.'}{f}{'}'}</option>) : <option value="employeeId">${'{trigger.body.employeeId}'}</option>}
+                            </select>
+                            <p className="text-[11px] text-muted mt-1 italic">
+                              Definition lưu rule <span className="font-mono">Participant = {'${trigger.body.' + (participantScope.selectorConfig.triggerField ?? 'employeeId') + '}'}</span> — runtime resolve thành người cụ thể. Lần sau HR chọn nhân viên khác, cùng definition tạo instance cho người đó.
+                            </p>
+                          </div>
+                        )}
+
                         {scopeEnabled && participantScope.scopeKind === 'condition' && (
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -367,16 +387,28 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
                             </h4>
                             <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
                               <CheckCircleIcon className="w-3 h-3 text-success" />
-                              <span><strong className="text-navy">{scopePreviewCount}</strong> người sẽ tham gia khi instance bắt đầu</span>
-                            </div>
-                            <ul className="text-sm text-gray-700 space-y-1.5 list-disc list-inside bg-white p-3 border border-border rounded">
-                              {previewFixedUsers.map((user, idx) => (
-                                <li key={idx}>{user}</li>
-                              ))}
-                              {scopePreviewCount > previewFixedUsers.length && (
-                                <li className="text-muted">...và {scopePreviewCount - previewFixedUsers.length} người khác</li>
+                              {participantScope.scopeKind === 'from_trigger' ? (
+                                <span>
+                                  Participant resolve từ <strong className="text-navy font-mono">${'{trigger.body.' + (participantScope.selectorConfig.triggerField ?? 'employeeId') + '}'}</strong> khi HR submit form — không cần biết trước là ai.
+                                </span>
+                              ) : (
+                                <span><strong className="text-navy">{scopePreviewCount}</strong> người sẽ tham gia khi instance bắt đầu</span>
                               )}
-                            </ul>
+                            </div>
+                            {participantScope.scopeKind === 'from_trigger' ? (
+                              <p className="text-sm text-gray-600 bg-white p-3 border border-border rounded">
+                                Ví dụ: HR tạo yêu cầu cho <strong>Nguyễn Văn A</strong> → instance chạy cho Nguyễn Văn A. HR tạo cho Trần Văn B → instance chạy cho Trần Văn B. Không cần sửa workflow.
+                              </p>
+                            ) : (
+                              <ul className="text-sm text-gray-700 space-y-1.5 list-disc list-inside bg-white p-3 border border-border rounded">
+                                {previewFixedUsers.map((user, idx) => (
+                                  <li key={idx}>{user}</li>
+                                ))}
+                                {scopePreviewCount > previewFixedUsers.length && (
+                                  <li className="text-muted">...và {scopePreviewCount - previewFixedUsers.length} người khác</li>
+                                )}
+                              </ul>
+                            )}
                             <p className="text-[11px] text-muted mt-3 italic">
                               * Đây là rule, không phải danh sách cố định. Danh sách thực tế được resolve và chốt tại thời điểm instance bắt đầu.
                             </p>
