@@ -15,7 +15,7 @@ export function getCurrentUser() {
   return CURRENT_USER;
 }
 
-export const orgUsers: OrgUser[] = [
+export let orgUsers: OrgUser[] = [
   { id: 'U001', externalId: 'EXT-001', displayName: 'Nguyễn Thị Mai', email: 'mai.nt@company.com', department: 'Phòng Nhân sự', role: 'HR Specialist', level: 'Staff', status: 'Active', managerId: 'U003' },
   { id: 'U002', externalId: 'EXT-002', displayName: 'Trần Hoàng Bách', email: 'bach.th@company.com', department: 'Phòng Công nghệ', role: 'Backend Engineer', level: 'Staff', status: 'Active', managerId: 'U004' },
   { id: 'U003', externalId: 'EXT-003', displayName: 'Lê Minh Tâm', email: 'tam.lm@company.com', department: 'Phòng Kinh doanh', role: 'Sales Lead', level: 'Manager', status: 'Active', managerId: 'U006' },
@@ -79,7 +79,7 @@ export const workflowTemplates = [
   { id: 'T003', name: 'Expense Claim', description: 'Luồng hoàn ứng đa cấp phê duyệt theo số tiền.', category: 'Finance' },
 ];
 
-export const workflows: WorkflowDefinition[] = [
+export let workflows: WorkflowDefinition[] = [
   {
     id: '1',
     name: 'Phê duyệt mua sắm',
@@ -93,8 +93,8 @@ export const workflows: WorkflowDefinition[] = [
     updatedAt: '2024-12-08 16:15',
     trigger: { type: 'manual', config: {} },
     variables: [
-      { key: 'threshold', dataType: 'NUMBER', defaultValue: { kind: 'CONSTANT', value: 10000000 }, required: true },
-      { key: 'period', dataType: 'STRING', defaultValue: { kind: 'CONSTANT', value: 'Q3-2024' }, required: false },
+      { key: 'threshold', dataType: 'NUMBER', defaultValue: { kind: 'CONSTANT', value: 10000000 }, required: true, mutationPolicy: 'READ_ONLY' as const },
+      { key: 'period', dataType: 'STRING', defaultValue: { kind: 'CONSTANT', value: 'Q3-2024' }, required: false, mutationPolicy: 'READ_ONLY' as const },
     ],
     nodes: [],
     connections: [],
@@ -112,8 +112,8 @@ export const workflows: WorkflowDefinition[] = [
     updatedAt: '2024-12-08 16:15',
     trigger: { type: 'manual', config: {} },
     variables: [
-      { key: 'maxLeaveDays', dataType: 'NUMBER', defaultValue: { kind: 'CONSTANT', value: 12 }, required: true },
-      { key: 'period', dataType: 'STRING', defaultValue: { kind: 'CONSTANT', value: '2024' }, required: false },
+      { key: 'maxLeaveDays', dataType: 'NUMBER', defaultValue: { kind: 'CONSTANT', value: 12 }, required: true, mutationPolicy: 'READ_ONLY' as const },
+      { key: 'period', dataType: 'STRING', defaultValue: { kind: 'CONSTANT', value: '2024' }, required: false, mutationPolicy: 'READ_ONLY' as const },
     ],
     nodes: [],
     connections: [],
@@ -186,8 +186,8 @@ export const workflows: WorkflowDefinition[] = [
       bodyTemplate: 'Bạn là người tham gia đợt đánh giá {{workflow.period}}. Thời gian hoàn thành: {{workflow.dueDate}}',
     },
     variables: [
-      { key: 'period', dataType: 'STRING', defaultValue: { kind: 'CONSTANT', value: 'Q4-2024' }, required: true, description: 'Kỳ đánh giá' },
-      { key: 'evaluationValid', dataType: 'BOOLEAN', defaultValue: { kind: 'CONSTANT', value: false }, required: true, description: 'HR xác nhận kết quả đánh giá hợp lệ' },
+      { key: 'period', dataType: 'STRING', defaultValue: { kind: 'CONSTANT', value: 'Q4-2024' }, required: true, description: 'Kỳ đánh giá', mutationPolicy: 'MUTABLE' as const },
+      { key: 'evaluationValid', dataType: 'BOOLEAN', defaultValue: { kind: 'CONSTANT', value: false }, required: true, description: 'HR xác nhận kết quả đánh giá hợp lệ', mutationPolicy: 'MUTABLE' as const },
     ],
     nodes: [
       {
@@ -196,12 +196,20 @@ export const workflows: WorkflowDefinition[] = [
         name: 'Nhân viên tự đánh giá',
         config: {
           assignee: { type: 'current_participant' },
+          assigneeType: 'assignee',
+          title: 'Phiếu tự đánh giá - ${variables.period}',
+          description: 'Vui lòng hoàn thành phiếu tự đánh giá cho kỳ này.',
           formName: 'Phiếu tự đánh giá',
           formFields: [
             { id: 'f1', label: 'Kết quả công việc nổi bật trong kỳ', type: 'textarea', required: true, placeholder: 'Mô tả thành tích chính', outputMapping: 'selfAchievements' },
             { id: 'f2', label: 'Khó khăn gặp phải', type: 'textarea', required: false, placeholder: 'Mô tả khó khăn', outputMapping: 'selfChallenges' },
             { id: 'f3', label: 'Điểm tự đánh giá', type: 'number', required: true, validation: { min: 1, max: 10 }, outputMapping: 'selfScore' },
           ],
+          executionMode: 'single',
+          slaDue: '5 ngày',
+          slaAction: 'Nhắc nhở',
+          dueReminderMessage: 'Nhắc nhở: Phiếu tự đánh giá của bạn đã đến hạn, vui lòng hoàn thành.',
+          channels: ['email', 'inapp'],
           message: 'Nhân viên ${participant.name} hoàn thành phiếu tự đánh giá cho kỳ ${variables.period}',
         },
         position: { x: 300, y: 210 },
@@ -212,6 +220,8 @@ export const workflows: WorkflowDefinition[] = [
         name: 'Quản lý trực tiếp đánh giá',
         config: {
           assignee: { type: 'participant_manager' },
+          title: 'Đánh giá của quản lý trực tiếp - ${variables.period}',
+          description: 'Quản lý trực tiếp cần xem xét kết quả tự đánh giá và đưu ra nhận định.',
           formName: 'Phiếu đánh giá của quản lý',
           formFields: [
             { id: 'f0', label: 'Kết quả tự đánh giá của nhân viên', type: 'textarea', required: false, readOnly: true, defaultValue: '${nodes.n1.selfAchievements}', outputMapping: 'displaySelfAchievements' },
@@ -221,22 +231,67 @@ export const workflows: WorkflowDefinition[] = [
             { id: 'f3', label: 'Điểm quản lý chấm', type: 'number', required: true, validation: { min: 1, max: 10 }, outputMapping: 'managerScore' },
             { id: 'f4', label: 'Đề xuất mục tiêu kỳ sau', type: 'text', required: false, outputMapping: 'nextPeriodGoals' },
           ],
+          executionMode: 'single',
+          slaDue: '5 ngày',
+          slaAction: 'Nhắc nhở',
+          dueReminderMessage: 'Nhắc nhở: Phiếu đánh giá của bạn dành cho nhân viên đã đến hạn.',
+          channels: ['email', 'inapp'],
           message: 'Quản lý ${participant.managerName} xem kết quả tự đánh giá của ${participant.name} (điểm: ${nodes.n1.selfScore}) rồi thực hiện đánh giá',
         },
         position: { x: 300, y: 370 },
       },
-      { id: 'n3', type: 'REVIEW', name: 'HR kiểm tra kết quả', config: { assignee: { type: 'fixed', value: 'U001', label: 'Nguyễn Thị Mai' }, message: 'HR kiểm tra tính hợp lệ của kết quả đánh giá' }, position: { x: 300, y: 530 } },
-      { id: 'n4', type: 'CONDITION', name: 'Kết quả hợp lệ?', config: { condition: '${trigger.body.evaluationValid} == true' }, position: { x: 300, y: 690 } },
-      { id: 'n5', type: 'DATA', name: 'Lưu kết quả đánh giá', config: { message: 'Lưu kết quả đánh giá vào hệ thống HRIS (System Action)' }, position: { x: 520, y: 850 } },
-      { id: 'n6', type: 'NOTIFICATION', name: 'Thông báo nhân viên', config: { recipient: 'current_participant', message: 'Kết quả đánh giá của ${participant.name} đã được lưu thành công' }, position: { x: 520, y: 1010 } },
+      {
+        id: 'n3',
+        type: 'REVIEW',
+        name: 'HR kiểm tra kết quả',
+        config: {
+          assignee: { type: 'fixed', value: 'U001', label: 'Nguyễn Thị Mai' },
+          assigneeType: 'assignee',
+          title: 'HR kiểm tra kết quả đánh giá - ${variables.period}',
+          description: 'HR xác nhận tính đầy đủ và hợp lệ của kết quả đánh giá từ nhân viên và quản lý.',
+          formName: 'Phiếu kiểm tra HR',
+          formFields: [
+            { id: 'f0a', label: 'Kết quả tự đánh giá của nhân viên', type: 'textarea', required: false, readOnly: true, defaultValue: '${nodes.n1.selfAchievements}', outputMapping: 'reviewSelfAchievements' },
+            { id: 'f0b', label: 'Điểm nhân viên tự đánh giá', type: 'number', required: false, readOnly: true, defaultValue: '${nodes.n1.selfScore}', outputMapping: 'reviewSelfScore' },
+            { id: 'f0c', label: 'Điểm quản lý chấm', type: 'number', required: false, readOnly: true, defaultValue: '${nodes.n2.managerScore}', outputMapping: 'reviewMgrScore' },
+            { id: 'f0d', label: 'Nhận xét của quản lý', type: 'textarea', required: false, readOnly: true, defaultValue: '${nodes.n2.managerComment}', outputMapping: 'reviewMgrComment' },
+            { id: 'f1', label: 'Xác nhận độ đầy đủ', type: 'checkbox', required: true, outputMapping: 'hrCompleteCheck' },
+            { id: 'f2', label: 'Ghi chú HR', type: 'textarea', required: false, outputMapping: 'hrNote' },
+            { id: 'f3', label: 'Kết quả cuối cùng hợp lệ?', type: 'checkbox', required: true, outputMapping: 'evaluationValid' },
+          ],
+          executionMode: 'single',
+          slaDue: '3 ngày',
+          slaAction: 'Nhắc nhở',
+          dueReminderMessage: 'Nhắc nhở: Công việc kiểm tra HR đã đến hạn.',
+          channels: ['email', 'inapp'],
+          message: 'HR kiểm tra tính hợp lệ của kết quả đánh giá'
+        },
+        position: { x: 300, y: 530 }
+      },
+      { id: 'n4', type: 'CONDITION', name: 'Kết quả hợp lệ?', config: { condition: '${nodes.n3.evaluationValid} == true' }, position: { x: 300, y: 690 } },
+      { id: 'n5', type: 'SYSTEM', name: 'Lưu kết quả đánh giá', config: { action: 'Gọi API nội bộ', endpoint: 'HRIS v2 - Lưu kết quả đánh giá', inputMapping: '{ "participantId": "${participant.id}", "period": "${variables.period}", "selfScore": "${nodes.n1.selfScore}", "managerScore": "${nodes.n2.managerScore}", "managerCompetency": "${nodes.n2.managerCompetency}", "evaluationValid": "${nodes.n3.evaluationValid}" }', outputMapping: '{ "evalResultId": "${result.body.id}", "evalResultStatus": "${result.body.status}" }', message: 'Lưu kết quả đánh giá vào hệ thống HRIS (System Action)' }, position: { x: 520, y: 850 } },
+      {
+        id: 'n6',
+        type: 'NOTIFICATION',
+        name: 'Thông báo nhân viên',
+        config: {
+          assignee: { type: 'current_participant' },
+          assigneeType: 'recipient',
+          message: 'Kết quả đánh giá của ${participant.name} đã được lưu thành công. Điểm tổng hợp: ${nodes.n2.managerScore}. Kết quả hợp lệ: ${nodes.n3.evaluationValid}',
+          channels: ['email', 'inapp', 'teams'],
+          title: 'Kết quả đánh giá - ${variables.period}',
+          bodyTemplate: 'Chào ${participant.name}. Kết quả đánh giá của bạn cho kỳ ${variables.period} đã được lưu. Điểm tự đánh giá: ${nodes.n1.selfScore}, điểm quản lý: ${nodes.n2.managerScore}. Trân trọng, HR Team',
+        },
+        position: { x: 520, y: 1010 },
+      },
     ],
     connections: [
-      { id: 'c1', sourceNodeId: 'n1', targetNodeId: 'n2' },
-      { id: 'c2', sourceNodeId: 'n2', targetNodeId: 'n3' },
-      { id: 'c3', sourceNodeId: 'n3', targetNodeId: 'n4' },
+      { id: 'c1', sourceNodeId: 'n1', sourcePort: 'SUCCESS', targetNodeId: 'n2' },
+      { id: 'c2', sourceNodeId: 'n2', sourcePort: 'APPROVED', targetNodeId: 'n3' },
+      { id: 'c3', sourceNodeId: 'n3', sourcePort: 'REVIEW_COMPLETED', targetNodeId: 'n4' },
       { id: 'c4', sourceNodeId: 'n4', sourcePort: 'true', targetNodeId: 'n5', label: 'TRUE' },
       { id: 'c5', sourceNodeId: 'n4', sourcePort: 'false', targetNodeId: 'n2', label: 'FALSE' },
-      { id: 'c6', sourceNodeId: 'n5', targetNodeId: 'n6' },
+      { id: 'c6', sourceNodeId: 'n5', sourcePort: 'SUCCESS', targetNodeId: 'n6' },
     ],
   },
 ];
@@ -262,7 +317,7 @@ export function addVersionEntry(versionNo: string, authorId: string, changes: st
   });
 }
 
-export const instances: WorkflowInstanceSummary[] = [
+export let instances: WorkflowInstanceSummary[] = [
   { id: 'inst-1092', requestCode: 'REQ-1092', workflowId: '2', workflowName: 'Phê duyệt nghỉ phép', workflowVersion: '1.4', creatorId: 'U001', creatorName: 'Nguyễn Thị Mai', status: 'PENDING', currentStepLabels: ['Phê duyệt Cấp 1'], activeAssignees: ['U003'], startedAt: '2024-11-20 09:00', slaStatus: 'ON_TIME' },
   { id: 'inst-1081', requestCode: 'REQ-1081', workflowId: '2', workflowName: 'Phê duyệt nghỉ phép', workflowVersion: '1.4', creatorId: 'U002', creatorName: 'Trần Hoàng Bách', status: 'PENDING', currentStepLabels: ['Phê duyệt Cấp 2'], activeAssignees: ['U005', 'U006'], startedAt: '2024-11-19 14:30', slaStatus: 'OVERDUE' },
   { id: 'inst-1052', requestCode: 'REQ-1052', workflowId: '1', workflowName: 'Phê duyệt mua sắm', workflowVersion: '2.2', creatorId: 'U004', creatorName: 'Phạm Hồng Đăng', status: 'COMPLETED', currentStepLabels: ['Hoàn tất quy trình'], activeAssignees: [], startedAt: '2024-11-18 10:15', slaStatus: 'ON_TIME' },
@@ -286,6 +341,16 @@ export function getInstance(id: string): WorkflowInstanceSummary | undefined {
   return instances.find(i => i.id === id || i.requestCode === id);
 }
 
+export function replaceBackendData(data: {
+  users?: OrgUser[];
+  workflowDefinitions?: WorkflowDefinition[];
+  workflowInstances?: WorkflowInstanceSummary[];
+}) {
+  if (data.users) orgUsers = data.users;
+  if (data.workflowDefinitions) workflows = data.workflowDefinitions;
+  if (data.workflowInstances) instances = data.workflowInstances;
+}
+
 export function hasRunningInstances(workflowId: string): boolean {
   return instances.some(i => i.workflowId === workflowId && (i.status === 'PENDING' || i.status === 'RUNNING'));
 }
@@ -303,8 +368,8 @@ export const instanceTasks: InstanceTask[] = [
 ];
 
 export const defaultVariables: WorkflowVariable[] = [
-  { key: 'threshold', dataType: 'NUMBER', defaultValue: { kind: 'CONSTANT', value: 10000000 }, required: true },
-  { key: 'period', dataType: 'STRING', defaultValue: { kind: 'CONSTANT', value: 'Q3-2024' }, required: false },
+  { key: 'threshold', dataType: 'NUMBER', defaultValue: { kind: 'CONSTANT', value: 10000000 }, required: true, mutationPolicy: 'READ_ONLY' as const },
+  { key: 'period', dataType: 'STRING', defaultValue: { kind: 'CONSTANT', value: 'Q3-2024' }, required: false, mutationPolicy: 'READ_ONLY' as const },
 ];
 
 export const mockContext = {
@@ -372,3 +437,61 @@ export const connectors: ConnectorDefinition[] = [
   { id: 'conn-3', name: 'Email Gateway', type: 'Email', baseUrl: 'smtp://mail.company.com', auth: 'Basic Auth', status: 'DISABLED', lastChecked: '2024-11-28 14:20' },
   { id: 'conn-4', name: 'HRIS v2 (Legacy)', type: 'Legacy', baseUrl: 'https://hris-legacy.company.com/api', auth: 'API Key', status: 'DISABLED', lastChecked: '2024-10-02 09:00' },
 ];
+
+// ===== NEW MOCK DATA FOR CONNECTORS (Extended) =====
+export function loadMockConnectors() {
+  return [
+    { id: 'conn-http', name: 'HTTP Connector', type: 'HTTP', description: 'Gọi API HTTP/REST', version: '1.0', icon: 'Link', color: '#EC4899', authType: 'NONE' as const, enabled: true, createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z', createdBy: 'admin', actions: [
+      { id: 'act-get', connectorId: 'conn-http', name: 'GET Request', actionKey: 'GET', description: 'HTTP GET', inputSchema: { type: 'object', properties: { url: { type: 'string' }, headers: { type: 'object' } } } as any, outputSchema: { type: 'object', properties: { statusCode: { type: 'number' }, body: { type: 'object' } } } as any, retryable: true, idempotent: true, sideEffects: 'READ_ONLY' as const },
+      { id: 'act-post', connectorId: 'conn-http', name: 'POST Request', actionKey: 'POST', description: 'HTTP POST', inputSchema: { type: 'object', properties: { url: { type: 'string' }, body: { type: 'object' } } } as any, outputSchema: { type: 'object', properties: { statusCode: { type: 'number' }, body: { type: 'object' } } } as any, retryable: true, idempotent: false, sideEffects: 'WRITE' as const },
+    ], configSchema: { type: 'object' } as any },
+    { id: 'conn-db', name: 'Database Connector', type: 'DATABASE', description: 'Truy vấn database', version: '1.0', icon: 'Database', color: '#06B6D4', authType: 'BASIC_AUTH' as const, enabled: true, createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z', createdBy: 'admin', actions: [
+      { id: 'act-query', connectorId: 'conn-db', name: 'Execute Query', actionKey: 'QUERY', description: 'Run SQL query', inputSchema: { type: 'object', properties: { query: { type: 'string' } } } as any, outputSchema: { type: 'object', properties: { rows: { type: 'array' } } } as any, retryable: false, idempotent: true, sideEffects: 'READ_ONLY' as const },
+      { id: 'act-insert', connectorId: 'conn-db', name: 'Insert Record', actionKey: 'INSERT', description: 'Insert a record', inputSchema: { type: 'object', properties: { table: { type: 'string' }, data: { type: 'object' } } } as any, outputSchema: { type: 'object', properties: { id: { type: 'string' } } } as any, retryable: false, idempotent: false, sideEffects: 'WRITE' as const },
+    ], configSchema: { type: 'object' } as any },
+    { id: 'conn-email', name: 'Email Connector', type: 'EMAIL', description: 'Gửi email', version: '1.0', icon: 'Mail', color: '#FBBF24', authType: 'BASIC_AUTH' as const, enabled: true, createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z', createdBy: 'admin', actions: [
+      { id: 'act-send-email', connectorId: 'conn-email', name: 'Send Email', actionKey: 'SEND', description: 'Send an email', inputSchema: { type: 'object', properties: { to: { type: 'string' }, subject: { type: 'string' }, body: { type: 'string' } } } as any, outputSchema: { type: 'object', properties: { messageId: { type: 'string' } } } as any, retryable: true, idempotent: true, sideEffects: 'WRITE' as const },
+    ], configSchema: { type: 'object' } as any },
+  ];
+}
+
+// ===== NEW MOCK DATA FOR CREDENTIALS =====
+export function loadMockCredentials() {
+  return [
+    { id: 'cred-1', name: 'API Key - Production', type: 'API_KEY' as const, scope: 'GLOBAL' as const, encryptedData: 'enc-***', metadata: { connectorTypes: ['HTTP'] }, createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z', createdBy: 'admin' },
+    { id: 'cred-2', name: 'Database Credentials', type: 'BASIC_AUTH' as const, scope: 'GLOBAL' as const, encryptedData: 'enc-***', metadata: { connectorTypes: ['DATABASE'] }, createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z', createdBy: 'admin' },
+    { id: 'cred-3', name: 'OAuth Token - SAP', type: 'OAUTH2' as const, scope: 'GLOBAL' as const, encryptedData: 'enc-***', metadata: { connectorTypes: ['HTTP', 'DATABASE'] }, createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z', createdBy: 'admin' },
+  ];
+}
+
+// ===== NEW MOCK DATA FOR MY TASKS =====
+export function loadMockTasks(filters?: any) {
+  const tasks = [
+    { id: 'task-1', workflowId: 'WF-001', taskType: 'APPROVAL' as const, title: 'Phê duyệt yêu cầu mua sắm #1234', description: 'Yêu cầu mua laptop mới cho nhân viên IT', assignee: { id: 'U001', displayName: 'Nguyễn Thị Mai' } as any, status: 'PENDING' as const, priority: 'HIGH' as const, dueAt: '2026-08-22T09:00:00Z', executionScope: 'INSTANCE' as const, completionPolicy: { policy: 'ALL' as const }, allowedActions: ['COMPLETE' as const, 'REJECT' as const], formRef: undefined, slaConfig: undefined, createdAt: '2026-08-19T10:00:00Z', createdBy: 'system' },
+    { id: 'task-2', workflowId: 'WF-001', taskType: 'REVIEW' as const, title: 'Kiểm duyệt hợp đồng thuê nhà', description: 'Kiểm tra các điều khoản trong hợp đồng', assignee: { id: 'U003', displayName: 'Lê Minh Tâm' } as any, status: 'COMPLETED' as const, priority: 'NORMAL' as const, dueAt: '2026-08-21T17:00:00Z', executionScope: 'INSTANCE' as const, completionPolicy: { policy: 'ALL' as const }, allowedActions: ['COMPLETE' as const, 'REQUEST_CHANGE' as const], formRef: undefined, slaConfig: undefined, createdAt: '2026-08-18T14:00:00Z', createdBy: 'system' },
+    { id: 'task-3', workflowId: 'WF-002', taskType: 'ASSIGNMENT' as const, title: 'Cập nhật báo cáo tài chính Q3', description: 'Hoàn thành báo cáo tài chính quý 3', assignee: { id: 'U004', displayName: 'Phạm Hồng Đăng' } as any, status: 'PENDING' as const, priority: 'URGENT' as const, dueAt: '2026-08-20T12:00:00Z', executionScope: 'EACH_PARTICIPANT' as const, completionPolicy: { policy: 'ALL' as const }, allowedActions: ['COMPLETE' as const], formRef: undefined, slaConfig: undefined, createdAt: '2026-08-17T08:00:00Z', createdBy: 'system' },
+    { id: 'task-4', workflowId: 'WF-003', taskType: 'APPROVAL' as const, title: 'Phê duyệt đơn nghỉ phép', description: 'Đơn nghỉ phép 5 ngày từ Vũ Ngọc Trinh', assignee: { id: 'U005', displayName: 'Vũ Ngọc Trinh' } as any, status: 'REJECTED' as const, priority: 'NORMAL' as const, dueAt: '2026-08-19T17:00:00Z', executionScope: 'INSTANCE' as const, completionPolicy: { policy: 'ALL' as const }, allowedActions: ['COMPLETE' as const, 'REJECT' as const], formRef: undefined, slaConfig: undefined, createdAt: '2026-08-16T09:00:00Z', createdBy: 'system' },
+  ];
+
+  let filtered = [...tasks];
+
+  if (filters?.status) {
+    if (Array.isArray(filters.status)) {
+      filtered = filtered.filter(t => filters.status.includes(t.status));
+    } else {
+      filtered = filtered.filter(t => t.status === filters.status);
+    }
+  }
+  if (filters?.priority) {
+    filtered = filtered.filter(t => t.priority === filters.priority);
+  }
+  if (filters?.workflowId) {
+    filtered = filtered.filter(t => t.workflowId === filters.workflowId);
+  }
+  if (filters?.searchQuery) {
+    const q = filters.searchQuery.toLowerCase();
+    filtered = filtered.filter(t => t.title.toLowerCase().includes(q) || (t.description && t.description.toLowerCase().includes(q)));
+  }
+
+  return { tasks: filtered, total: filtered.length };
+}

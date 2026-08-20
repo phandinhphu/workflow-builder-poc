@@ -6,6 +6,7 @@ import VersionHistoryModal from '../components/VersionHistoryModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Toast, { useToasts } from '../components/Toast';
 import { getWorkflow, getInstancesByWorkflow, userDisplayName, hasRunningInstances, workflowVersions, scopeDescription } from '../data/mockData';
+import { api } from '../api/client';
 
 export default function WorkflowDetail() {
   const { id } = useParams();
@@ -34,14 +35,14 @@ export default function WorkflowDetail() {
   const instanceCount = getInstancesByWorkflow(workflow.id).length;
   const hasRunning = hasRunningInstances(workflow.id);
 
-  const confirmSuspend = () => {
-    toasts.pushToast('success', `Workflow "${workflow.name}" đã được tạm ngưng. Instance mới sẽ không được tạo.`);
-    setSuspendConfirmOpen(false);
+  const confirmSuspend = async () => {
+    try { await api.workflows.changeStatus(workflow.id, 'SUSPENDED'); workflow.status = 'SUSPENDED'; toasts.pushToast('success', `Workflow "${workflow.name}" đã được tạm ngưng. Instance mới sẽ không được tạo.`); setSuspendConfirmOpen(false); }
+    catch (cause) { toasts.pushToast('error', cause instanceof Error ? cause.message : 'Không tạm ngưng được workflow'); }
   };
 
-  const confirmReactivate = () => {
-    toasts.pushToast('success', `Workflow "${workflow.name}" đã được kích hoạt lại.`);
-    setReactivateConfirmOpen(false);
+  const confirmReactivate = async () => {
+    try { await api.workflows.changeStatus(workflow.id, 'PUBLISHED'); workflow.status = 'PUBLISHED'; toasts.pushToast('success', `Workflow "${workflow.name}" đã được kích hoạt lại.`); setReactivateConfirmOpen(false); }
+    catch (cause) { toasts.pushToast('error', cause instanceof Error ? cause.message : 'Không kích hoạt được workflow'); }
   };
 
   return (
@@ -79,8 +80,16 @@ export default function WorkflowDetail() {
                 <ArrowPathIcon className="w-4 h-4" /> Kích hoạt lại
               </button>
             )}
+            {workflow.status === 'PUBLISHED' && workflow.trigger?.type === 'manual' && (
+              <Link
+                to={`/workflows/${workflow.id}/runtime?start=1`}
+                className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 flex items-center gap-1"
+              >
+                <PlayIcon className="w-4 h-4" /> Chạy workflow
+              </Link>
+            )}
             <Link to={`/workflows/${workflow.id}/designer`} className="px-4 py-2 bg-primary text-white text-sm font-medium rounded hover:bg-primary-dark flex items-center gap-1">
-              <PlayIcon className="w-4 h-4" /> Thiết kế
+              <DocumentTextIcon className="w-4 h-4" /> Thiết kế
             </Link>
           </div>
         </div>
@@ -248,10 +257,10 @@ export default function WorkflowDetail() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-base font-bold text-navy">Danh sách Instance</h3>
                 <Link
-                  to={`/workflows/${workflow.id}/runtime`}
+                  to={`/workflows/${workflow.id}/runtime${workflow.status === 'PUBLISHED' && workflow.trigger?.type === 'manual' ? '?start=1' : ''}`}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded hover:bg-primary-dark"
                 >
-                  Mở trang theo dõi Runtime
+                  {workflow.status === 'PUBLISHED' && workflow.trigger?.type === 'manual' ? 'Chạy workflow' : 'Mở trang theo dõi Runtime'}
                 </Link>
               </div>
               <div className="bg-white border border-border rounded-lg p-6 shadow-sm">
@@ -280,7 +289,7 @@ export default function WorkflowDetail() {
         </div>
       </div>
 
-      <VersionHistoryModal isOpen={isVersionHistoryOpen} onClose={() => setIsVersionHistoryOpen(false)} />
+      <VersionHistoryModal workflowId={workflow.id} isOpen={isVersionHistoryOpen} onClose={() => setIsVersionHistoryOpen(false)} />
 
       <ConfirmDialog
         isOpen={suspendConfirmOpen}

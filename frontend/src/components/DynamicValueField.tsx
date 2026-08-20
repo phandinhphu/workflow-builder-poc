@@ -52,7 +52,6 @@ export default function DynamicValueField({
   disabled = false,
 }: DynamicValueFieldProps) {
   const [isContextExplorerOpen, setIsContextExplorerOpen] = useState(false);
-  const [displayValue, setDisplayValue] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -65,7 +64,6 @@ export default function DynamicValueField({
     const token = `\${${path}}`;
     const newValue = value.slice(0, start) + token + value.slice(end);
     onChange(newValue);
-    setDisplayValue(newValue);
     setTimeout(() => {
       if (input) {
         input.selectionStart = start + token.length;
@@ -77,11 +75,9 @@ export default function DynamicValueField({
   const removeChip = (chipPath: string) => {
     const newValue = value.replace(`\${${chipPath}}`, '');
     onChange(newValue);
-    setDisplayValue(newValue);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDisplayValue(e.target.value);
     onChange(e.target.value);
   };
 
@@ -135,7 +131,7 @@ export default function DynamicValueField({
         <input
           ref={inputRef}
           type="text"
-          value={displayValue}
+          value={value}
           onChange={handleInputChange}
           placeholder={placeholder}
           disabled={disabled}

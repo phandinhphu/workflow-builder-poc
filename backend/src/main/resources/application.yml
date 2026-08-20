@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: workflow-backend
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/workflow_builder?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Bangkok}
+    username: ${DB_USERNAME:workflow}
+    password: ${DB_PASSWORD:workflow}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: Asia/Bangkok
+  jackson:
+    default-property-inclusion: non_null
+    time-zone: Asia/Bangkok
+  mvc:
+    problemdetails:
+      enabled: true
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+app:
+  cors-origins: ${CORS_ORIGINS:http://localhost:5173}
+  dev-user-header-enabled: ${DEV_USER_HEADER_ENABLED:false}
+  auth-token-hours: ${AUTH_TOKEN_HOURS:12}
+  integrations:
+    allow-insecure-http: ${ALLOW_INSECURE_HTTP:false}
+  runtime:
+    scheduler-delay-ms: ${RUNTIME_SCHEDULER_DELAY_MS:5000}
+    notification-delay-ms: ${NOTIFICATION_DELAY_MS:5000}
+    max-sync-depth: ${MAX_SYNC_DEPTH:200}

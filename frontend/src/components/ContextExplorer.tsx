@@ -55,15 +55,22 @@ export default function ContextExplorer({ isOpen, onClose, onSelect, nodes, trig
   const triggerItems = flatten(currentTrigger, 'trigger');
   const nodeItems: ContextItem[] = [];
   allNodes.forEach(node => {
-    if (node.output) {
-      Object.entries(node.output).forEach(([key, value]) => {
+    const formFields = (node.data?.formFields as Array<{ id: string; outputMapping?: string; type?: string }> | undefined) ?? [];
+    formFields.forEach(field => {
+      const key = field.outputMapping || field.id;
+      if (key) {
         nodeItems.push({
           path: `nodes.${node.id}.output.${key}`,
           label: `${node.data?.label || node.id}.${key}`,
-          type: typeof value,
+          type: field.type || 'string',
         });
-      });
-    }
+      }
+    });
+    if (node.output && formFields.length === 0) Object.entries(node.output).forEach(([key, value]) => nodeItems.push({
+      path: `nodes.${node.id}.output.${key}`,
+      label: `${node.data?.label || node.id}.${key}`,
+      type: typeof value,
+    }));
   });
   const variableItems: ContextItem[] = Array.isArray(currentVariables)
     ? currentVariables.map((v: any) => ({ path: `variables.${v.key}`, label: v.key, type: v.dataType }))

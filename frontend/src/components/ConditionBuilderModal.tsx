@@ -34,9 +34,9 @@ const parseExpressionToGroup = (_expr: string): ConditionGroup => {
     rules: [
       {
         id: Date.now().toString(),
-        field: 'trigger.amount',
-        operator: '>',
-        value: '1000',
+        field: 'nodes.n3.evolutionValid',
+        operator: '==',
+        value: 'TRUE',
         type: 'literal'
       }
     ]

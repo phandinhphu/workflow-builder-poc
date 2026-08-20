@@ -8,7 +8,13 @@ import {
   Database, 
   Globe2, 
   FormInput, 
-  GitBranch 
+  GitBranch,
+  TrendingUp,
+  Clock,
+  Zap,
+  ArrowLeftRight,
+  ArrowRightLeft,
+  Layers
 } from 'lucide-react';
 
 const NODE_CATEGORIES = [
@@ -28,12 +34,28 @@ const NODE_CATEGORIES = [
       { type: 'data', label: 'Bảng dữ liệu', description: 'Truy vấn và xử lý dữ liệu có cấu trúc', icon: Database },
       { type: 'http', label: 'HTTP Request', description: 'Gửi yêu cầu gọi API bên ngoài', icon: Globe2 },
       { type: 'form', label: 'Biểu mẫu', description: 'Yêu cầu người dùng nhập thông tin qua giao diện', icon: FormInput },
+      { type: 'data_transform', label: 'Biến đổi dữ liệu', description: 'Transform, map, set variable trong context - không side effect', icon: TrendingUp },
     ]
   },
   {
     name: 'ĐIỀU KHIỂN LUỒNG XỬ LÝ',
     nodes: [
       { type: 'condition', label: 'Điều kiện (IF / ELSE)', description: 'Chuyển hướng luồng dữ liệu theo điều kiện', icon: GitBranch },
+      { type: 'parallel_split', label: 'Phân nhánh song song', description: 'Kích hoạt nhiều path xử lý song song từ cùng 1 điểm', icon: ArrowLeftRight },
+      { type: 'join', label: 'Đồng bộ nhánh', description: 'Đợi tất cả nhánh song song hoàn thành rồi tiếp tục', icon: ArrowRightLeft },
+    ]
+  },
+  {
+    name: 'CHỜ & SỰ KIỆN',
+    nodes: [
+      { type: 'timer', label: 'Bộ hẹn giờ', description: 'Dừng xử lý trong khoảng thời gian hoặc đến thời điểm cụ thể', icon: Clock },
+      { type: 'wait_event', label: 'Chờ sự kiện', description: 'Đợi sự kiện bên ngoài (webhook, hệ thống) rồi tiếp tục', icon: Zap },
+    ]
+  },
+  {
+    name: 'TÁI SỬ DỤNG',
+    nodes: [
+      { type: 'subworkflow', label: 'Subworkflow', description: 'Gọi và chạy một workflow khác như module con', icon: Layers },
     ]
   }
 ];

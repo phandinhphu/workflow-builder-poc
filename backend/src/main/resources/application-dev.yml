@@ -1,0 +1,7 @@
+app:
+  dev-user-header-enabled: true
+  integrations:
+    allow-insecure-http: true
+server:
+  error:
+    include-message: always

@@ -1,16 +1,28 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon, ClockIcon, FunnelIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
-import { workflowVersions } from '../data/mockData';
+import { workflowVersions as fallbackVersions } from '../data/mockData';
+import { api } from '../api/client';
+import type { WorkflowVersion } from '../types/workflow';
 
 interface VersionHistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
+  workflowId?: string;
 }
 
-export default function VersionHistoryModal({ isOpen, onClose }: VersionHistoryModalProps) {
+export default function VersionHistoryModal({ isOpen, onClose, workflowId }: VersionHistoryModalProps) {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'DRAFT' | 'PUBLISHED' | 'SUSPENDED'>('ALL');
+  const [workflowVersions, setWorkflowVersions] = useState<WorkflowVersion[]>(fallbackVersions);
+
+  useEffect(() => {
+    if (!isOpen || !workflowId) return;
+    api.workflows.versions(workflowId).then(items => setWorkflowVersions(items.map((item: any) => ({
+      id: item.id, versionNo: item.versionNo, status: item.status, author: item.author,
+      createdAt: item.publishedAt ?? item.createdAt, changes: [`Published snapshot · checksum ${String(item.checksum ?? '').slice(0, 12)}`],
+    })))).catch(() => setWorkflowVersions(fallbackVersions));
+  }, [isOpen, workflowId]);
 
   const filtered = workflowVersions.filter(v => statusFilter === 'ALL' || v.status === statusFilter);
 
@@ -29,7 +41,7 @@ export default function VersionHistoryModal({ isOpen, onClose }: VersionHistoryM
           <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" />
         </Transition.Child>
 
-        <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
+        <div className="fixed inset-0 z-50 w-screen overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
             <Transition.Child
               as={Fragment}

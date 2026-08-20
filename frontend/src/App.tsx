@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from 'react';
 import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom';
 import WorkflowList from './pages/WorkflowList';
 import WorkflowBuilder from './pages/WorkflowBuilder';
@@ -5,16 +6,17 @@ import WorkflowDetail from './pages/WorkflowDetail';
 import InstancesList from './pages/InstancesList';
 import InstanceDetail from './pages/InstanceDetail';
 import UsersList from './pages/UsersList';
+import MyTasksPage from './pages/MyTasks';
+import ConnectorManagementPage from './pages/ConnectorManagement';
+import Dashboard from './pages/Dashboard';
+import OrganizationsPage from './pages/OrganizationsPage';
+import RolesPage from './pages/RolesPage';
 import Sidebar from './components/Sidebar';
 import Topbar from './components/Topbar';
-
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div className="h-full flex flex-col items-center justify-center p-6 text-gray-500">
-      <p className="text-sm mb-4">{title} — màn hình sẽ được triển khai ở giai đoạn tiếp theo.</p>
-    </div>
-  );
-}
+import { api } from './api/client';
+import { ApiError } from './api/client';
+import { replaceBackendData } from './data/mockData';
+import LoginPage from './pages/LoginPage';
 
 function AppLayout() {
   return (
@@ -35,7 +37,7 @@ const router = createBrowserRouter([
     element: <AppLayout />,
     children: [
       { path: '/', element: <Navigate to="/workflows" replace /> },
-      { path: '/dashboard', element: <PlaceholderPage title="Dashboard" /> },
+      { path: '/dashboard', element: <Dashboard /> },
       { path: '/workflows', element: <WorkflowList /> },
       { path: '/workflows/new', element: <WorkflowBuilder /> },
       { path: '/workflows/new/designer', element: <WorkflowBuilder /> },
@@ -44,14 +46,52 @@ const router = createBrowserRouter([
       { path: '/workflows/:id/runtime', element: <InstancesList /> },
       { path: '/workflows/:id/designer', element: <WorkflowBuilder /> },
       { path: '/workflows/:workflowId/instances/:instanceId', element: <InstanceDetail /> },
+      { path: '/my-tasks', element: <MyTasksPage /> },
+      { path: '/connectors', element: <ConnectorManagementPage /> },
       { path: '/users', element: <UsersList /> },
-      { path: '/sync', element: <PlaceholderPage title="Đồng bộ dữ liệu" /> },
-      { path: '/settings', element: <PlaceholderPage title="Cài đặt" /> },
+      { path: '/sync', element: <OrganizationsPage /> },
+      { path: '/settings', element: <RolesPage /> },
     ],
   },
 ]);
 
 function App() {
+  const [state, setState] = useState<'loading' | 'ready' | 'error' | 'unauthenticated'>('loading');
+  const [error, setError] = useState('');
+
+  const bootstrap = useCallback(async () => {
+    setState('loading');
+    if (!localStorage.getItem('workflow.authToken') && !(import.meta.env.DEV && import.meta.env.VITE_ALLOW_DEV_USER_HEADER === 'true')) { setState('unauthenticated'); return; }
+    try {
+      const [users, workflowSummaries, workflowInstances] = await Promise.all([
+        api.users.list(),
+        api.workflows.list(),
+        api.runtime.instances(),
+      ]);
+      const workflowDefinitions = await Promise.all(workflowSummaries.map(workflow => api.workflows.get(workflow.id)));
+      replaceBackendData({ users, workflowDefinitions, workflowInstances });
+      setState('ready');
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 401) { localStorage.removeItem('workflow.authToken'); setState('unauthenticated'); return; }
+      setError(cause instanceof Error ? cause.message : 'Không thể kết nối backend');
+      setState('error');
+    }
+  }, []);
+
+  useEffect(() => { void bootstrap(); }, [bootstrap]);
+
+  if (state === 'loading') return <div className="h-screen grid place-items-center text-sm text-gray-500">Đang tải dữ liệu HRM và workflow từ backend…</div>;
+  if (state === 'unauthenticated') return <LoginPage onAuthenticated={() => void bootstrap()} />;
+  if (state === 'error') return (
+    <div className="h-screen grid place-items-center bg-gray-50">
+      <div className="bg-white border rounded-xl p-6 max-w-lg text-center shadow-sm">
+        <h1 className="font-bold text-red-700">Không kết nối được backend</h1>
+        <p className="text-sm text-gray-600 mt-2">{error}</p>
+        <p className="text-xs text-gray-500 mt-2">Hãy chạy MySQL và Spring Boot ở cổng 8080.</p>
+        <button onClick={() => void bootstrap()} className="mt-4 px-4 py-2 bg-primary text-white rounded-md text-sm">Thử lại</button>
+      </div>
+    </div>
+  );
   return <RouterProvider router={router} />;
 }
 

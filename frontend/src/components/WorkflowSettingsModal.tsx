@@ -49,6 +49,7 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
       defaultValue: newVarDefault ? { kind: 'CONSTANT', value: newVarDefault } : undefined,
       required: newVarRequired,
       description: newVarDesc || undefined,
+      mutationPolicy: 'MUTABLE',
     };
     setVariables([...variables, v]);
     setNewVarKey('');
@@ -77,7 +78,7 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
           <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" />
         </Transition.Child>
 
-        <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
+        <div className="fixed inset-0 z-50 w-screen overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
             <Transition.Child
               as={Fragment}

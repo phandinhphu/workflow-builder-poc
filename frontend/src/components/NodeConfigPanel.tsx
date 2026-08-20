@@ -1,6 +1,6 @@
 ﻿import { XMarkIcon } from '@heroicons/react/24/outline';
-import type { Node } from '@xyflow/react';
-import { useState } from 'react';
+import type { Node, Edge } from '@xyflow/react';
+import { useState, useMemo } from 'react';
 import DynamicValueField from './DynamicValueField';
 import AssigneeResolver, { type AssigneeResolverConfig } from './AssigneeResolver';
 import FormBuilderModal, { type FormField } from './FormBuilderModal';
@@ -8,7 +8,8 @@ import ConditionBuilderModal from './ConditionBuilderModal';
 import { CheckCircle2, UserPlus, BellRing, GitBranch, MousePointer2, FormInput, Eye, Code2, Database, Globe2, Play, Clock, Webhook } from 'lucide-react';
 import clsx from 'clsx';
 import { useDesignerStore } from '../stores/designerStore';
-import type { TriggerType } from '../types/workflow';
+import { toIsoDuration } from '../utils/duration';
+import type { TriggerType, TriggerDefinition } from '../types/workflow';
 
 const TRIGGER_TYPE_OPTIONS: { value: TriggerType; label: string; icon: any }[] = [
   { value: 'manual', label: 'Kích hoạt thủ công', icon: MousePointer2 },
@@ -42,6 +43,307 @@ const nodeConfig: Record<string, { title: string, desc: string, icon: any, color
 
 const defaultAssignee: AssigneeResolverConfig = { type: 'fixed', value: '', label: '' };
 
+type AnyRecord = Record<string, unknown>;
+
+// @ts-ignore
+function extractContextRefs(text: string | undefined): string[] {
+  if (!text) return [];
+  const refs: string[] = [];
+  const regex = /\$\{([^}]+)\}/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    refs.push(match[1].trim());
+  }
+  return [...new Set(refs)];
+}
+
+function ContextRefBadge({ path }: { path: string }) {
+  const firstSeg = path.split('.')[0];
+  const colorMap: Record<string, string> = {
+    trigger: 'bg-blue-100 text-blue-700 border-blue-200',
+    variables: 'bg-purple-100 text-purple-700 border-purple-200',
+    nodes: 'bg-teal-100 text-teal-700 border-teal-200',
+    participant: 'bg-orange-100 text-orange-700 border-orange-200',
+    currentUser: 'bg-gray-100 text-gray-700 border-gray-200',
+    result: 'bg-green-100 text-green-700 border-green-200',
+  };
+  const cn = colorMap[firstSeg] || 'bg-gray-100 text-gray-700 border-gray-200';
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-mono border ${cn}`}>
+      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6l4 2" /></svg>
+      {'${' + path + '}'}
+    </span>
+  );
+}
+
+function FormFieldPreview({ field }: { field: FormField }) {
+  const isReadOnly = field.readOnly;
+  return (
+    <div className={`mb-3 ${isReadOnly ? 'opacity-60' : ''}`}>
+      <label className="block text-sm font-medium text-navy mb-1">
+        {field.label}
+        {field.required && <span className="text-danger ml-1">*</span>}
+      </label>
+      {(() => {
+        switch (field.type) {
+          case 'textarea':
+            return (
+              <textarea
+                readOnly={isReadOnly}
+                rows={2}
+                placeholder={field.placeholder || ''}
+                defaultValue={field.defaultValue || ''}
+                className="w-full border border-border rounded px-3 py-2 text-sm bg-white resize-none focus:outline-none"
+              />
+            );
+          case 'number':
+            return (
+              <input
+                readOnly={isReadOnly}
+                type="number"
+                placeholder={field.placeholder || ''}
+                defaultValue={field.defaultValue || ''}
+                min={field.validation?.min}
+                max={field.validation?.max}
+                className="w-full border border-border rounded px-3 py-2 text-sm bg-white focus:outline-none"
+              />
+            );
+          case 'select':
+            return (
+              <select
+                disabled={isReadOnly}
+                className="w-full border border-border rounded px-3 py-2 text-sm bg-white focus:outline-none"
+              >
+                <option value="">Chọn...</option>
+                {field.options?.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+            );
+          case 'checkbox':
+            return (
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  readOnly
+                  defaultChecked={field.defaultValue === 'true' || field.defaultValue === '${trigger.body.evaluationValid}'}
+                  className="rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <span className="text-sm text-gray-600">{field.placeholder || ''}</span>
+              </label>
+            );
+          case 'date':
+            return <input readOnly={isReadOnly} type="date" className="w-full border border-border rounded px-3 py-2 text-sm bg-white focus:outline-none" />;
+          case 'user-picker':
+            return (
+              <input
+                readOnly={isReadOnly}
+                type="text"
+                placeholder="Chọn người dùng..."
+                className="w-full border border-border rounded px-3 py-2 text-sm bg-white focus:outline-none"
+              />
+            );
+          case 'file':
+            return <input readOnly={isReadOnly} type="file" className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-gray-50 file:text-navy hover:file:bg-gray-100" />;
+          default:
+            return (
+              <input
+                readOnly={isReadOnly}
+                type="text"
+                placeholder={field.placeholder || ''}
+                defaultValue={field.defaultValue || ''}
+                className="w-full border border-border rounded px-3 py-2 text-sm bg-white focus:outline-none"
+              />
+            );
+        }
+      })()}
+      {field.validation && (
+        <p className="text-xs text-muted mt-1">
+          {field.validation.min !== undefined && field.validation.max !== undefined
+            ? `Giới hạn: ${field.validation.min} - ${field.validation.max}`
+            : ''}
+        </p>
+      )}
+      {field.defaultValue && field.defaultValue.startsWith('${') && (
+        <div className="mt-1">
+          <ContextRefBadge path={field.defaultValue.replace(/^\$\{([^}]+)\}$/, '$1')} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function findUpstreamNodes(nodeId: string, nodes: Node[], edges: Edge[]): Node[] {
+  const upstream: Node[] = [];
+  const visited = new Set<string>();
+  
+  const incomingEdges = edges.filter(e => e.target === nodeId && e.sourceHandle !== 'false');
+  const queue: string[] = incomingEdges.map(e => e.source);
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    if (visited.has(currentId)) continue;
+    visited.add(currentId);
+
+    const node = nodes.find(n => n.id === currentId);
+    if (node) {
+      upstream.push(node);
+      const prevEdges = edges.filter(e => e.target === currentId && e.sourceHandle !== 'false');
+      queue.push(...prevEdges.map(e => e.source));
+    }
+  }
+  
+  upstream.sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+  return upstream;
+}
+
+function InputDataTab({ trigger, upstreamNodes, variables }: { type: string; data: AnyRecord; trigger?: TriggerDefinition; upstreamNodes: Node[]; variables: Array<{ key: string }> }) {
+  return (
+    <div className="p-4">
+      <h4 className="text-xs font-bold text-navy uppercase mb-3">Context đầu vào khả dụng</h4>
+      <div className="space-y-4">
+        {trigger && (
+          <div className="border border-border rounded-md p-3 bg-white">
+            <p className="text-sm font-medium text-navy mb-2">Từ Trigger ({trigger.type})</p>
+            <div className="flex flex-wrap gap-1">
+              <ContextRefBadge path="trigger.body" />
+            </div>
+          </div>
+        )}
+        
+        {variables.length > 0 && (
+          <div className="border border-border rounded-md p-3 bg-white">
+            <p className="text-sm font-medium text-navy mb-2">Biến Workflow</p>
+            <div className="flex flex-wrap gap-1">
+              {variables.map(v => <ContextRefBadge key={v.key} path={`variables.${v.key}`} />)}
+            </div>
+          </div>
+        )}
+        
+        {upstreamNodes.length > 0 && (
+          <div className="border border-border rounded-md p-3 bg-white">
+            <p className="text-sm font-medium text-navy mb-2">Kết quả từ các bước trước</p>
+            <div className="space-y-2">
+              {upstreamNodes.map(node => (
+                <div key={node.id}>
+                  <p className="text-xs text-muted mb-1">{node.data.label as string}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {(node.data.formFields as FormField[] ?? []).map((f: FormField) => (
+                      f.outputMapping && <ContextRefBadge key={f.id} path={`nodes.${node.id}.output.${f.outputMapping}`} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-muted mt-4 italic">Sử dụng định dạng ${'{path}'} để mapping dữ liệu trong cấu hình các trường.</p>
+    </div>
+  );
+}
+
+function PreviewTab({ type, data, formFields }: { type: string; data: AnyRecord; formFields: FormField[] }) {
+  const isHumanTask = ['assignment', 'approval', 'review', 'form'].includes(type);
+
+  if (isHumanTask && formFields.length > 0) {
+    return (
+      <div className="p-4 overflow-y-auto">
+        <h4 className="text-xs font-bold text-navy uppercase mb-3">Form preview</h4>
+        <div className="border border-border rounded-md p-4 bg-white max-w-md mx-auto">
+          {String(data.formName) && <h3 className="text-lg font-bold text-navy mb-4 text-center">{String(data.formName)}</h3>}
+          <div className="space-y-3">
+            {formFields.map(f => <FormFieldPreview key={f.id} field={f} />)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (type === 'notification') {
+    return (
+      <div className="p-4">
+        <h4 className="text-xs font-bold text-navy uppercase mb-3">Thông báo preview</h4>
+        <div className="max-w-md mx-auto">
+          <div className="border border-border rounded-lg p-4 bg-white shadow-sm">
+            <div className="flex items-center gap-3 mb-3 pb-2 border-b border-border">
+              <BellRing className="w-5 h-5 text-yellow-500" />
+              <div>
+                <p className="text-sm font-bold text-navy">
+                  {data.title ? String(data.title) : 'Thông báo'}
+                </p>
+                <p className="text-xs text-muted">
+                  {((data.channels as string[]) || []).map(ch => ch === 'email' ? 'Email' : ch === 'inapp' ? 'In-app' : ch === 'teams' ? 'Teams' : ch).join(', ') || '—'}
+                </p>
+              </div>
+            </div>
+            <p className="text-sm text-navy whitespace-pre-wrap break-words">
+              {String(data.message || data.bodyTemplate || 'Chưa có nội dung')}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (type === 'system') {
+    return (
+      <div className="p-4">
+        <h4 className="text-xs font-bold text-navy uppercase mb-3">System Action preview</h4>
+        <div className="max-w-md mx-auto">
+          <div className="border border-border rounded-lg p-4 bg-white">
+            <div className="flex items-center gap-3 mb-3">
+              <Code2 className="w-5 h-5 text-gray-500" />
+              <span className="text-sm font-medium text-navy">{String(data.action || type)}</span>
+            </div>
+            {String(data.endpoint) && (
+              <p className="text-xs text-muted mb-2 break-all">{String(data.endpoint)}</p>
+            )}
+            {String(data.inputMapping) && (
+              <pre className="text-xs font-mono bg-gray-50 border border-border rounded p-2 whitespace-pre-wrap break-all">
+                {String(data.inputMapping)}
+              </pre>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (type === 'condition') {
+    const condition = String(data.condition || '');
+    return (
+      <div className="p-4">
+        <h4 className="text-xs font-bold text-navy uppercase mb-3">Condition preview</h4>
+        <div className="max-w-md mx-auto">
+          <div className="border border-border rounded-lg p-4 bg-white">
+            <div className="flex items-center gap-3 mb-2">
+              <GitBranch className="w-5 h-5 text-emerald-500" />
+              <span className="text-sm font-medium text-navy">Điều kiện nhánh</span>
+            </div>
+            <code className="text-sm font-mono text-navy block bg-gray-50 border border-border rounded p-2 break-all whitespace-pre-wrap">
+              {condition || 'Chưa có điều kiện'}
+            </code>
+            <div className="mt-3 flex gap-4">
+              <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded p-2 text-center">
+                <span className="text-xs font-bold text-emerald-700">TRUE</span>
+              </div>
+              <div className="flex-1 bg-red-50 border border-red-200 rounded p-2 text-center">
+                <span className="text-xs font-bold text-red-700">FALSE</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center text-muted">
+      <CheckCircle2 className="w-8 h-8 mb-2 opacity-20" />
+      <p className="text-sm">Chưa có kết quả để hiển thị</p>
+    </div>
+  );
+}
+
 export default function NodeConfigPanel({ node, onClose, onUpdate }: { node: Node, onClose: () => void, onUpdate: (data: any) => void }) {
   const data = node.data as any;
   const type = data.nodeType as string;
@@ -54,6 +356,12 @@ export default function NodeConfigPanel({ node, onClose, onUpdate }: { node: Nod
 
   const setStoreTrigger = useDesignerStore(s => s.setTrigger);
   const setPanel = useDesignerStore(s => s.setPanel);
+  const nodes = useDesignerStore(s => s.nodes);
+  const edges = useDesignerStore(s => s.edges);
+  const trigger = useDesignerStore(s => s.trigger);
+  const variables = useDesignerStore(s => s.variables);
+
+  const upstreamNodes = useMemo(() => findUpstreamNodes(node.id, nodes, edges), [node.id, nodes, edges]);
 
   const openTriggerLibrary = () => {
     setPanel('trigger-library');
@@ -90,7 +398,7 @@ export default function NodeConfigPanel({ node, onClose, onUpdate }: { node: Nod
   const channels: string[] = data.channels || ['email', 'inapp'];
 
   return (
-    <div className="w-[420px] border-l border-border bg-white flex flex-col h-full z-20 shadow-xl shrink-0 absolute right-0 top-0">
+    <div className="w-[420px] border-l border-border bg-white flex flex-col h-full z-10 shadow-xl shrink-0 absolute right-0 top-0">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-gray-50/50">
         <div className="flex items-center gap-3">
           <div className={`w-8 h-8 rounded bg-white border border-gray-200 shadow-sm flex items-center justify-center ${config.color}`}>
@@ -127,6 +435,7 @@ export default function NodeConfigPanel({ node, onClose, onUpdate }: { node: Nod
       </div>
 
       <div className="flex-1 overflow-y-auto p-5">
+        {activeTab === 'input' && <InputDataTab type={type} data={data} trigger={trigger} upstreamNodes={upstreamNodes} variables={variables} />}
         {activeTab === 'config' && (
           <div className="space-y-6">
 
@@ -419,13 +728,13 @@ export default function NodeConfigPanel({ node, onClose, onUpdate }: { node: Nod
                     <span className="text-xs text-muted block mb-1">Hạn sau</span>
                     <select
                       className="w-full border border-border rounded px-3 py-1.5 text-sm"
-                      value={data.slaDue || '24 giờ'}
+                      value={toIsoDuration(data.slaDue) || 'PT24H'}
                       onChange={(e) => onUpdate({ slaDue: e.target.value })}
                     >
-                      <option>5 giờ</option>
-                      <option>24 giờ</option>
-                      <option>48 giờ</option>
-                      <option>1 tuần</option>
+                      <option value="PT5H">5 giờ</option>
+                      <option value="PT24H">24 giờ</option>
+                      <option value="PT48H">48 giờ</option>
+                      <option value="P7D">1 tuần</option>
                     </select>
                   </div>
                   <div>
@@ -692,18 +1001,8 @@ export default function NodeConfigPanel({ node, onClose, onUpdate }: { node: Nod
           </div>
         )}
 
-        {activeTab === 'input' && (
-          <div className="flex flex-col items-center justify-center h-full text-center text-muted">
-            <MousePointer2 className="w-8 h-8 mb-2 opacity-20" />
-            <p className="text-sm">Chọn nguồn dữ liệu đầu vào<br />từ Context Explorer</p>
-          </div>
-        )}
-
         {activeTab === 'preview' && (
-          <div className="flex flex-col items-center justify-center h-full text-center text-muted">
-            <CheckCircle2 className="w-8 h-8 mb-2 opacity-20" />
-            <p className="text-sm">Chưa có kết quả để hiển thị</p>
-          </div>
+          <PreviewTab type={type} data={data} formFields={formFields} />
         )}
       </div>
 
@@ -712,6 +1011,9 @@ export default function NodeConfigPanel({ node, onClose, onUpdate }: { node: Nod
         onClose={() => setFormModalOpen(false)}
         onSave={setFormFields}
         initialFields={formFields}
+        nodes={upstreamNodes}
+        trigger={trigger}
+        variables={variables}
       />
       <ConditionBuilderModal
         isOpen={conditionModalOpen}

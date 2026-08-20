@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { MagnifyingGlassIcon, PlayIcon, PlusIcon, XMarkIcon, CheckCircleIcon, BellIcon, UsersIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 import Pagination from '../components/Pagination';
 import Toast, { useToasts } from '../components/Toast';
 import { getInstancesByWorkflow, getWorkflow, resolveParticipantScope, findUser, orgUsers } from '../data/mockData';
-import type { WorkflowInstanceSummary, WorkflowParticipantEntry } from '../types/workflow';
+import type { WorkflowInstanceSummary } from '../types/workflow';
+import { api } from '../api/client';
 
 const STATUS_STYLES: Record<string, string> = {
   COMPLETED: 'bg-green-100 text-green-700',
@@ -31,34 +32,38 @@ function nowStamp() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-function nextId(prefix: string) {
-  return `${prefix}-${Date.now()}`;
-}
-
-function nextSeq() {
-  return Math.floor(100 + Math.random() * 900);
-}
-
 export default function InstancesList() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [page, setPage] = useState(1);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(searchParams.get('start') === '1');
   const [period, setPeriod] = useState('');
   const [notifyEnabled, setNotifyEnabled] = useState(true);
   const [empId, setEmpId] = useState('U009');
   const [startDate, setStartDate] = useState('01/09/2026');
   const [needType, setNeedType] = useState('Cấp máy mới');
   const [notes, setNotes] = useState('');
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
   const toasts = useToasts();
 
   const workflow = id ? getWorkflow(id) : undefined;
   const allInstances = getInstancesByWorkflow(id);
   const [localInstances, setLocalInstances] = useState<WorkflowInstanceSummary[]>(allInstances);
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    api.runtime.instances(id).then(setLocalInstances).catch(cause => toasts.pushToast('error', cause instanceof Error ? cause.message : 'Không tải được instance'));
+  }, [id]);
 
   const isFromTrigger = workflow?.participantScope?.scopeKind === 'from_trigger';
-  const resolvedUsers = isFromTrigger
+  const isManualTrigger = workflow?.trigger?.type === 'manual';
+  const activeUsers = orgUsers.filter(user => user.status === 'Active');
+  const resolvedUsers = isManualTrigger
+    ? activeUsers.filter(user => selectedParticipantIds.includes(user.id))
+    : isFromTrigger
     ? (workflow && findUser(empId) ? [findUser(empId)!] : [])
     : resolveParticipantScope(workflow?.participantScope);
 
@@ -77,48 +82,34 @@ export default function InstancesList() {
   const safePage = Math.min(page, totalPages);
   const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
-  const handleCreateInstance = () => {
+  const handleCreateInstance = async () => {
     if (!workflow) return;
     const p = isFromTrigger
       ? `${needType} — ${startDate}`
       : (period.trim() || `Kỳ ${nowStamp().slice(0, 7)}`);
-    const participants: WorkflowParticipantEntry[] = resolvedUsers.map((u, idx) => ({
-      id: nextId(`p-${idx}`),
-      userId: u.id,
-      displayName: u.displayName,
-      department: u.department,
-      currentStepLabel: workflow.nodes[0]?.name ?? 'Bước đầu tiên',
-      currentAssignee: u.displayName,
-      status: 'NOT_STARTED',
-    }));
-    const firstNodeLabel = workflow.nodes[0]?.name ?? 'Bước đầu tiên';
     const notif = workflow.participantNotification;
-    const seq = nextSeq();
-    const newInstance: WorkflowInstanceSummary = {
-      id: nextId('inst'),
-      requestCode: isFromTrigger ? `REQ-PC-${seq}` : `EVAL-${p.replace(/\D/g, '').slice(0, 6) || nowStamp().slice(2, 10).replace(/\D/g, '')}`,
-      workflowId: workflow.id,
-      workflowName: workflow.name,
-      workflowVersion: workflow.draftVersion,
-      creatorId: 'U000',
-      creatorName: 'Nguyễn Văn B',
-      status: 'RUNNING',
-      currentStepLabels: [firstNodeLabel ?? 'Bước đầu tiên'],
-      activeAssignees: resolvedUsers.slice(0, 3).map(u => u.displayName),
-      startedAt: nowStamp(),
-      slaStatus: 'ON_TIME',
-      period: p,
-      participantCount: resolvedUsers.length,
-      participants,
-    };
-    setLocalInstances(prev => [newInstance, ...prev]);
-    setCreateOpen(false);
-    setPeriod('');
-    if (notifyEnabled && notif?.enabled) {
-      toasts.pushToast('success', `Đã tạo instance "${p}" — ${resolvedUsers.length} participants được snapshot và thông báo qua ${notif.channels.join(', ')}`);
-    } else {
-      toasts.pushToast('success', `Đã tạo instance "${p}" với ${resolvedUsers.length} participants (snapshot đã chốt)`);
-    }  };
+    if (isManualTrigger && selectedParticipantIds.length === 0) {
+      toasts.pushToast('error', 'Hãy chọn ít nhất một nhân viên tham gia workflow.');
+      return;
+    }
+    setCreating(true);
+    try {
+      const payload: Record<string, unknown> = {
+        variables: { period: p },
+        triggerData: { period: p, source: 'MANUAL_UI' },
+        notifyParticipants: notifyEnabled,
+      };
+      if (isManualTrigger) payload.participantUserIds = selectedParticipantIds;
+      if (isFromTrigger) payload.triggerData = { employeeId: empId, startDate, needType, notes };
+      const started = await api.runtime.start(workflow.id, payload);
+      setLocalInstances(await api.runtime.instances(workflow.id));
+      setCreateOpen(false); setPeriod('');
+      setSelectedParticipantIds([]);
+      if (notifyEnabled && notif?.enabled) toasts.pushToast('success', `Đã chạy workflow — ${started.requestCode ?? ''}, ${resolvedUsers.length} nhân viên được thông báo qua ${notif.channels.join(', ')}`);
+      else toasts.pushToast('success', `Đã chạy workflow — ${started.requestCode ?? ''}, ${resolvedUsers.length} nhân viên tham gia`);
+    } catch (cause) { toasts.pushToast('error', cause instanceof Error ? cause.message : 'Không tạo được instance'); }
+    finally { setCreating(false); }
+  };
 
   return (
     <div className="h-full flex flex-col p-6">
@@ -135,12 +126,12 @@ export default function InstancesList() {
             Theo dõi Runtime
           </h1>
           <div className="flex items-center gap-3">
-            {workflow?.participantScope?.enabled && (
+            {workflow?.status === 'PUBLISHED' && isManualTrigger && (
               <button
                 onClick={() => setCreateOpen(true)}
                 className="inline-flex items-center gap-1.5 text-sm font-medium text-white bg-primary rounded-md px-4 py-2 hover:bg-primary-dark"
               >
-                <PlusIcon className="w-4 h-4" /> Tạo instance mới
+                <PlusIcon className="w-4 h-4" /> Chạy workflow
               </button>
             )}
             <Link to="/workflows" className="text-sm font-medium text-navy border border-border rounded px-4 py-2 hover:bg-gray-50">
@@ -257,14 +248,59 @@ export default function InstancesList() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h2 className="text-xl font-bold text-navy">Tạo instance mới</h2>
+              <h2 className="text-xl font-bold text-navy">{isManualTrigger ? 'Chạy workflow thủ công' : 'Tạo instance mới'}</h2>
               <button onClick={() => setCreateOpen(false)} className="text-gray-400 hover:text-navy rounded-full p-1 transition-colors">
                 <XMarkIcon className="w-6 h-6" />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
-              {isFromTrigger ? (
+              {isManualTrigger ? (
+                <>
+                  <div className="rounded-md border border-green-200 bg-green-50 p-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-green-800">
+                      <PlayIcon className="h-4 w-4" /> Manual trigger
+                    </div>
+                    <p className="mt-1 text-xs text-green-700">Instance sẽ bắt đầu ngay sau khi xác nhận và dùng phiên bản workflow đang được publish.</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Tên đợt / kỳ thực hiện</label>
+                    <input
+                      type="text"
+                      placeholder="VD: Đánh giá Q3/2026"
+                      value={period}
+                      onChange={e => setPeriod(e.target.value)}
+                      className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <label className="text-sm font-medium text-gray-700">Nhân viên tham gia <span className="text-danger">*</span></label>
+                      <div className="flex gap-3 text-xs">
+                        <button type="button" onClick={() => setSelectedParticipantIds(activeUsers.map(user => user.id))} className="text-primary hover:underline">Chọn tất cả</button>
+                        <button type="button" onClick={() => setSelectedParticipantIds([])} className="text-gray-500 hover:underline">Bỏ chọn</button>
+                      </div>
+                    </div>
+                    <div className="max-h-56 overflow-y-auto rounded-md border border-border divide-y divide-gray-100">
+                      {activeUsers.map(user => (
+                        <label key={user.id} className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-gray-50">
+                          <input
+                            type="checkbox"
+                            checked={selectedParticipantIds.includes(user.id)}
+                            onChange={event => setSelectedParticipantIds(current => event.target.checked ? [...current, user.id] : current.filter(id => id !== user.id))}
+                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-navy">{user.displayName}</p>
+                            <p className="truncate text-xs text-muted">{user.externalId} · {user.department} · {user.role}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-xs text-muted">Đã chọn {selectedParticipantIds.length} nhân viên. Danh sách này sẽ được snapshot khi instance bắt đầu.</p>
+                  </div>
+                </>
+              ) : isFromTrigger ? (
                 <div className="bg-gray-50 border border-border rounded-md p-4 space-y-3">
                   <h4 className="text-sm font-medium text-navy">Bước 1 — HR tạo yêu cầu (form trigger)</h4>
                   <p className="text-xs text-muted">Người khởi tạo: <strong>HR</strong> (Allowed Initiator: {String((workflow.trigger?.config.allowedInitiator as any)?.role ?? 'HR')})</p>
@@ -390,10 +426,11 @@ export default function InstancesList() {
               </button>
               <button
                 type="button"
-                onClick={handleCreateInstance}
-                className="px-4 py-2 bg-primary rounded-md text-white text-sm font-medium hover:bg-primary-dark"
+                disabled={creating || (isManualTrigger && selectedParticipantIds.length === 0)}
+                onClick={() => void handleCreateInstance()}
+                className="px-4 py-2 bg-primary rounded-md text-white text-sm font-medium hover:bg-primary-dark disabled:opacity-60"
               >
-                Tạo instance
+                {creating ? 'Đang khởi chạy…' : isManualTrigger ? 'Chạy ngay' : 'Tạo instance'}
               </button>
             </div>
           </div>

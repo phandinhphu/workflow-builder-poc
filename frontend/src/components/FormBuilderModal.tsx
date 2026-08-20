@@ -1,6 +1,7 @@
 import { Fragment, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import DynamicValueField from './DynamicValueField';
 
 export interface FormField {
   id: string;
@@ -21,6 +22,9 @@ interface FormBuilderModalProps {
   onClose: () => void;
   onSave: (fields: FormField[]) => void;
   initialFields?: FormField[];
+  nodes?: any[];
+  trigger?: any;
+  variables?: any[];
 }
 
 const FIELD_TYPES: { value: FormField['type']; label: string }[] = [
@@ -39,7 +43,7 @@ function makeId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 }
 
-export default function FormBuilderModal({ isOpen: _isOpen, onClose, onSave, initialFields = [] }: FormBuilderModalProps) {
+export default function FormBuilderModal({ isOpen: _isOpen, onClose, onSave, initialFields = [], nodes = [], trigger, variables = [] }: FormBuilderModalProps) {
   const [fields, setFields] = useState<FormField[]>(initialFields);
   const [activeTab, setActiveTab] = useState<'fields' | 'preview'>('fields');
 
@@ -110,7 +114,7 @@ export default function FormBuilderModal({ isOpen: _isOpen, onClose, onSave, ini
           <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
         </Transition.Child>
 
-        <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
+        <div className="fixed inset-0 z-50 w-screen overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
             <Transition.Child
               as={Fragment}
@@ -211,12 +215,15 @@ export default function FormBuilderModal({ isOpen: _isOpen, onClose, onSave, ini
                               className="w-full border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-primary"
                             />
                           </div>
-                          <div>
+                          <div className="md:col-span-2">
                             <label className="block text-xs text-muted mb-1">Giá trị mặc định</label>
-                            <input
+                            <DynamicValueField
                               value={field.defaultValue || ''}
-                              onChange={(e) => updateField(field.id, { defaultValue: e.target.value })}
-                              className="w-full border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-primary"
+                              onChange={(value) => updateField(field.id, { defaultValue: value })}
+                              placeholder="Giá trị cố định hoặc chọn output từ bước trước"
+                              nodes={nodes}
+                              trigger={trigger}
+                              variables={variables}
                             />
                           </div>
                           <div className="flex items-center gap-2 pt-5">

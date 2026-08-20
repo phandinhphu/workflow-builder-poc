@@ -1,0 +1,178 @@
+{
+  "id": "6",
+  "name": "Đánh giá hiệu quả công việc",
+  "description": "Quy trình đánh giá hiệu quả công việc định kỳ: nhân viên tự đánh giá, quản lý trực tiếp đánh giá, HR kiểm tra, lưu và thông báo kết quả",
+  "type": "Review",
+  "module": "HR",
+  "ownerId": "U000",
+  "status": "PUBLISHED",
+  "draftVersion": "1.0",
+  "trigger": {
+    "type": "schedule",
+    "config": { "cron": "0 0 8 1 * *", "label": "08:00 ngày 01 hàng tháng", "timezone": "Asia/Bangkok" }
+  },
+  "participantScope": {
+    "enabled": true,
+    "source": "INTERNAL_HRM",
+    "scopeKind": "all_active",
+    "selectorType": "fixed",
+    "selectorConfig": { "rule": "employee.status == ACTIVE" },
+    "snapshotPolicy": "AT_INSTANCE_START"
+  },
+  "participantNotification": {
+    "enabled": true,
+    "channels": ["inapp", "email"],
+    "titleTemplate": "Đợt đánh giá ${variables.period} đã bắt đầu",
+    "bodyTemplate": "Bạn là người tham gia đợt đánh giá ${variables.period}."
+  },
+  "variables": [
+    {
+      "key": "period",
+      "dataType": "STRING",
+      "defaultValue": { "kind": "CONSTANT", "value": "Q4-2026" },
+      "required": true,
+      "description": "Kỳ đánh giá",
+      "mutationPolicy": "MUTABLE"
+    },
+    {
+      "key": "evaluationValid",
+      "dataType": "BOOLEAN",
+      "defaultValue": { "kind": "CONSTANT", "value": false },
+      "required": true,
+      "description": "HR xác nhận kết quả đánh giá hợp lệ",
+      "mutationPolicy": "MUTABLE"
+    }
+  ],
+  "settings": { "maxIterations": 10 },
+  "nodes": [
+    {
+      "id": "start",
+      "type": "START",
+      "name": "Bắt đầu đợt đánh giá",
+      "executionScope": "EACH_PARTICIPANT",
+      "config": {},
+      "position": { "x": 300, "y": 50 }
+    },
+    {
+      "id": "n1",
+      "type": "ASSIGNMENT",
+      "name": "Nhân viên tự đánh giá",
+      "executionScope": "EACH_PARTICIPANT",
+      "config": {
+        "assignee": { "type": "current_participant" },
+        "assigneeType": "assignee",
+        "title": "Phiếu tự đánh giá - ${variables.period}",
+        "description": "Vui lòng hoàn thành phiếu tự đánh giá cho kỳ này.",
+        "formName": "Phiếu tự đánh giá",
+        "formFields": [
+          { "id": "f1", "label": "Kết quả công việc nổi bật trong kỳ", "type": "textarea", "required": true, "placeholder": "Mô tả thành tích chính", "outputMapping": "selfAchievements" },
+          { "id": "f2", "label": "Khó khăn gặp phải", "type": "textarea", "required": false, "placeholder": "Mô tả khó khăn", "outputMapping": "selfChallenges" },
+          { "id": "f3", "label": "Điểm tự đánh giá", "type": "number", "required": true, "validation": { "min": 1, "max": 10 }, "outputMapping": "selfScore" }
+        ],
+        "executionMode": "single",
+        "slaDue": "P5D",
+        "channels": ["email", "inapp"],
+        "message": "Nhân viên ${participant.name} hoàn thành phiếu tự đánh giá cho kỳ ${variables.period}"
+      },
+      "position": { "x": 300, "y": 210 }
+    },
+    {
+      "id": "n2",
+      "type": "APPROVAL",
+      "name": "Quản lý trực tiếp đánh giá",
+      "executionScope": "EACH_PARTICIPANT",
+      "config": {
+        "assignee": { "type": "participant_manager", "fallback": { "type": "fixed", "value": "U001" } },
+        "title": "Đánh giá của quản lý trực tiếp - ${variables.period}",
+        "description": "Quản lý trực tiếp xem xét kết quả tự đánh giá và đưa ra nhận định.",
+        "formName": "Phiếu đánh giá của quản lý",
+        "formFields": [
+          { "id": "f0", "label": "Kết quả tự đánh giá của nhân viên", "type": "textarea", "required": false, "readOnly": true, "defaultValue": "${nodes.n1.output.selfAchievements}", "outputMapping": "displaySelfAchievements" },
+          { "id": "f0b", "label": "Điểm nhân viên tự đánh giá", "type": "number", "required": false, "readOnly": true, "defaultValue": "${nodes.n1.output.selfScore}", "outputMapping": "displaySelfScore" },
+          { "id": "f1", "label": "Đánh giá năng lực", "type": "select", "required": true, "options": [{ "value": "excellent", "label": "Xuất sắc" }, { "value": "good", "label": "Tốt" }, { "value": "fair", "label": "Đạt" }, { "value": "poor", "label": "Cần cải thiện" }], "outputMapping": "managerCompetency" },
+          { "id": "f2", "label": "Nhận xét của quản lý", "type": "textarea", "required": true, "outputMapping": "managerComment" },
+          { "id": "f3", "label": "Điểm quản lý chấm", "type": "number", "required": true, "validation": { "min": 1, "max": 10 }, "outputMapping": "managerScore" },
+          { "id": "f4", "label": "Đề xuất mục tiêu kỳ sau", "type": "text", "required": false, "outputMapping": "nextPeriodGoals" }
+        ],
+        "executionMode": "single",
+        "slaDue": "P5D",
+        "channels": ["email", "inapp"]
+      },
+      "position": { "x": 300, "y": 370 }
+    },
+    {
+      "id": "n3",
+      "type": "REVIEW",
+      "name": "HR kiểm tra kết quả",
+      "executionScope": "EACH_PARTICIPANT",
+      "config": {
+        "assignee": { "type": "fixed", "value": "U001", "label": "Nguyễn Thị Mai" },
+        "title": "HR kiểm tra kết quả đánh giá - ${variables.period}",
+        "description": "HR xác nhận tính đầy đủ và hợp lệ của kết quả đánh giá từ nhân viên và quản lý.",
+        "formName": "Phiếu kiểm tra HR",
+        "formFields": [
+          { "id": "f0a", "label": "Kết quả tự đánh giá của nhân viên", "type": "textarea", "readOnly": true, "defaultValue": "${nodes.n1.output.selfAchievements}", "outputMapping": "reviewSelfAchievements" },
+          { "id": "f0b", "label": "Điểm nhân viên tự đánh giá", "type": "number", "readOnly": true, "defaultValue": "${nodes.n1.output.selfScore}", "outputMapping": "reviewSelfScore" },
+          { "id": "f0c", "label": "Điểm quản lý chấm", "type": "number", "readOnly": true, "defaultValue": "${nodes.n2.managerScore}", "outputMapping": "reviewMgrScore" },
+          { "id": "f0d", "label": "Nhận xét của quản lý", "type": "textarea", "readOnly": true, "defaultValue": "${nodes.n2.managerComment}", "outputMapping": "reviewMgrComment" },
+          { "id": "f1", "label": "Xác nhận độ đầy đủ", "type": "checkbox", "required": true, "outputMapping": "hrCompleteCheck" },
+          { "id": "f2", "label": "Ghi chú HR", "type": "textarea", "required": false, "outputMapping": "hrNote" },
+          { "id": "f3", "label": "Kết quả cuối cùng hợp lệ?", "type": "checkbox", "required": true, "outputMapping": "evaluationValid" }
+        ],
+        "slaDue": "P3D",
+        "channels": ["email", "inapp"]
+      },
+      "position": { "x": 300, "y": 530 }
+    },
+    {
+      "id": "n4",
+      "type": "CONDITION",
+      "name": "Kết quả hợp lệ?",
+      "executionScope": "EACH_PARTICIPANT",
+      "config": { "condition": "${nodes.n3.evaluationValid} == true" },
+      "position": { "x": 300, "y": 690 }
+    },
+    {
+      "id": "n5",
+      "type": "SYSTEM",
+      "name": "Lưu kết quả đánh giá",
+      "executionScope": "EACH_PARTICIPANT",
+      "config": {
+        "action": "SAVE_EVALUATION_RESULT",
+        "inputMapping": { "participantId": "${participant.id}", "period": "${variables.period}", "selfScore": "${nodes.n1.output.selfScore}", "managerScore": "${nodes.n2.output.managerScore}", "managerCompetency": "${nodes.n2.output.managerCompetency}", "evaluationValid": "${nodes.n3.output.evaluationValid}" }
+      },
+      "position": { "x": 520, "y": 850 }
+    },
+    {
+      "id": "n6",
+      "type": "NOTIFICATION",
+      "name": "Thông báo nhân viên",
+      "executionScope": "EACH_PARTICIPANT",
+      "config": {
+        "assignee": { "type": "current_participant" },
+        "channels": ["email", "inapp"],
+        "title": "Kết quả đánh giá - ${variables.period}",
+        "bodyTemplate": "Chào ${participant.name}. Kết quả đánh giá của bạn cho kỳ ${variables.period} đã được lưu. Điểm tự đánh giá: ${nodes.n1.output.selfScore}, điểm quản lý: ${nodes.n2.output.managerScore}."
+      },
+      "position": { "x": 520, "y": 1010 }
+    },
+    {
+      "id": "end",
+      "type": "END",
+      "name": "Hoàn tất đánh giá",
+      "executionScope": "EACH_PARTICIPANT",
+      "config": {},
+      "position": { "x": 520, "y": 1170 }
+    }
+  ],
+  "connections": [
+    { "id": "c0", "sourceNodeId": "start", "sourcePort": "SUCCESS", "targetNodeId": "n1" },
+    { "id": "c1", "sourceNodeId": "n1", "sourcePort": "SUCCESS", "targetNodeId": "n2" },
+    { "id": "c2", "sourceNodeId": "n2", "sourcePort": "APPROVED", "targetNodeId": "n3" },
+    { "id": "c3", "sourceNodeId": "n3", "sourcePort": "REVIEW_COMPLETED", "targetNodeId": "n4" },
+    { "id": "c4", "sourceNodeId": "n4", "sourcePort": "true", "targetNodeId": "n5", "label": "TRUE" },
+    { "id": "c5", "sourceNodeId": "n4", "sourcePort": "false", "targetNodeId": "n2", "label": "FALSE" },
+    { "id": "c6", "sourceNodeId": "n5", "sourcePort": "SUCCESS", "targetNodeId": "n6" },
+    { "id": "c7", "sourceNodeId": "n6", "sourcePort": "SUCCESS", "targetNodeId": "end" }
+  ]
+}

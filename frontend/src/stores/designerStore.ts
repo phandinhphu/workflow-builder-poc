@@ -25,7 +25,7 @@ export interface DesignerPanelState {
   savedAt: string | null;
   validationIssues: any[];
   activeLeftPanel: 'none' | 'triggers' | 'nodes';
-  panel: 'none' | 'node-library' | 'trigger-library' | 'validation';
+  panel: 'none' | 'node-library' | 'trigger-library' | 'validation' | 'context-explorer';
 }
 
 export interface DesignerActions {
@@ -65,7 +65,7 @@ export interface DesignerActions {
   setSavedAt: (time: string | null) => void;
   setValidationIssues: (issues: any[]) => void;
   setActiveLeftPanel: (panel: 'none' | 'triggers' | 'nodes') => void;
-  setPanel: (panel: 'none' | 'node-library' | 'trigger-library' | 'validation') => void;
+  setPanel: (panel: 'none' | 'node-library' | 'trigger-library' | 'validation' | 'context-explorer') => void;
   reset: () => void;
 }
 

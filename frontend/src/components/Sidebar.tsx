@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Squares2X2Icon, UsersIcon, HomeIcon, DocumentTextIcon, ArrowPathIcon, Cog6ToothIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { Squares2X2Icon, UsersIcon, HomeIcon, DocumentTextIcon, BuildingOffice2Icon, ShieldCheckIcon, ChevronDownIcon, ClipboardDocumentCheckIcon, LinkIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 import { getCurrentUser } from '../data/mockData';
 
@@ -7,11 +7,13 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
   { name: 'Người dùng', href: '/users', icon: UsersIcon },
   { name: 'Danh sách Workflow', href: '/workflows', icon: DocumentTextIcon },
+  { name: 'Nhiệm vụ của tôi', href: '/my-tasks', icon: ClipboardDocumentCheckIcon },
+  { name: 'Kết nối & API', href: '/connectors', icon: LinkIcon },
 ];
 
 const bottomItems = [
-  { name: 'Đồng bộ dữ liệu', href: '/sync', icon: ArrowPathIcon },
-  { name: 'Cài đặt', href: '/settings', icon: Cog6ToothIcon },
+  { name: 'Cơ cấu tổ chức', href: '/sync', icon: BuildingOffice2Icon },
+  { name: 'Vai trò hệ thống', href: '/settings', icon: ShieldCheckIcon },
 ];
 
 function isActivePath(pathname: string, href: string) {

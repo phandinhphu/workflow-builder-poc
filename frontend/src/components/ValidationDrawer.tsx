@@ -29,6 +29,26 @@ function extractReferences(text: unknown): string[] {
   return refs;
 }
 
+function collectReferences(value: unknown, target: string[]): void {
+  if (typeof value === 'string') {
+    target.push(...extractReferences(value));
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach(item => collectReferences(item, target));
+    return;
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (String(record.kind || '').toUpperCase() === 'REFERENCE' && typeof record.path === 'string') target.push(record.path);
+    Object.values(record).forEach(item => collectReferences(item, target));
+  }
+}
+
+function normalizeReference(reference: string): string {
+  return reference.trim().replace(/^\$\./, '').replace(/\[['"]?([^'"\]]+)['"]?\]/g, '.$1');
+}
+
 export function validateWorkflow(
   nodes: Node[],
   edges: Edge[],
@@ -133,25 +153,22 @@ export function validateWorkflow(
   // Check 6: dynamic references must resolve against known context
   const variableKeys = new Set(variables.map(v => v.key));
   const knownNodeIds = new Set(nodes.map(n => n.id));
-  const stringFields: string[] = [];
-  nodes.forEach(node => {
-    const data = node.data as Record<string, unknown>;
-    ['condition', 'title', 'message', 'url', 'headers', 'body', 'inputMapping', 'outputMapping', 'filterRules', 'submitMapping', 'dueReminderMessage'].forEach(f => {
-      if (typeof data[f] === 'string') stringFields.push(data[f] as string);
-    });
-    const assignee = data.assignee as any;
-    if (assignee && assignee.type === 'dynamic' && typeof assignee.value === 'string') {
-      stringFields.push(assignee.value);
-    }
-    const triggerConfig = data.triggerConfig as Record<string, unknown> | undefined;
-    if (triggerConfig && typeof triggerConfig.expression === 'string') {
-      stringFields.push(triggerConfig.expression);
-    }
-  });
   const seen = new Set<string>();
-  stringFields.forEach(text => {
-    extractReferences(text).forEach(ref => {
-      const key = `${ref}`;
+  const reverse = new Map<string, string[]>();
+  edges.forEach(edge => reverse.set(edge.target, [...(reverse.get(edge.target) ?? []), edge.source]));
+  const upstreamOf = (nodeId: string) => {
+    const result = new Set<string>();
+    const visit = (id: string) => (reverse.get(id) ?? []).forEach(parent => { if (!result.has(parent)) { result.add(parent); visit(parent); } });
+    visit(nodeId);
+    return result;
+  };
+  nodes.forEach(currentNode => {
+    const refs: string[] = [];
+    collectReferences(currentNode.data, refs);
+    const upstream = upstreamOf(currentNode.id);
+    refs.forEach(rawRef => {
+      const ref = normalizeReference(rawRef);
+      const key = `${currentNode.id}|${ref}`;
       if (seen.has(key)) return;
       seen.add(key);
       const firstSeg = ref.split('.')[0];
@@ -161,12 +178,23 @@ export function validateWorkflow(
           issues.push({ type: 'error', message: `Tham chiếu "${ref}" trỏ tới biến workflow không tồn tại.` });
         }
       } else if (firstSeg === 'nodes') {
-        const nodeId = ref.split('.')[1];
+        const parts = ref.split('.');
+        const nodeId = parts[1];
         if (!nodeId || !knownNodeIds.has(nodeId)) {
-          issues.push({ type: 'error', message: `Tham chiếu "${ref}" trỏ tới output của node đã bị xóa.` });
+          issues.push({ type: 'error', nodeId: currentNode.id, message: `Tham chiếu "${ref}" trỏ tới output của node đã bị xóa.` });
+        } else if (!upstream.has(nodeId)) {
+          issues.push({ type: 'error', nodeId: currentNode.id, message: `Tham chiếu "${ref}" không thuộc một bước chạy trước.` });
+        } else {
+          const canonical = parts[2] === 'output';
+          const outputKey = canonical ? parts[3] : parts[2];
+          if (!outputKey) issues.push({ type: 'error', nodeId: currentNode.id, message: `Tham chiếu "${ref}" chưa chỉ rõ output.` });
+          if (!canonical) issues.push({ type: 'warning', nodeId: currentNode.id, message: `Tham chiếu cũ "${ref}" vẫn chạy nhưng nên đổi sang "nodes.${nodeId}.output.${outputKey}".` });
+          const source = nodes.find(node => node.id === nodeId);
+          const outputs = new Set(((source?.data.formFields as Array<{ id: string; outputMapping?: string }> | undefined) ?? []).map(field => field.outputMapping || field.id));
+          if (outputs.size > 0 && outputKey && !outputs.has(outputKey)) issues.push({ type: 'error', nodeId: currentNode.id, message: `Bước "${source?.data.label || nodeId}" không có output "${outputKey}".` });
         }
-      } else if (firstSeg !== 'trigger' && firstSeg !== 'participant' && firstSeg !== 'currentUser') {
-        issues.push({ type: 'error', message: `Tham chiếu "${ref}" không hợp lệ (namespace không xác định).` });
+      } else if (!['trigger', 'instance', 'participant', 'currentUser'].includes(firstSeg)) {
+        issues.push({ type: 'error', nodeId: currentNode.id, message: `Tham chiếu "${ref}" không hợp lệ (namespace không xác định).` });
       }
     });
   });

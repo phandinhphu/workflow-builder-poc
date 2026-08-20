@@ -22,7 +22,7 @@ export default function EdgeConfigPanel({ edge, onClose, onUpdate, onDelete }: E
   const isDefault: boolean = edge.data?.isDefault === true;
 
   return (
-    <div className="w-[360px] border-l border-border bg-white flex flex-col h-full z-20 shadow-xl shrink-0 absolute right-0 top-0">
+    <div className="w-[360px] border-l border-border bg-white flex flex-col h-full z-10 shadow-xl shrink-0 absolute right-0 top-0">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-gray-50/50">
         <div>
           <h2 className="text-sm font-bold text-navy leading-none mb-1">Cấu hình đường đi</h2>

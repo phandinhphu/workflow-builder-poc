@@ -162,9 +162,11 @@ export default function TestRunnerDrawer({ isOpen, onClose, nodes, edges, trigge
     : JSON.stringify({
         body: {
           requesterId: 'U001',
-          evaluationValid: false,
+          evaluationValid: true,
           selfScore: 8,
           selfAchievements: 'Hoàn thành KPI quý, dẫn đầu team về doanh thu',
+          managerScore: 9,
+          managerComment: 'Rất tốt',
         },
       }, null, 2);
   const [triggerPayload, setTriggerPayload] = useState(() => defaultPayload);
@@ -303,7 +305,7 @@ export default function TestRunnerDrawer({ isOpen, onClose, nodes, edges, trigge
           <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" />
         </Transition.Child>
 
-        <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
+        <div className="fixed inset-0 z-50 w-screen overflow-y-auto">
           <div className="flex min-h-full items-end justify-end p-4">
             <Transition.Child
               as={Fragment}

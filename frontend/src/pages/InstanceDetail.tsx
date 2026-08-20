@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeftIcon, XCircleIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
@@ -7,7 +7,9 @@ import '@xyflow/react/dist/style.css';
 import CustomNode from '../components/nodes/CustomNode';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Toast, { useToasts } from '../components/Toast';
-import { getInstance, getWorkflow, instanceTimeline, instanceTasks, mockContext, findUser } from '../data/mockData';
+import { getInstance, getWorkflow } from '../data/mockData';
+import { api } from '../api/client';
+import type { NodeType, WorkflowDefinition } from '../types/workflow';
 
 const customNodeTypes = {
   custom: CustomNode,
@@ -29,16 +31,63 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELLED: 'Cancelled',
 };
 
-function buildFlowNodes(instanceStatus: string): { nodes: Node[]; edges: Edge[] } {
-  const runningStep = instanceStatus === 'PENDING' || instanceStatus === 'RUNNING';
+function designerNodeType(type: NodeType): string {
+  const aliases: Partial<Record<NodeType, string>> = { DATA_TRANSFORM: 'data', CODE: 'system', TIMER: 'system', WAIT_EVENT: 'system', PARALLEL_SPLIT: 'system', JOIN: 'system', SUBWORKFLOW: 'system' };
+  return aliases[type] ?? type.toLowerCase();
+}
+
+function executionLabel(executions: any[]): string {
+  if (!executions.length) return 'Chưa thực thi';
+  if (executions.some(item => ['WAITING', 'RUNNING'].includes(item.state))) return 'Đang xử lý';
+  if (executions.some(item => item.state === 'FAILED')) return 'Thất bại';
+  if (executions.some(item => item.state === 'REJECTED')) return 'Yêu cầu làm lại';
+  if (executions.every(item => ['COMPLETED', 'SKIPPED'].includes(item.state))) return 'Hoàn tất';
+  return executions.at(-1)?.state ?? 'Chưa thực thi';
+}
+
+function buildFlowNodes(instanceStatus: string, workflow?: WorkflowDefinition, nodeExecutions: any[] = []): { nodes: Node[]; edges: Edge[] } {
+  if (!workflow?.nodes?.length) return { nodes: [], edges: [] };
+
+  const minY = Math.min(...workflow.nodes.map(node => node.position.y));
+  const maxY = Math.max(...workflow.nodes.map(node => node.position.y));
+  const averageX = workflow.nodes.reduce((sum, node) => sum + node.position.x, 0) / workflow.nodes.length;
+  const incoming = new Set(workflow.connections.map(connection => connection.targetNodeId));
+  const outgoing = new Set(workflow.connections.map(connection => connection.sourceNodeId));
+  const roots = workflow.nodes.filter(node => !incoming.has(node.id));
+  const leaves = workflow.nodes.filter(node => !outgoing.has(node.id));
+  const isFinished = ['COMPLETED', 'REJECTED', 'CANCELLED'].includes(instanceStatus);
+
   const nodes: Node[] = [
-    { id: 'start-1', type: 'custom', position: { x: 250, y: 50 }, data: { label: 'Bắt đầu', nodeType: 'start', subLabel: 'Hoàn tất' } },
-    { id: 'approval-1', type: 'custom', position: { x: 250, y: 200 }, data: { label: 'Phê duyệt Cấp 1', nodeType: 'approval', subLabel: runningStep ? 'Lê Minh Tâm' : 'Hoàn tất' } },
-    { id: 'end-1', type: 'custom', position: { x: 250, y: 350 }, data: { label: 'Kết thúc', nodeType: 'end' } },
+    { id: '__runtime_start__', type: 'custom', position: { x: averageX, y: minY - 150 }, data: { label: 'Bắt đầu', nodeType: 'start', subLabel: 'Hoàn tất' } },
+    ...workflow.nodes.map(node => ({
+      id: node.id,
+      type: 'custom',
+      position: node.position,
+      data: {
+        label: node.name,
+        nodeType: designerNodeType(node.type),
+        subLabel: executionLabel(nodeExecutions.filter(execution => execution.nodeId === node.id)),
+      },
+    })),
+    { id: '__runtime_end__', type: 'custom', position: { x: averageX, y: maxY + 180 }, data: { label: 'Kết thúc', nodeType: 'end', subLabel: isFinished ? instanceStatus : 'Chưa hoàn tất' } },
   ];
+
   const edges: Edge[] = [
-    { id: 'e1', source: 'start-1', target: 'approval-1', animated: false },
-    { id: 'e2', source: 'approval-1', target: 'end-1', animated: runningStep, style: { strokeDasharray: runningStep ? '5 5' : undefined } },
+    ...roots.map(node => ({ id: `start-${node.id}`, source: '__runtime_start__', target: node.id })),
+    ...workflow.connections.map(connection => {
+      const sourceExecution = nodeExecutions.filter(execution => execution.nodeId === connection.sourceNodeId).at(-1);
+      const active = ['WAITING', 'RUNNING'].includes(sourceExecution?.state);
+      return {
+        id: connection.id,
+        source: connection.sourceNodeId,
+        target: connection.targetNodeId,
+        sourceHandle: connection.sourcePort?.toLowerCase() === 'false' ? 'false' : connection.sourcePort?.toLowerCase() === 'true' ? 'true' : undefined,
+        label: connection.label,
+        animated: active,
+        style: { strokeDasharray: active ? '5 5' : undefined },
+      };
+    }),
+    ...leaves.map(node => ({ id: `${node.id}-end`, source: node.id, target: '__runtime_end__', animated: !isFinished })),
   ];
   return { nodes, edges };
 }
@@ -58,14 +107,23 @@ function maskContext(value: unknown, depth = 0): unknown {
 }
 
 export default function InstanceDetail() {
-  const { id } = useParams();
-  const [activeTab, setActiveTab] = useState<'info' | 'flow' | 'audit' | 'tasks' | 'participants'>('flow');
+  const { instanceId } = useParams();
+  const [activeTab, setActiveTab] = useState<'info' | 'flow' | 'audit' | 'tasks' | 'participants' | 'context'>('flow');
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
   const toasts = useToasts();
+  const [detail, setDetail] = useState<Record<string, any> | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const instance = id ? getInstance(id) : undefined;
+  useEffect(() => {
+    if (!instanceId) return;
+    setLoading(true);
+    api.runtime.instance(instanceId).then(setDetail).catch(cause => toasts.pushToast('error', cause instanceof Error ? cause.message : 'Không tải được instance')).finally(() => setLoading(false));
+  }, [instanceId]);
+
+  const instance: any = detail ?? (instanceId ? getInstance(instanceId) : undefined);
   const workflow = instance ? getWorkflow(instance.workflowId) : undefined;
 
+  if (loading && !instance) return <div className="h-full grid place-items-center text-sm text-gray-500">Đang tải runtime snapshot…</div>;
   if (!instance) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-6 text-gray-500">
@@ -76,16 +134,22 @@ export default function InstanceDetail() {
   }
 
   const canCancel = instance.status === 'PENDING' || instance.status === 'RUNNING';
-  const flow = buildFlowNodes(instance.status);
+  const flow = buildFlowNodes(instance.status, workflow, detail?.nodeExecutions ?? []);
 
   const maskedContext = {
-    trigger: maskContext(mockContext.trigger),
-    variables: maskContext(mockContext.variables),
+    trigger: maskContext(detail?.context?.trigger ?? {}),
+    variables: maskContext(detail?.context?.variables ?? {}),
   };
+  const timeline = detail?.timeline ?? [];
+  const runtimeTasks = detail?.tasks ?? [];
 
-  const doCancel = () => {
-    toasts.pushToast('success', `Instance ${instance.requestCode} đã được hủy.`);
-    setIsCancelConfirmOpen(false);
+  const doCancel = async () => {
+    try {
+      await api.runtime.cancel(instance.id);
+      setDetail(await api.runtime.instance(instance.id));
+      toasts.pushToast('success', `Instance ${instance.requestCode} đã được hủy.`);
+      setIsCancelConfirmOpen(false);
+    } catch (cause) { toasts.pushToast('error', cause instanceof Error ? cause.message : 'Không hủy được instance'); }
   };
 
   return (
@@ -147,6 +211,7 @@ export default function InstanceDetail() {
             { id: 'flow', name: 'View Flow' },
             { id: 'audit', name: 'Audit & History' },
             { id: 'tasks', name: 'Tasks' },
+            { id: 'context', name: 'Workflow Context' },
             ...(instance.participants ? [{ id: 'participants' as const, name: `Người tham gia (${instance.participantCount ?? instance.participants.length})` }] : []),
           ].map((tab) => (
             <button
@@ -199,7 +264,7 @@ export default function InstanceDetail() {
                   <div>
                     <span className="block text-xs text-muted mb-1 uppercase tracking-wide">Due Date</span>
                     <span className="text-sm font-medium text-navy">
-                      {instance.slaStatus === 'OVERDUE' ? 'Quá hạn' : '2024-11-21 09:00:00'}
+                      {runtimeTasks.find((task: any) => ['PENDING', 'CLAIMED', 'OVERDUE'].includes(task.status))?.dueAt ?? 'Không có task đang chờ'}
                     </span>
                   </div>
                 </div>
@@ -247,7 +312,7 @@ export default function InstanceDetail() {
                 </div>
 
                 <div className="relative pl-8 border-l-2 border-gray-200 space-y-8 py-2">
-                  {instanceTimeline.map(entry => (
+                  {timeline.map((entry: any) => (
                     <div key={entry.id} className="relative">
                       <div className={clsx(
                         "absolute -left-[41px] w-5 h-5 rounded-full border-4 border-white flex items-center justify-center shadow-sm",
@@ -293,11 +358,11 @@ export default function InstanceDetail() {
                       </tr>
                     </thead>
                     <tbody>
-                      {instanceTasks.map(task => (
+                      {runtimeTasks.map((task: any) => (
                         <tr key={task.id} className="border-b border-border hover:bg-gray-50">
                           <td className="px-3 py-2 font-mono text-sm text-navy">{task.id}</td>
                           <td className="px-3 py-2 text-sm text-gray-600">{task.assignee}</td>
-                          <td className="px-3 py-2 text-sm text-gray-600">{task.participantId ? findUser(task.participantId)?.displayName ?? '—' : '—'}</td>
+                          <td className="px-3 py-2 text-sm text-gray-600">{task.participantId ? instance.participants?.find((participant: any) => participant.id === task.participantId)?.displayName ?? '—' : '—'}</td>
                           <td className="px-3 py-2">
                             <span className={clsx(
                               "inline-flex items-center px-2 py-1 rounded-full text-[10px] font-medium",
@@ -309,28 +374,30 @@ export default function InstanceDetail() {
                           </td>
                           <td className="px-3 py-2 text-sm text-gray-600">{task.dueAt}</td>
                           <td className="px-3 py-2 text-right">
-                            <button
-                              onClick={() => toasts.pushToast('success', `Task ${task.id} đã được submit (mô phỏng).`)}
-                              className="text-primary hover:text-primary-dark text-sm font-medium"
-                            >
-                              Submit
-                            </button>
-                            <button
-                              onClick={() => toasts.pushToast('warning', `Task ${task.id} đã bị reject (mô phỏng).`)}
-                              className="text-danger hover:text-red-600 text-sm font-medium ml-2"
-                            >
-                              Reject
-                            </button>
+                            {['PENDING', 'CLAIMED', 'OVERDUE'].includes(task.status) ? (
+                              <Link to="/my-tasks" className="text-primary hover:text-primary-dark text-sm font-medium">Mở task</Link>
+                            ) : <span className="text-xs text-muted">Đã xử lý</span>}
                           </td>
                         </tr>
                       ))}
-                      {instanceTasks.length === 0 && (
+                      {runtimeTasks.length === 0 && (
                         <tr>
                           <td colSpan={6} className="px-3 py-6 text-center text-sm text-muted">Không có task nào</td>
                         </tr>
                       )}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'context' && (
+            <div className="p-6 max-w-4xl mx-auto">
+              <div className="bg-white border border-border rounded-lg p-6 shadow-sm">
+                <h3 className="text-base font-bold text-navy mb-4">Workflow Context đầy đủ</h3>
+                <div className="bg-gray-50 rounded border border-gray-200 p-4 font-mono text-xs overflow-auto">
+                  <pre className="text-gray-700">{JSON.stringify(detail?.context ?? maskedContext, null, 2)}</pre>
                 </div>
               </div>
             </div>
@@ -349,11 +416,11 @@ export default function InstanceDetail() {
                     <span className="text-xs text-muted">Tổng participants</span>
                   </div>
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-                    <span className="block text-2xl font-bold text-green-700">{instance.participants.filter(p => p.status === 'COMPLETED').length}</span>
+                    <span className="block text-2xl font-bold text-green-700">{instance.participants.filter((p: any) => p.status === 'COMPLETED').length}</span>
                     <span className="text-xs text-green-600">Completed</span>
                   </div>
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
-                    <span className="block text-2xl font-bold text-yellow-700">{instance.participants.filter(p => p.status === 'IN_PROGRESS').length}</span>
+                    <span className="block text-2xl font-bold text-yellow-700">{instance.participants.filter((p: any) => p.status === 'IN_PROGRESS').length}</span>
                     <span className="text-xs text-yellow-600">In progress</span>
                   </div>
                 </div>
@@ -373,7 +440,7 @@ export default function InstanceDetail() {
                       </tr>
                     </thead>
                     <tbody>
-                      {instance.participants.map(p => (
+                      {instance.participants.map((p: any) => (
                         <tr key={p.id} className="border-b border-border hover:bg-gray-50">
                           <td className="px-3 py-2">
                             <span className="text-sm font-medium text-navy">{p.displayName}</span>

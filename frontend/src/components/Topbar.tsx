@@ -16,8 +16,8 @@ export default function Topbar() {
       else if (path.includes('/history')) crumbs.push('Audit & History');
       else if (path.includes('/runtime')) crumbs.push('Theo dõi Runtime');
       else if (path.includes('/instances/')) crumbs.push('Chi tiết Instance');
-    } else if (path.startsWith('/sync')) crumbs.push('Đồng bộ dữ liệu');
-    else if (path.startsWith('/settings')) crumbs.push('Cài đặt');
+    } else if (path.startsWith('/sync')) crumbs.push('Cơ cấu tổ chức');
+    else if (path.startsWith('/settings')) crumbs.push('Vai trò hệ thống');
     else crumbs.push('Dashboard');
     
     return crumbs;

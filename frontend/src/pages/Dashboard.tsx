@@ -173,7 +173,7 @@ export default function Dashboard() {
       <div className="bg-white border border-border rounded-xl p-5 shadow-sm">
         <div className="flex items-center gap-2 text-sm text-muted">
           <ArrowPathIcon className="w-4 h-4" />
-          Nguồn dữ liệu: SAP SuccessFactors — đồng bộ gần nhất 2024-12-10 08:30 (xem trang Đồng bộ dữ liệu).
+          Nguồn dữ liệu: HRM nội bộ — người dùng, cấp quản lý, đơn vị tổ chức và vai trò hệ thống được quản lý trực tiếp.
         </div>
       </div>
     </div>

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronDownIcon, MagnifyingGlassIcon, UserIcon, UsersIcon, BriefcaseIcon, HomeIcon, ArrowRightIcon, CheckIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
-import { orgUsers } from '../data/mockData';
+import { api, type SystemRole } from '../api/client';
+import type { OrgUser } from '../types/workflow';
 
 export interface AssigneeResolverConfig {
   type: 'fixed' | 'role' | 'group' | 'current_participant' | 'participant_manager' | 'creator_manager' | 'department_head' | 'dynamic';
@@ -26,29 +27,22 @@ const RESOLVER_TYPES = [
   { value: 'dynamic', label: 'Người dùng động (Biểu thức)', description: 'Từ variable/expression trả userId', icon: ArrowRightIcon },
 ];
 
-const MOCK_USERS = orgUsers.map(u => ({ id: u.id, name: u.displayName, email: u.email, avatar: u.displayName.split(' ').slice(-1)[0].charAt(0) + u.displayName.split(' ')[0].charAt(0) }));
-
-const MOCK_ROLES = [
-  { id: 'ROLE_MANAGER', name: 'Manager' },
-  { id: 'ROLE_DIRECTOR', name: 'Director' },
-  { id: 'ROLE_FINANCE_LEAD', name: 'Finance Lead' },
-  { id: 'ROLE_HR_LEAD', name: 'HR Lead' },
-];
-
-const MOCK_GROUPS = [
-  { id: 'GRP_IT_SUPPORT', name: 'IT Support' },
-  { id: 'GRP_HR_TEAM', name: 'HR Team' },
-  { id: 'GRP_FINANCE_TEAM', name: 'Finance Team' },
-];
-
 const VALUE_LESS_TYPES: AssigneeResolverConfig['type'][] = ['current_participant', 'participant_manager', 'creator_manager', 'department_head'];
 
 export default function AssigneeResolver({ config, onChange, participants }: AssigneeResolverProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [users, setUsers] = useState<OrgUser[]>([]);
+  const [roles, setRoles] = useState<SystemRole[]>([]);
+  const [groups, setGroups] = useState<Array<{ id: string; name: string }>>([]);
+  const [loadError, setLoadError] = useState('');
+  useEffect(() => { void Promise.all([api.users.list(), api.roles.list(), api.groups.list()]).then(([nextUsers, nextRoles, nextGroups]) => {
+    setUsers(nextUsers); setRoles(nextRoles); setGroups(nextGroups); setLoadError('');
+  }).catch(cause => setLoadError(cause instanceof Error ? cause.message : 'Không tải được directory')); }, []);
+  const directoryUsers = users.map(user => ({ id: user.id, name: user.displayName, email: user.email, avatar: user.displayName.split(' ').slice(-1)[0].charAt(0) + user.displayName.split(' ')[0].charAt(0) }));
   const selectedType = RESOLVER_TYPES.find(t => t.value === config.type) ?? RESOLVER_TYPES[0];
 
-  const filteredUsers = MOCK_USERS.filter(u =>
+  const filteredUsers = directoryUsers.filter(u =>
     u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -56,15 +50,15 @@ export default function AssigneeResolver({ config, onChange, participants }: Ass
   const selectedSummary = (): string => {
     switch (config.type) {
       case 'fixed': {
-        const user = MOCK_USERS.find(u => u.id === config.value);
+        const user = directoryUsers.find(u => u.id === config.value);
         return user ? `Đã chọn: ${user.name}` : 'Chưa chọn người dùng';
       }
       case 'role': {
-        const role = MOCK_ROLES.find(r => r.id === config.value);
+        const role = roles.find(r => r.id === config.value || r.code === config.value);
         return role ? `Đã chọn: ${role.name}` : 'Chưa chọn vai trò';
       }
       case 'group': {
-        const group = MOCK_GROUPS.find(g => g.id === config.value);
+        const group = groups.find(g => g.id === config.value);
         return group ? `Đã chọn: ${group.name}` : 'Chưa chọn nhóm';
       }
       case 'dynamic':
@@ -129,7 +123,7 @@ export default function AssigneeResolver({ config, onChange, participants }: Ass
       case 'role':
         return (
           <div className="border border-border rounded-md overflow-hidden max-h-56 overflow-y-auto py-1 bg-white">
-            {MOCK_ROLES.map(role => (
+            {roles.map(role => (
               <button
                 key={role.id}
                 onClick={() => handleValueChange('role', role.id)}
@@ -145,7 +139,7 @@ export default function AssigneeResolver({ config, onChange, participants }: Ass
       case 'group':
         return (
           <div className="border border-border rounded-md overflow-hidden max-h-56 overflow-y-auto py-1 bg-white">
-            {MOCK_GROUPS.map(group => (
+            {groups.map(group => (
               <button
                 key={group.id}
                 onClick={() => handleValueChange('group', group.id)}
@@ -202,6 +196,7 @@ export default function AssigneeResolver({ config, onChange, participants }: Ass
 
       {isExpanded && (
         <div className="space-y-3 p-3 border border-border rounded-md bg-gray-50">
+          {loadError && <p className="text-xs text-red-600">{loadError}</p>}
           <div>
             <p className="text-xs font-semibold text-muted uppercase tracking-wide px-1 mb-1.5">Chọn loại resolver</p>
             <div className="grid gap-1">

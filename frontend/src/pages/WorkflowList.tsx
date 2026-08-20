@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Toast, { useToasts } from '../components/Toast';
 import { workflows, workflowTemplates, getCurrentUser, userDisplayName, hasRunningInstances } from '../data/mockData';
+import { api } from '../api/client';
 
 const STATUS_LABELS: Record<string, string> = {
   PUBLISHED: 'Published',
@@ -64,11 +65,15 @@ export default function WorkflowList() {
     setDeleteTarget(id);
   };
 
-  const doDelete = () => {
+  const doDelete = async () => {
     if (!deleteTarget) return;
-    toasts.pushToast('success', 'Workflow đã được xóa (mô phỏng).');
-    setDeleteTarget(null);
-    setOpenMenuId(null);
+    try {
+      await api.workflows.changeStatus(deleteTarget, 'DELETED');
+      const index = workflows.findIndex(workflow => workflow.id === deleteTarget);
+      if (index >= 0) workflows.splice(index, 1);
+      toasts.pushToast('success', 'Workflow đã được xóa mềm.');
+      setDeleteTarget(null); setOpenMenuId(null);
+    } catch (cause) { toasts.pushToast('error', cause instanceof Error ? cause.message : 'Không xóa được workflow'); }
   };
 
   return (
