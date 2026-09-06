@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useMyTasksStore } from '../stores/myTasksStore';
 import { Loader2, RefreshCw, Eye, Search } from 'lucide-react';
+import AssignmentTaskModal from '../components/node/AssignmentTaskModal';
 
 const STATUS_BADGES: Record<string, { label: string; color: string }> = {
   PENDING: { label: 'Pending', color: 'bg-yellow-100 text-yellow-700' },
@@ -248,7 +249,16 @@ export default function MyTasksPage() {
         )}
       </div>
 
-      {selectedTask && (
+      {selectedTask && (selectedTask.taskType === 'ASSIGNMENT' ? (
+        <AssignmentTaskModal
+          taskId={selectedTask.id}
+          taskTitle={selectedTask.title}
+          onComplete={async (data) => {
+            await handleComplete(selectedTask.id, data);
+          }}
+          onClose={() => setSelectedTask(null)}
+        />
+      ) : (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setSelectedTask(null)}>
           <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold mb-4">{selectedTask.title}</h2>
@@ -302,7 +312,7 @@ export default function MyTasksPage() {
             </div>
           </div>
         </div>
-      )}
+      ))}
 
       {toast && (
         <div className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg text-white text-sm ${

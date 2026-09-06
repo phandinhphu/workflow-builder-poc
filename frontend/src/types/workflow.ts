@@ -150,6 +150,8 @@ export type AssigneeResolverType =
   | 'FIXED_USER'
   | 'ROLE'
   | 'GROUP'
+  | 'INITIATOR'
+  | 'CREATOR'
   | 'CURRENT_PARTICIPANT'
   | 'PARTICIPANT_MANAGER'
   | 'CREATOR_MANAGER'
@@ -251,10 +253,12 @@ export interface WorkflowInstanceSummary {
 export interface OrgUser {
   id: string;
   externalId: string;
+  employeeCode?: string;
   displayName: string;
   email: string;
   department: string;
   role: string;
+  jobTitle?: string;
   level: string;
   status: 'Active' | 'Inactive';
   managerId?: string;

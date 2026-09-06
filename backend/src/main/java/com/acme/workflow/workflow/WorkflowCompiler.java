@@ -21,7 +21,7 @@ public class WorkflowCompiler {
     private static final Set<String> HUMAN_TYPES = Set.of("ASSIGNMENT", "APPROVAL", "REVIEW", "FORM");
     private static final Set<String> TRIGGERS = Set.of("manual", "schedule", "form", "webhook");
     private static final Set<String> RESOLVERS = Set.of("fixed", "fixed_user", "role", "group", "current_participant",
-            "participant_manager", "creator_manager", "department_head", "dynamic");
+            "participant_manager", "creator_manager", "department_head", "dynamic", "initiator", "creator");
     private static final Map<String, Set<String>> PORTS = Map.ofEntries(
             Map.entry("START", Set.of("SUCCESS", "STARTED")),
             Map.entry("ASSIGNMENT", Set.of("SUCCESS", "REJECTED", "REQUEST_CHANGE", "TIMEOUT", "ERROR")),

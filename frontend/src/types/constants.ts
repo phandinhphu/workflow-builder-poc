@@ -198,10 +198,13 @@ export const RESOLVER_ICONS = {
   FIXED_USER: 'User',
   ROLE: 'Users',
   GROUP: 'Users',
+  INITIATOR: 'UserCheck',
+  CREATOR: 'UserCheck',
   CURRENT_PARTICIPANT: 'User',
   PARTICIPANT_MANAGER: 'User',
   CREATOR_MANAGER: 'User',
   DEPARTMENT_HEAD: 'User',
+  DYNAMIC: 'Link',
   EXPRESSION: 'Link',
   EXTERNAL_QUERY: 'ExternalLink',
 } as const;

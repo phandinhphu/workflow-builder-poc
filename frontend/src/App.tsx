@@ -17,6 +17,7 @@ import { api } from './api/client';
 import { ApiError } from './api/client';
 import { replaceBackendData } from './data/mockData';
 import LoginPage from './pages/LoginPage';
+import ServiceCatalog from './pages/ServiceCatalog';
 
 function AppLayout() {
   return (
@@ -36,7 +37,8 @@ const router = createBrowserRouter([
   {
     element: <AppLayout />,
     children: [
-      { path: '/', element: <Navigate to="/workflows" replace /> },
+      { path: '/', element: <Navigate to="/catalog" replace /> },
+      { path: '/catalog', element: <ServiceCatalog /> },
       { path: '/dashboard', element: <Dashboard /> },
       { path: '/workflows', element: <WorkflowList /> },
       { path: '/workflows/new', element: <WorkflowBuilder /> },

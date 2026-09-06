@@ -1,13 +1,14 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Squares2X2Icon, UsersIcon, HomeIcon, DocumentTextIcon, BuildingOffice2Icon, ShieldCheckIcon, ChevronDownIcon, ClipboardDocumentCheckIcon, LinkIcon } from '@heroicons/react/24/outline';
+import { Squares2X2Icon, UsersIcon, HomeIcon, DocumentTextIcon, BuildingOffice2Icon, ShieldCheckIcon, ChevronDownIcon, ClipboardDocumentCheckIcon, LinkIcon, SparklesIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 import { getCurrentUser } from '../data/mockData';
 
 const navigation = [
+  { name: 'Cổng Dịch vụ (Catalog)', href: '/catalog', icon: SparklesIcon },
+  { name: 'Nhiệm vụ của tôi', href: '/my-tasks', icon: ClipboardDocumentCheckIcon },
+  { name: 'Danh sách Workflow', href: '/workflows', icon: DocumentTextIcon },
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
   { name: 'Người dùng', href: '/users', icon: UsersIcon },
-  { name: 'Danh sách Workflow', href: '/workflows', icon: DocumentTextIcon },
-  { name: 'Nhiệm vụ của tôi', href: '/my-tasks', icon: ClipboardDocumentCheckIcon },
   { name: 'Kết nối & API', href: '/connectors', icon: LinkIcon },
 ];
 

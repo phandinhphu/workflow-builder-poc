@@ -360,6 +360,7 @@ public class RuntimeEngineService {
         LinkedHashSet<String> result = new LinkedHashSet<>();
         switch (type) {
             case "fixed", "fixed_user" -> result.add(value);
+            case "initiator", "creator" -> instances.findById(instanceId).ifPresent(i -> result.add(i.creatorId));
             case "current_participant" -> result.add(context.path("participant").path("id").asText(null));
             case "participant_manager" -> result.add(context.path("participant").path("managerId").asText(null));
             case "creator_manager" -> result.add(instances.findById(instanceId)
@@ -375,10 +376,7 @@ public class RuntimeEngineService {
                             .forEach(a -> result.add(a.userId)));
             case "dynamic" -> {
                 JsonNode dynamic = resolver.path(context, value);
-                if (dynamic.isArray())
-                    dynamic.forEach(v -> result.add(v.asText()));
-                else
-                    result.add(dynamic.asText(null));
+                extractDynamicAssignees(dynamic, result);
             }
             default -> result.add(value);
         }
@@ -388,6 +386,35 @@ public class RuntimeEngineService {
         if (result.isEmpty() && config.path("fallback").isObject())
             return resolveAssignees(config.path("fallback"), context, instanceId);
         return result.stream().sorted().toList();
+    }
+
+    private void extractDynamicAssignees(JsonNode node, Set<String> target) {
+        if (node == null || node.isMissingNode() || node.isNull()) return;
+        if (node.isArray()) {
+            node.forEach(item -> {
+                if (item.isObject()) {
+                    if (item.has("id")) target.add(item.get("id").asText());
+                    else if (item.has("userId")) target.add(item.get("userId").asText());
+                    else if (item.has("employeeCode")) {
+                        users.findByEmployeeCode(item.get("employeeCode").asText()).ifPresent(u -> target.add(u.id));
+                    }
+                } else {
+                    target.add(item.asText());
+                }
+            });
+        } else if (node.isObject()) {
+            if (node.has("participantIds")) {
+                extractDynamicAssignees(node.get("participantIds"), target);
+            } else if (node.has("participants")) {
+                extractDynamicAssignees(node.get("participants"), target);
+            } else if (node.has("id")) {
+                target.add(node.get("id").asText());
+            } else if (node.has("userId")) {
+                target.add(node.get("userId").asText());
+            }
+        } else if (node.isTextual()) {
+            target.add(node.asText());
+        }
     }
 
     private boolean inScope(String scopeId, String participantOrgId) {
@@ -510,9 +537,10 @@ public class RuntimeEngineService {
         boolean routeNow = !"COMPLETE".equals(normalized) || completionReached(task.nodeExecutionId, resolution);
         if (routeNow) {
             cancelSiblingTasks(task);
-            completeExecution(execution, "COMPLETED", port, output);
+            ObjectNode finalOutput = aggregateTaskOutputs(execution, output);
+            completeExecution(execution, "COMPLETED", port, finalOutput);
             event(task.instanceId, task.participantExecutionId, task.nodeExecutionId, "TASK_" + task.status,
-                    "Hoàn thành task", task.id, "SUCCESS", actor, output);
+                    "Hoàn thành task", task.id, "SUCCESS", actor, finalOutput);
             route(task.instanceId, task.participantExecutionId, findNode(definition(task.instanceId), task.nodeId),
                     definition(task.instanceId), port, 0);
         } else
@@ -522,6 +550,67 @@ public class RuntimeEngineService {
                 Map.of("outcomePort", port, "routed", routeNow));
         return Map.of("success", true, "taskId", task.id, "status", task.status, "outcomePort", port, "routed",
                 routeNow);
+    }
+
+    private ObjectNode aggregateTaskOutputs(NodeExecutionEntity execution, ObjectNode currentTaskOutput) {
+        ObjectNode result = currentTaskOutput.deepCopy();
+        if ("ASSIGNMENT".equalsIgnoreCase(execution.nodeType)) {
+            ArrayNode participantIds = jsons.mapper().createArrayNode();
+            ArrayNode participantsList = jsons.mapper().createArrayNode();
+            JsonNode rawIds = currentTaskOutput.has("participantUserIds") ? currentTaskOutput.get("participantUserIds")
+                    : currentTaskOutput.has("participantIds") ? currentTaskOutput.get("participantIds") : null;
+            if (rawIds != null && rawIds.isArray()) {
+                rawIds.forEach(idNode -> {
+                    String uid = idNode.isObject() && idNode.has("id") ? idNode.get("id").asText() : idNode.asText();
+                    if (!uid.isBlank()) {
+                        participantIds.add(uid);
+                        try {
+                            participantsList.add(jsons.value(directory.user(uid)));
+                        } catch (Exception ignored) {
+                            participantsList.add(jsons.object().put("id", uid));
+                        }
+                    }
+                });
+            }
+            result.set("participantIds", participantIds);
+            result.set("participants", participantsList);
+            result.put("totalParticipants", participantIds.size());
+            return result;
+        }
+
+        List<WorkflowTaskEntity> siblings = tasks.findByNodeExecutionIdOrderByCreatedAtAsc(execution.id);
+        if (siblings.size() > 1) {
+            ObjectNode submissionsMap = jsons.object();
+            ArrayNode submissionList = jsons.mapper().createArrayNode();
+            for (WorkflowTaskEntity sibling : siblings) {
+                if ("COMPLETED".equals(sibling.status)) {
+                    submissions.findTopByTaskIdOrderByRevisionNoDesc(sibling.id).ifPresent(sub -> {
+                        JsonNode formData = jsons.read(sub.formData);
+                        String uid = sibling.assigneeId != null ? sibling.assigneeId : sibling.claimantId;
+                        if (uid != null) {
+                            submissionsMap.set(uid, formData);
+                        }
+                        ObjectNode entry = jsons.object();
+                        entry.put("taskId", sibling.id);
+                        entry.put("userId", uid);
+                        try {
+                            if (uid != null) {
+                                entry.set("user", jsons.value(directory.user(uid)));
+                            }
+                        } catch (Exception ignored) {
+                        }
+                        entry.set("data", formData);
+                        entry.put("action", sub.action);
+                        entry.put("submittedAt", sub.createdAt.toString());
+                        submissionList.add(entry);
+                    });
+                }
+            }
+            result.set("submissions", submissionsMap);
+            result.set("submissionList", submissionList);
+            result.put("totalSubmissions", submissionList.size());
+        }
+        return result;
     }
 
     private boolean completionReached(String executionId, ObjectNode resolution) {

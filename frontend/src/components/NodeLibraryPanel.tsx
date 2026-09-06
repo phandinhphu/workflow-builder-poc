@@ -19,21 +19,21 @@ import {
 
 const NODE_CATEGORIES = [
   {
-    name: 'NGHIỆP VỤ',
+    name: 'NGHIỆP VỤ & NGƯỜI DÙNG',
     nodes: [
+      { type: 'assignment', label: 'Phân bổ người tham gia', description: 'Thu thập/chọn danh sách người tham gia bằng User Picker hoặc Upload file Excel', icon: UserPlus },
+      { type: 'form', label: 'Biểu mẫu nhập liệu (Form)', description: 'Thiết kế form và giao cho người dùng cụ thể hoặc danh sách động từ bước trước', icon: FormInput },
       { type: 'approval', label: 'Phê duyệt', description: 'Gửi yêu cầu và chờ phê duyệt từ quản lý hoặc bên liên quan', icon: CheckCircle2 },
       { type: 'review', label: 'Kiểm duyệt', description: 'Kiểm duyệt nội dung trước khi tiếp tục', icon: Eye },
-      { type: 'assignment', label: 'Phân công', description: 'Giao nhiệm vụ hoặc hồ sơ cho đội ngũ hoặc vai trò cụ thể', icon: UserPlus },
       { type: 'notification', label: 'Thông báo', description: 'Gửi thông báo tự động (Email, In-app, Slack) đến các người liên quan', icon: BellRing },
     ]
   },
   {
-    name: 'CỐT LÕI',
+    name: 'CỐT LÕI & TÍCH HỢP',
     nodes: [
       { type: 'system', label: 'System Action', description: 'Thực thi hành động hệ thống: tạo record, cập nhật trạng thái, gọi API nội bộ', icon: Code2 },
       { type: 'data', label: 'Bảng dữ liệu', description: 'Truy vấn và xử lý dữ liệu có cấu trúc', icon: Database },
       { type: 'http', label: 'HTTP Request', description: 'Gửi yêu cầu gọi API bên ngoài', icon: Globe2 },
-      { type: 'form', label: 'Biểu mẫu', description: 'Yêu cầu người dùng nhập thông tin qua giao diện', icon: FormInput },
       { type: 'data_transform', label: 'Biến đổi dữ liệu', description: 'Transform, map, set variable trong context - không side effect', icon: TrendingUp },
     ]
   },

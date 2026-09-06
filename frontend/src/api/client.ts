@@ -118,6 +118,25 @@ export const api = {
     reject: (id: string, comment?: string) => request<{ success: boolean; message: string }>(`/tasks/${id}/reject`, { method: 'POST', body: JSON.stringify({ comment }) }),
     action: (id: string, action: string, data: Record<string, unknown>) => request<Record<string, unknown>>(`/tasks/${id}/actions/${action}`, { method: 'POST', body: JSON.stringify(data) }),
     signal: (eventName: string, correlationKey: string, payload: Record<string, unknown>) => request<Record<string, unknown>>(`/triggers/events/${encodeURIComponent(eventName)}/${encodeURIComponent(correlationKey)}`, { method: 'POST', body: JSON.stringify(payload) }),
+    participants: {
+      previewImport: async (file: File) => {
+        const token = localStorage.getItem('workflow.authToken');
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch(`${API_BASE}/runtime/participants/preview-import`, {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ message: 'Không thể upload file' }));
+          throw new Error(err.message || 'Lỗi xử lý file');
+        }
+        return res.json();
+      },
+      previewIdentifiers: (identifiers: string[]) => request<any>('/runtime/participants/preview-identifiers', { method: 'POST', body: JSON.stringify({ identifiers }) }),
+      downloadTemplateUrl: `${API_BASE}/runtime/participants/template`,
+    },
   },
   notifications: {
     list: () => request<any[]>('/notifications'),
