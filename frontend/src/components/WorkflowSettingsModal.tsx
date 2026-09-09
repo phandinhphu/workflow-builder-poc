@@ -189,6 +189,60 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
                           />
                         </div>
                       </div>
+
+                      {/* Execution Pattern */}
+                      <div className="pt-3 border-t border-border">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Mô hình vận hành (Execution Pattern)
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div
+                            onClick={() => setWorkflowData({ executionPattern: 'ON_DEMAND' })}
+                            className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                              (workflowData.executionPattern || 'ON_DEMAND') === 'ON_DEMAND'
+                                ? 'border-indigo-600 bg-indigo-50/40'
+                                : 'border-gray-200 hover:border-gray-300 bg-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name="settingsExecutionPattern"
+                                checked={(workflowData.executionPattern || 'ON_DEMAND') === 'ON_DEMAND'}
+                                onChange={() => setWorkflowData({ executionPattern: 'ON_DEMAND' })}
+                                className="text-indigo-600 focus:ring-indigo-500"
+                              />
+                              <span className="text-xs font-bold text-gray-900">On-Demand (Service Catalog)</span>
+                            </div>
+                            <p className="mt-1 text-[11px] text-gray-500 pl-5">
+                              Từng nhân viên gửi đơn độc lập.
+                            </p>
+                          </div>
+
+                          <div
+                            onClick={() => setWorkflowData({ executionPattern: 'BATCH_CAMPAIGN' })}
+                            className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                              workflowData.executionPattern === 'BATCH_CAMPAIGN'
+                                ? 'border-indigo-600 bg-indigo-50/40'
+                                : 'border-gray-200 hover:border-gray-300 bg-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name="settingsExecutionPattern"
+                                checked={workflowData.executionPattern === 'BATCH_CAMPAIGN'}
+                                onChange={() => setWorkflowData({ executionPattern: 'BATCH_CAMPAIGN' })}
+                                className="text-indigo-600 focus:ring-indigo-500"
+                              />
+                              <span className="text-xs font-bold text-gray-900">Batch Campaign (Định kỳ)</span>
+                            </div>
+                            <p className="mt-1 text-[11px] text-gray-500 pl-5">
+                              Đợt đánh giá nhân sự, khảo sát đồng thời.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
 

@@ -12,6 +12,7 @@ export interface DesignerPanelState {
     owner: string;
     version: string;
     status: WorkflowStatus;
+    executionPattern?: 'ON_DEMAND' | 'BATCH_CAMPAIGN';
   };
   nodes: Node[];
   edges: Edge[];
@@ -38,6 +39,7 @@ export interface DesignerActions {
     owner: string;
     version: string;
     status: WorkflowStatus;
+    executionPattern?: 'ON_DEMAND' | 'BATCH_CAMPAIGN';
     trigger?: TriggerDefinition;
     participantScope?: ParticipantScope;
     participantNotification?: ParticipantNotification;
@@ -81,6 +83,7 @@ const initialState: DesignerPanelState = {
     owner: '',
     version: '1.0',
     status: 'DRAFT',
+    executionPattern: 'ON_DEMAND',
   },
   nodes: [],
   edges: [],
@@ -122,6 +125,7 @@ export const useDesignerStore = create<DesignerStore>((set) => ({
       owner: wf.owner,
       version: wf.version,
       status: wf.status,
+      executionPattern: wf.executionPattern ?? 'ON_DEMAND',
     },
     trigger: wf.trigger,
     participantScope: wf.participantScope ?? { ...initialState.participantScope },

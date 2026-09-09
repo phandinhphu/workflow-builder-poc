@@ -285,29 +285,66 @@ export default function MyTasksPage() {
                 <p className="text-sm">{selectedTask.assignee?.displayName || 'Unassigned'}</p>
               </div>
             </div>
-            {!!selectedTask.formFields?.length && (
+            {/* Review Banner for Approval tasks */}
+            {(selectedTask.reviewedParticipantName || selectedTask.participantName) && (
+              <div className="mb-4 p-3.5 bg-blue-50/80 border border-blue-200 rounded-lg flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] text-blue-600 font-bold uppercase tracking-wider block">
+                    Đơn yêu cầu / Phiếu đánh giá của
+                  </span>
+                  <span className="text-sm font-bold text-blue-950">
+                    {selectedTask.reviewedParticipantName || selectedTask.participantName}
+                  </span>
+                </div>
+                {(selectedTask.reviewedParticipantId || selectedTask.participantId) && (
+                  <span className="px-2.5 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-full font-mono">
+                    ID: {selectedTask.reviewedParticipantId || selectedTask.participantId}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Form Fields Display */}
+            {!!selectedTask.formFields?.length ? (
               <div className="border-t pt-4 mt-4 space-y-3 max-h-[45vh] overflow-auto">
-                <h3 className="text-sm font-semibold">Biểu mẫu xử lý</h3>
+                <h3 className="text-sm font-bold text-gray-800">
+                  {selectedTask.taskType === 'APPROVAL' || selectedTask.taskType === 'REVIEW'
+                    ? 'Nội dung thông tin cần phê duyệt'
+                    : 'Biểu mẫu xử lý'}
+                </h3>
                 {selectedTask.formFields.filter((field: any) => field.visible !== false).map((field: any) => {
                   const key = field.outputMapping || field.id;
-                  const value = formData[key] ?? '';
+                  const value = formData[key] ?? field.resolvedValue ?? (selectedTask.reviewedSubmission?.[key] || selectedTask.reviewedSubmission?.[field.id]) ?? '';
                   return <label key={field.id} className="block text-sm">
-                    <span className="font-medium text-gray-700">{field.label}{field.required && !field.readOnly ? ' *' : ''}</span>
+                    <span className="font-semibold text-gray-700">{field.label || field.id}{field.required && !field.readOnly ? ' *' : ''}</span>
                     {field.bindingError && <span className="mt-1 block rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">Không thể nạp dữ liệu: {field.bindingError}</span>}
-                    {field.type === 'textarea' ? <textarea readOnly={field.readOnly} value={String(value)} onChange={e => setFormData({ ...formData, [key]: e.target.value })} className="mt-1 w-full border rounded px-3 py-2 read-only:bg-gray-50" />
-                      : field.type === 'select' ? <select disabled={field.readOnly} value={String(value)} onChange={e => setFormData({ ...formData, [key]: e.target.value })} className="mt-1 w-full border rounded px-3 py-2 disabled:bg-gray-50"><option value="">Chọn…</option>{field.options?.map((option: any) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
+                    {field.type === 'textarea' ? <textarea readOnly={field.readOnly} value={String(value)} onChange={e => setFormData({ ...formData, [key]: e.target.value })} className="mt-1 w-full border rounded px-3 py-2 read-only:bg-gray-100/70 read-only:text-gray-800" />
+                      : field.type === 'select' ? <select disabled={field.readOnly} value={String(value)} onChange={e => setFormData({ ...formData, [key]: e.target.value })} className="mt-1 w-full border rounded px-3 py-2 disabled:bg-gray-100/70 disabled:text-gray-800"><option value="">Chọn…</option>{field.options?.map((option: any) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
                       : field.type === 'checkbox' ? <input type="checkbox" disabled={field.readOnly} checked={Boolean(value)} onChange={e => setFormData({ ...formData, [key]: e.target.checked })} className="ml-3" />
-                      : <input type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'} readOnly={field.readOnly} value={String(value)} min={field.validation?.min} max={field.validation?.max} onChange={e => setFormData({ ...formData, [key]: field.type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value })} className="mt-1 w-full border rounded px-3 py-2 read-only:bg-gray-50" />}
+                      : <input type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'} readOnly={field.readOnly} value={String(value)} min={field.validation?.min} max={field.validation?.max} onChange={e => setFormData({ ...formData, [key]: field.type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value })} className="mt-1 w-full border rounded px-3 py-2 read-only:bg-gray-100/70 read-only:text-gray-800" />}
                   </label>;
                 })}
               </div>
-            )}
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setSelectedTask(null)} className="px-4 py-2 border rounded text-sm hover:bg-gray-50">Close</button>
-              {selectedTask.status === 'PENDING' && <button onClick={async () => { await handleClaim(selectedTask.id); setSelectedTask(null); }} className="px-4 py-2 bg-blue-600 text-white rounded text-sm">Claim</button>}
+            ) : selectedTask.reviewedSubmission && Object.keys(selectedTask.reviewedSubmission).length > 0 ? (
+              <div className="border-t pt-4 mt-4 space-y-2 max-h-[45vh] overflow-auto">
+                <h3 className="text-sm font-bold text-gray-800">Nội dung thông tin cần phê duyệt</h3>
+                <div className="bg-gray-50 border rounded-lg p-3 divide-y divide-gray-200">
+                  {Object.entries(selectedTask.reviewedSubmission).map(([k, v]) => (
+                    <div key={k} className="py-2 flex justify-between items-center text-xs">
+                      <span className="font-medium text-gray-600 font-mono">{k}</span>
+                      <span className="font-bold text-gray-900">{String(v)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="flex justify-end gap-2 mt-6 pt-4 border-t">
+              <button onClick={() => setSelectedTask(null)} className="px-4 py-2 border rounded text-sm hover:bg-gray-50 font-medium">Đóng</button>
+              {selectedTask.status === 'PENDING' && <button onClick={async () => { await handleClaim(selectedTask.id); setSelectedTask(null); }} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold">Nhận việc (Claim)</button>}
               {selectedTask.status === 'CLAIMED' && <>
-                <button onClick={() => void handleReject(selectedTask.id)} className="px-4 py-2 bg-red-600 text-white rounded text-sm">Reject</button>
-                <button onClick={() => void handleComplete(selectedTask.id, formData)} className="px-4 py-2 bg-green-600 text-white rounded text-sm">Complete</button>
+                <button onClick={() => void handleReject(selectedTask.id)} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-semibold">Từ chối</button>
+                <button onClick={() => void handleComplete(selectedTask.id, formData)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-sm font-semibold">Phê duyệt (Complete)</button>
               </>}
             </div>
           </div>

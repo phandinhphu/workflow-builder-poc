@@ -1,4 +1,4 @@
-﻿import { Fragment } from 'react';
+import { Fragment } from 'react';
 import { Transition } from '@headlessui/react';
 import { XCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import type { Node, Edge } from '@xyflow/react';
@@ -16,7 +16,8 @@ export interface ValidationResult {
   issues: ValidationIssue[];
 }
 
-const NO_VALUE_RESOLVERS = ['current_participant', 'participant_manager', 'creator_manager', 'department_head'];
+// These resolver types resolve from workflow context automatically and don't require a manual value selection
+const NO_VALUE_RESOLVERS = ['initiator', 'creator', 'current_participant', 'participant_manager', 'creator_manager', 'department_head'];
 
 function extractReferences(text: unknown): string[] {
   if (typeof text !== 'string') return [];
@@ -114,12 +115,14 @@ export function validateWorkflow(
 
     if (['approval', 'review', 'assignment'].includes(node.data.nodeType as string)) {
       const assignee = node.data.assignee as any;
-      const needsValue = assignee && !NO_VALUE_RESOLVERS.includes(assignee.type);
-      if (assignee && assignee.type === 'dynamic' && (!assignee.value || (assignee.value as string).trim() === '')) {
-        issues.push({ type: 'error', nodeId: node.id, message: `Bước "${node.data.label}" dùng assignee động nhưng chưa cấu hình biểu thức.` });
-      }
-      if (needsValue && (assignee.value === undefined || assignee.value === '' || assignee.value === null)) {
+      if (!assignee || !assignee.type) {
+        // No assignee configured at all
         issues.push({ type: 'error', nodeId: node.id, message: `Bước "${node.data.label}" chưa chọn người nhận/phê duyệt.` });
+      } else if (!NO_VALUE_RESOLVERS.includes(assignee.type)) {
+        // This type requires an explicit value (user id, role id, expression, etc.)
+        if (!assignee.value || (typeof assignee.value === 'string' && assignee.value.trim() === '')) {
+          issues.push({ type: 'error', nodeId: node.id, message: `Bước "${node.data.label}" chưa chọn người nhận/phê duyệt.` });
+        }
       }
     }
 
@@ -313,9 +316,8 @@ export default function ValidationDrawer({ isOpen, onClose, result, onPublish, o
                   <div className="flex flex-col gap-2">
                     <button
                       type="button"
-                      className={`inline-flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm ${
-                        result.isValid ? 'bg-primary hover:bg-primary-dark' : 'bg-gray-400 cursor-not-allowed'
-                      }`}
+                      className={`inline-flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm ${result.isValid ? 'bg-primary hover:bg-primary-dark' : 'bg-gray-400 cursor-not-allowed'
+                        }`}
                       onClick={() => {
                         if (result.isValid) {
                           onPublish();

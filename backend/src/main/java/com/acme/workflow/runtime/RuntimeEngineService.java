@@ -14,6 +14,9 @@ import com.acme.workflow.workflow.domain.WorkflowVersionEntity;
 import com.acme.workflow.workflow.repository.WorkflowVersionRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.*;
+
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +26,7 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
+@Slf4j
 @Service
 public class RuntimeEngineService {
     private static final Set<String> HUMAN = Set.of("ASSIGNMENT", "APPROVAL", "REVIEW", "FORM");
@@ -127,9 +131,14 @@ public class RuntimeEngineService {
             if (existing.isPresent())
                 return Map.of("id", existing.get().id, "idempotentReplay", true, "status", existing.get().status);
         }
+        // Inject the actor so resolveParticipants can build the ON_DEMAND
+        // single-participant list
+        if (actor != null && !request.has("actorId"))
+            request.put("actorId", actor);
         List<Map<String, Object>> resolved = resolveParticipants(definition, request);
         if (resolved.isEmpty())
-            throw ApiException.badRequest("EMPTY_PARTICIPANTS", "Participant resolver không trả về người dùng nào");
+            throw ApiException.badRequest("EMPTY_PARTICIPANTS",
+                    "Participant resolver không trả về người dùng nào. Kiểm tra lại executionPattern hoặc participantScope của workflow.");
         ObjectNode variables = resolveVariables(definition, request.path("variables"));
         WorkflowInstanceEntity instance = new WorkflowInstanceEntity();
         instance.id = Ids.uuid();
@@ -174,12 +183,37 @@ public class RuntimeEngineService {
 
     private List<Map<String, Object>> resolveParticipants(ObjectNode definition, ObjectNode request) {
         LinkedHashMap<String, Map<String, Object>> unique = new LinkedHashMap<>();
+
+        // Explicit override: caller provided specific participantUserIds
         JsonNode explicit = request.path("participantUserIds");
         if (explicit.isArray() && !explicit.isEmpty()) {
             explicit.forEach(id -> addActive(unique, id.asText()));
             return new ArrayList<>(unique.values());
         }
-        JsonNode scope = definition.path("participantScope"), cfg = scope.path("selectorConfig");
+
+        // ON_DEMAND: single-request workflow, only the triggering actor is the
+        // "participant".
+        // Actual task assignees (manager, dynamic list, etc.) are resolved per-node at
+        // runtime.
+        String pattern = definition.path("executionPattern").asText("ON_DEMAND").toUpperCase(Locale.ROOT);
+        JsonNode scope = definition.path("participantScope");
+        boolean scopeEnabled = scope.isObject() && scope.path("enabled").asBoolean(false);
+        if ("ON_DEMAND".equals(pattern) || !scopeEnabled) {
+            // The actor user is injected by the caller into the request
+            String actorId = request.path("actorId").asText(null);
+            if (actorId == null || actorId.isBlank()) {
+                actorId = request.path("creatorId").asText(null);
+            }
+            if (actorId != null && !actorId.isBlank()) {
+                addActive(unique, actorId);
+                return new ArrayList<>(unique.values());
+            }
+            // Fallback: will be empty — caller must handle this
+            return new ArrayList<>();
+        }
+
+        // BATCH_CAMPAIGN: resolve the full participant snapshot from the scope config
+        JsonNode cfg = scope.path("selectorConfig");
         String kind = scope.path("scopeKind").asText("all_active");
         List<Map<String, Object>> result = new ArrayList<>();
         switch (kind) {
@@ -217,17 +251,38 @@ public class RuntimeEngineService {
             }
             default -> result.addAll(directory.users(null, "ACTIVE", null, true));
         }
-        result.stream().filter(user -> "Active".equals(user.get("status")))
-                .forEach(user -> unique.put((String) user.get("id"), user));
+        result.stream().filter(user -> {
+            Object st = user.get("status");
+            return st == null || "Active".equalsIgnoreCase(String.valueOf(st));
+        }).forEach(user -> unique.put((String) user.get("id"), user));
         return new ArrayList<>(unique.values());
     }
 
     private void addActive(Map<String, Map<String, Object>> target, String id) {
+        if (id == null || id.isBlank())
+            return;
         try {
             Map<String, Object> user = directory.user(id);
-            if ("Active".equals(user.get("status")))
+            Object st = user.get("status");
+            if (st == null || "Active".equalsIgnoreCase(String.valueOf(st)))
                 target.put(id, user);
-        } catch (ApiException ignored) {
+        } catch (Exception e) {
+            // Fallback: check HrmUser repository directly if directory threw notFound
+            users.findById(id).ifPresent(u -> {
+                if ("ACTIVE".equalsIgnoreCase(u.status)) {
+                    Map<String, Object> fallbackUser = new LinkedHashMap<>();
+                    fallbackUser.put("id", u.id);
+                    fallbackUser.put("displayName", u.displayName);
+                    fallbackUser.put("email", u.email);
+                    fallbackUser.put("status", "Active");
+                    fallbackUser.put("organizationUnitId", u.organizationUnitId);
+                    fallbackUser.put("managerId", u.managerId);
+                    target.put(id, fallbackUser);
+                }
+            });
+            if (!target.containsKey(id)) {
+                target.put(id, Map.of("id", id, "displayName", id, "status", "Active"));
+            }
         }
     }
 
@@ -301,57 +356,188 @@ public class RuntimeEngineService {
             ObjectNode context) {
         JsonNode config = node.path("config");
         JsonNode assignee = config.has("assigneeResolver") ? config.path("assigneeResolver") : config.path("assignee");
+        String assigneeType = assignee.path("type").asText("").toLowerCase(Locale.ROOT);
+        String nodeType = node.path("type").asText().toUpperCase(Locale.ROOT);
+
+        // Item-level per-participant manager approval:
+        // For APPROVAL/REVIEW nodes that review a multi-participant form, create one
+        // task
+        // per participant with the participant's own manager as the approver.
+        if (("APPROVAL".equals(nodeType) || "REVIEW".equals(nodeType))
+                && "each_participant_manager".equals(assigneeType)) {
+            createPerParticipantApprovalTasks(instanceId, peId, execution, node, config, context);
+            return;
+        }
+
         List<String> resolved = resolveAssignees(assignee, context, instanceId);
         if (resolved.isEmpty()) {
             failExecution(execution, "ASSIGNEE_NOT_FOUND", "Không resolve được assignee");
             failParticipant(instanceId, peId, "ASSIGNEE_NOT_FOUND", "Không resolve được assignee");
             return;
         }
-        String mode = config.path("assignmentMode").asText(config.path("executionMode").asText("DIRECT_ONE"))
-                .toUpperCase(Locale.ROOT);
-        if ("SINGLE".equals(mode))
+        String rawMode = config.has("assignmentMode") ? config.path("assignmentMode").asText("")
+                : config.path("executionMode").asText("DIRECT_ONE");
+        String mode = rawMode.toUpperCase(Locale.ROOT);
+        if ("SINGLE".equals(mode) || "ONE".equals(mode) || "DIRECT_ONE".equals(mode)) {
             mode = "DIRECT_ONE";
-        if ("ALL".equals(mode))
+        } else if ("ALL".equals(mode) || "DIRECT_ALL".equals(mode) || "FOREACHPARTICIPANT".equals(mode)
+                || "FOR_EACH".equals(mode) || "EACH".equals(mode) || "FOREACH".equals(mode)) {
             mode = "DIRECT_ALL";
+        } else if ("CLAIMABLE_POOL".equals(mode) || "POOL".equals(mode)) {
+            mode = "CLAIMABLE_POOL";
+        } else {
+            mode = "DIRECT_ONE";
+        }
+
         List<String> taskAssignees = "DIRECT_ALL".equals(mode) ? resolved
                 : List.of("CLAIMABLE_POOL".equals(mode) ? "" : resolved.getFirst());
         for (String assigneeId : taskAssignees) {
-            WorkflowTaskEntity task = new WorkflowTaskEntity();
-            task.id = Ids.uuid();
-            task.instanceId = instanceId;
-            task.participantExecutionId = peId;
-            task.nodeExecutionId = execution.id;
-            task.nodeId = node.path("id").asText();
-            task.taskType = node.path("type").asText().toUpperCase(Locale.ROOT);
-            task.title = resolver.render(config.path("title").asText(node.path("name").asText()), context);
-            task.description = resolver.render(config.path("description").asText(""), context);
-            task.assigneeId = assigneeId.isBlank() ? null : assigneeId;
-            task.status = "PENDING";
-            task.dueAt = dueAt(config);
-            task.priority = config.path("priority").asText(task.dueAt == null ? "NORMAL" : "HIGH");
-            task.formSchema = jsons.write(materializeFields(config.path("formFields"), context));
-            task.allowedActions = jsons.write(allowedActions(task.taskType, config));
-            ObjectNode snapshot = jsons.object();
-            snapshot.put("assignmentMode", mode);
-            snapshot.set("completionPolicy", config.path("completionPolicy"));
-            snapshot.set("candidateUserIds", jsons.value(resolved));
-            task.resolutionSnapshot = jsons.write(snapshot);
-            task.createdAt = Instant.now();
-            tasks.saveAndFlush(task);
-            if ("CLAIMABLE_POOL".equals(mode))
-                resolved.forEach(userId -> {
-                    TaskCandidateUserEntity candidate = new TaskCandidateUserEntity();
-                    candidate.taskId = task.id;
-                    candidate.userId = userId;
-                    candidates.save(candidate);
-                });
-            event(instanceId, peId, execution.id, "TASK_ASSIGNED", node.path("name").asText(), "Task đã được giao",
-                    "WAITING", null, Map.of("taskId", task.id, "assigneeIds", resolved, "assignmentMode", mode));
-            sendTaskNotification(instanceId, task, config.path("channels"), resolved);
-            scheduleSla(task, config);
+            createSingleTask(instanceId, peId, execution, node, config, context, assigneeId, mode, resolved);
         }
         execution.state = "WAITING";
         executions.save(execution);
+    }
+
+    /**
+     * Creates one approval/review task per participant from the upstream form node.
+     * Each task is assigned to that participant's direct manager and contains only
+     * that participant's form submission data, so each manager sees exactly the
+     * information relevant to their direct report.
+     */
+    private void createPerParticipantApprovalTasks(String instanceId, String peId, NodeExecutionEntity execution,
+            JsonNode node, JsonNode config, ObjectNode context) {
+        String reviewSourceNodeId = config.path("reviewSourceNodeId").asText(null);
+        String nodeType = node.path("type").asText().toUpperCase(Locale.ROOT);
+
+        // Collect submission entries from the upstream Form node output stored in
+        // context
+        List<ObjectNode> submissionEntries = new ArrayList<>();
+        if (reviewSourceNodeId != null) {
+            JsonNode formOutput = context.path("nodes").path(reviewSourceNodeId);
+            JsonNode submissionList = formOutput.path("submissionList");
+            if (submissionList.isArray()) {
+                submissionList.forEach(entry -> {
+                    if (entry.isObject())
+                        submissionEntries.add((ObjectNode) entry.deepCopy());
+                });
+            }
+        }
+
+        if (submissionEntries.isEmpty()) {
+            // Fallback: treat as a normal approval with creator_manager resolver
+            log.warn(
+                    "[createPerParticipantApprovalTasks] No submissions found from reviewSourceNodeId={}, nodeId={}. Falling back to creator_manager.",
+                    reviewSourceNodeId, node.path("id").asText());
+            ObjectNode fallbackAssignee = jsons.object().put("type", "creator_manager");
+            List<String> fallback = resolveAssignees(fallbackAssignee, context, instanceId);
+            if (!fallback.isEmpty()) {
+                createSingleTask(instanceId, peId, execution, node, config, context, fallback.getFirst(), "DIRECT_ONE",
+                        fallback);
+            } else {
+                failExecution(execution, "ASSIGNEE_NOT_FOUND", "Không tìm được manager để phê duyệt");
+                failParticipant(instanceId, peId, "ASSIGNEE_NOT_FOUND", "Không tìm được manager để phê duyệt");
+                return;
+            }
+            execution.state = "WAITING";
+            executions.save(execution);
+            return;
+        }
+
+        String mode = "DIRECT_ONE";
+        int tasksCreated = 0;
+        for (ObjectNode entry : submissionEntries) {
+            String participantId = entry.path("userId").asText(null);
+            if (participantId == null || participantId.isBlank())
+                continue;
+
+            // Resolve this participant's manager
+            String managerId = users.findById(participantId).map(u -> u.managerId).orElse(null);
+            if (managerId == null || managerId.isBlank()) {
+                log.warn("[createPerParticipantApprovalTasks] No manager for participantId={}, skipping task.",
+                        participantId);
+                continue;
+            }
+            // Verify manager is active
+            if (users.findById(managerId).map(u -> !"ACTIVE".equals(u.status)).orElse(true)) {
+                log.warn("[createPerParticipantApprovalTasks] Manager {} is not active, skipping task.", managerId);
+                continue;
+            }
+
+            // Build a per-participant context enriched with this participant's submission
+            // data
+            ObjectNode participantContext = context.deepCopy();
+            participantContext.set("reviewedParticipantId", jsons.value(participantId));
+            participantContext.set("reviewedSubmission", entry.path("data"));
+            try {
+                ObjectNode participantInfo = (ObjectNode) jsons.value(directory.user(participantId));
+                participantContext.set("reviewedParticipant", participantInfo);
+            } catch (Exception ignored) {
+                participantContext.set("reviewedParticipant", jsons.object().put("id", participantId));
+            }
+
+            createSingleTask(instanceId, peId, execution, node, config, participantContext,
+                    managerId, mode, List.of(managerId));
+            tasksCreated++;
+        }
+
+        if (tasksCreated == 0) {
+            failExecution(execution, "ASSIGNEE_NOT_FOUND", "Không tìm được manager nào để phê duyệt");
+            failParticipant(instanceId, peId, "ASSIGNEE_NOT_FOUND", "Không tìm được manager nào để phê duyệt");
+            return;
+        }
+        execution.state = "WAITING";
+        executions.save(execution);
+    }
+
+    /** Creates and persists a single WorkflowTaskEntity for the given assignee. */
+    private void createSingleTask(String instanceId, String peId, NodeExecutionEntity execution,
+            JsonNode node, JsonNode config, ObjectNode context, String assigneeId, String mode,
+            List<String> candidateIds) {
+        WorkflowTaskEntity task = new WorkflowTaskEntity();
+        task.id = Ids.uuid();
+        task.instanceId = instanceId;
+        task.participantExecutionId = peId;
+        task.nodeExecutionId = execution.id;
+        task.nodeId = node.path("id").asText();
+        task.taskType = node.path("type").asText().toUpperCase(Locale.ROOT);
+        task.title = resolver.render(config.path("title").asText(node.path("name").asText()), context);
+        task.description = resolver.render(config.path("description").asText(""), context);
+        task.assigneeId = (assigneeId == null || assigneeId.isBlank()) ? null : assigneeId;
+        task.status = "PENDING";
+        task.dueAt = dueAt(config);
+        task.priority = config.path("priority").asText(task.dueAt == null ? "NORMAL" : "HIGH");
+        ArrayNode effectiveFields = resolveEffectiveFormFields(instanceId, node, config, context);
+        task.formSchema = jsons.write(materializeFields(effectiveFields, context));
+        task.allowedActions = jsons.write(allowedActions(task.taskType, config));
+        ObjectNode snapshot = jsons.object();
+        snapshot.put("assignmentMode", mode);
+        snapshot.set("completionPolicy", config.path("completionPolicy"));
+        snapshot.set("candidateUserIds", jsons.value(candidateIds));
+        // Attach the specific participantId being reviewed (for per-participant approval)
+        if (context.has("reviewedParticipantId")) {
+            snapshot.set("reviewedParticipantId", context.get("reviewedParticipantId"));
+            if (context.has("reviewedParticipant")) {
+                snapshot.put("reviewedParticipantName",
+                        context.path("reviewedParticipant").path("displayName").asText(""));
+            }
+        }
+        if (context.has("reviewedSubmission")) {
+            snapshot.set("reviewedSubmission", context.get("reviewedSubmission"));
+        }
+        task.resolutionSnapshot = jsons.write(snapshot);
+        task.createdAt = Instant.now();
+        tasks.saveAndFlush(task);
+        if ("CLAIMABLE_POOL".equals(mode))
+            candidateIds.forEach(userId -> {
+                TaskCandidateUserEntity candidate = new TaskCandidateUserEntity();
+                candidate.taskId = task.id;
+                candidate.userId = userId;
+                candidates.save(candidate);
+            });
+        event(instanceId, peId, execution.id, "TASK_ASSIGNED", node.path("name").asText(), "Task đã được giao",
+                "WAITING", null, Map.of("taskId", task.id, "assigneeIds", candidateIds, "assignmentMode", mode));
+        sendTaskNotification(instanceId, task, config.path("channels"), candidateIds);
+        scheduleSla(task, config);
     }
 
     private List<String> resolveAssignees(JsonNode config, ObjectNode context, String instanceId) {
@@ -378,6 +564,24 @@ public class RuntimeEngineService {
                 JsonNode dynamic = resolver.path(context, value);
                 extractDynamicAssignees(dynamic, result);
             }
+            // Personalized: resolves every participantId from the upstream Assignment/Form
+            // node output.
+            // Used by Notification nodes to send individual messages to each participant.
+            case "each_participant" -> {
+                JsonNode dynamic = resolver.path(context, value);
+                extractDynamicAssignees(dynamic, result);
+                // If no expression value, fall back to the assignment node participantIds in
+                // context
+                if (result.isEmpty()) {
+                    context.path("nodes").fields().forEachRemaining(entry -> {
+                        JsonNode pIds = entry.getValue().path("participantIds");
+                        if (pIds.isArray())
+                            extractDynamicAssignees(pIds, result);
+                    });
+                }
+            }
+            // each_participant_manager is handled specially in createTasks - not used
+            // directly here
             default -> result.add(value);
         }
         result.removeIf(Objects::isNull);
@@ -389,12 +593,15 @@ public class RuntimeEngineService {
     }
 
     private void extractDynamicAssignees(JsonNode node, Set<String> target) {
-        if (node == null || node.isMissingNode() || node.isNull()) return;
+        if (node == null || node.isMissingNode() || node.isNull())
+            return;
         if (node.isArray()) {
             node.forEach(item -> {
                 if (item.isObject()) {
-                    if (item.has("id")) target.add(item.get("id").asText());
-                    else if (item.has("userId")) target.add(item.get("userId").asText());
+                    if (item.has("id"))
+                        target.add(item.get("id").asText());
+                    else if (item.has("userId"))
+                        target.add(item.get("userId").asText());
                     else if (item.has("employeeCode")) {
                         users.findByEmployeeCode(item.get("employeeCode").asText()).ifPresent(u -> target.add(u.id));
                     }
@@ -434,6 +641,55 @@ public class RuntimeEngineService {
                 return value.path("value").asText();
         }
         return value.asText();
+    }
+
+    private ArrayNode resolveEffectiveFormFields(String instanceId, JsonNode node, JsonNode config,
+            ObjectNode context) {
+        ArrayNode result = jsons.mapper().createArrayNode();
+        String reviewSourceNodeId = config.path("reviewSourceNodeId").asText(null);
+        String nodeType = node.path("type").asText().toUpperCase(Locale.ROOT);
+        boolean isReviewNode = "APPROVAL".equals(nodeType) || "REVIEW".equals(nodeType);
+
+        if (isReviewNode && reviewSourceNodeId != null && !reviewSourceNodeId.isBlank()) {
+            try {
+                JsonNode sourceNode = findNode(definition(instanceId), reviewSourceNodeId);
+                JsonNode sourceFields = sourceNode.path("config").path("formFields");
+                JsonNode reviewedSub = context.path("reviewedSubmission");
+                if (reviewedSub.isMissingNode() || reviewedSub.isNull()) {
+                    reviewedSub = context.path("nodes").path(reviewSourceNodeId);
+                }
+
+                if (sourceFields.isArray()) {
+                    for (JsonNode sf : sourceFields) {
+                        ObjectNode copy = sf.deepCopy();
+                        copy.put("readOnly", true);
+                        copy.put("required", false);
+                        String id = copy.path("id").asText();
+                        String mapping = copy.path("outputMapping").asText(id);
+                        JsonNode val = reviewedSub.has(mapping) ? reviewedSub.get(mapping)
+                                : reviewedSub.has(id) ? reviewedSub.get(id) : null;
+                        if (val != null) {
+                            copy.set("resolvedValue", val);
+                            copy.set("defaultValue", jsons.object().put("kind", "CONSTANT").set("value", val));
+                            copy.put("bindingStatus", "RESOLVED");
+                        }
+                        result.add(copy);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("[resolveEffectiveFormFields] Could not load formFields from reviewSourceNodeId={}: {}",
+                        reviewSourceNodeId, e.getMessage());
+            }
+        }
+
+        // Add any explicit formFields configured directly on this node
+        JsonNode nodeFields = config.path("formFields");
+        if (nodeFields.isArray()) {
+            for (JsonNode nf : nodeFields) {
+                result.add(nf.deepCopy());
+            }
+        }
+        return result;
     }
 
     private ArrayNode materializeFields(JsonNode fields, ObjectNode context) {
@@ -503,6 +759,11 @@ public class RuntimeEngineService {
     }
 
     private Map<String, Object> actAs(String taskId, String action, ObjectNode request, String actor) {
+        log.info("Đang xử lý task: {}", taskId);
+        log.info("Cho người dùng: {}", actor);
+        log.info("Action: {}", action);
+        log.info("Request: {}", request);
+
         String normalized = action.toUpperCase(Locale.ROOT);
         if (!Set.of("COMPLETE", "REJECT", "REQUEST_CHANGE").contains(normalized))
             throw ApiException.badRequest("INVALID_ACTION", "Action không hỗ trợ");
@@ -536,24 +797,54 @@ public class RuntimeEngineService {
         String port = outcome(execution.nodeType, normalized);
         boolean routeNow = !"COMPLETE".equals(normalized) || completionReached(task.nodeExecutionId, resolution);
         if (routeNow) {
+            log.info("1. Task is routed now...");
+
             cancelSiblingTasks(task);
-            ObjectNode finalOutput = aggregateTaskOutputs(execution, output);
+            log.info("2. Cancelled sibling tasks...");
+            ObjectNode finalOutput = aggregateTaskOutputs(execution, output, port, normalized,
+                    request.path("comment").asText(null), actor);
+            log.info("3. Aggregated outputs...");
             completeExecution(execution, "COMPLETED", port, finalOutput);
+            log.info("4. Completed execution...");
             event(task.instanceId, task.participantExecutionId, task.nodeExecutionId, "TASK_" + task.status,
                     "Hoàn thành task", task.id, "SUCCESS", actor, finalOutput);
             route(task.instanceId, task.participantExecutionId, findNode(definition(task.instanceId), task.nodeId),
                     definition(task.instanceId), port, 0);
-        } else
+        } else {
+            log.info("waiting for completion policy...");
             event(task.instanceId, task.participantExecutionId, task.nodeExecutionId, "TASK_VOTE_RECORDED",
                     "Đã ghi nhận kết quả task", "Đang chờ completion policy", "WAITING", actor, output);
+        }
         audit.append(actor, normalized, "TASK", task.id, null, null, output,
                 Map.of("outcomePort", port, "routed", routeNow));
         return Map.of("success", true, "taskId", task.id, "status", task.status, "outcomePort", port, "routed",
                 routeNow);
     }
 
-    private ObjectNode aggregateTaskOutputs(NodeExecutionEntity execution, ObjectNode currentTaskOutput) {
+    private ObjectNode aggregateTaskOutputs(NodeExecutionEntity execution, ObjectNode currentTaskOutput,
+            String port, String action, String comment, String actor) {
         ObjectNode result = currentTaskOutput.deepCopy();
+        // Set built-in fields for Approval nodes
+        if ("APPROVAL".equalsIgnoreCase(execution.nodeType)) {
+            result.put("outcome", port);
+            result.put("approved", "APPROVED".equalsIgnoreCase(port));
+            result.put("action", action);
+            if (comment != null && !comment.isBlank())
+                result.put("comment", comment);
+            result.put("approverId", actor);
+            return result;
+        }
+        // Set built-in fields for Review nodes
+        if ("REVIEW".equalsIgnoreCase(execution.nodeType)) {
+            result.put("outcome", port);
+            result.put("reviewed", "REVIEW_COMPLETED".equalsIgnoreCase(port));
+            result.put("action", action);
+            if (comment != null && !comment.isBlank())
+                result.put("comment", comment);
+            result.put("reviewerId", actor);
+            return result;
+        }
+
         if ("ASSIGNMENT".equalsIgnoreCase(execution.nodeType)) {
             ArrayNode participantIds = jsons.mapper().createArrayNode();
             ArrayNode participantsList = jsons.mapper().createArrayNode();
@@ -579,7 +870,7 @@ public class RuntimeEngineService {
         }
 
         List<WorkflowTaskEntity> siblings = tasks.findByNodeExecutionIdOrderByCreatedAtAsc(execution.id);
-        if (siblings.size() > 1) {
+        if (!siblings.isEmpty()) {
             ObjectNode submissionsMap = jsons.object();
             ArrayNode submissionList = jsons.mapper().createArrayNode();
             for (WorkflowTaskEntity sibling : siblings) {
@@ -615,17 +906,28 @@ public class RuntimeEngineService {
 
     private boolean completionReached(String executionId, ObjectNode resolution) {
         List<WorkflowTaskEntity> siblings = tasks.findByNodeExecutionIdOrderByCreatedAtAsc(executionId);
+        if (siblings.isEmpty()) return true;
         long completed = siblings.stream().filter(t -> "COMPLETED".equals(t.status)).count();
-        String policy = resolution.path("completionPolicy").path("policy").asText("ALL").toUpperCase(Locale.ROOT);
+
+        JsonNode policyNode = resolution.path("completionPolicy");
+        String policy = "ALL";
+        double threshold = 1.0;
+        String unit = "COUNT";
+
+        if (policyNode.isTextual()) {
+            policy = policyNode.asText("ALL").toUpperCase(Locale.ROOT);
+        } else if (policyNode.isObject()) {
+            policy = policyNode.path("policy").asText("ALL").toUpperCase(Locale.ROOT);
+            threshold = policyNode.path("threshold").asDouble(1.0);
+            unit = policyNode.path("thresholdUnit").asText("COUNT").toUpperCase(Locale.ROOT);
+        }
+
         return switch (policy) {
             case "ANY" -> completed >= 1;
-            case "THRESHOLD" -> {
-                double threshold = resolution.path("completionPolicy").path("threshold").asDouble(1);
-                String unit = resolution.path("completionPolicy").path("thresholdUnit").asText("COUNT");
-                yield "PERCENTAGE".equals(unit) ? completed * 100.0 / siblings.size() >= threshold
-                        : completed >= threshold;
-            }
-            default -> completed == siblings.size();
+            case "THRESHOLD" -> "PERCENTAGE".equals(unit)
+                    ? (completed * 100.0 / siblings.size()) >= threshold
+                    : completed >= threshold;
+            default -> completed >= siblings.size();
         };
     }
 
@@ -1074,27 +1376,89 @@ public class RuntimeEngineService {
 
     private List<JsonNode> outgoing(ObjectNode definition, String nodeId, String port) {
         List<JsonNode> all = allOutgoing(definition, nodeId);
+        if (all.isEmpty()) return List.of();
+
+        // 1. Exact match on sourcePort
         List<JsonNode> matches = all.stream().filter(c -> port.equalsIgnoreCase(c.path("sourcePort").asText()))
                 .toList();
         if (!matches.isEmpty())
             return matches;
+
+        // 2. Semantic aliases (SUBMITTED <-> SUCCESS <-> COMPLETED, etc.)
+        Set<String> aliases = getPortAliases(port);
+        List<JsonNode> aliasMatches = all.stream()
+                .filter(c -> aliases.contains(c.path("sourcePort").asText().toUpperCase(Locale.ROOT)))
+                .toList();
+        if (!aliasMatches.isEmpty())
+            return aliasMatches;
+
+        // 3. Fallback to default connection
         List<JsonNode> defaults = all.stream().filter(c -> c.path("isDefault").asBoolean()).toList();
-        return !defaults.isEmpty() ? defaults : List.of();
+        if (!defaults.isEmpty())
+            return defaults;
+
+        // 4. If single outgoing connection and outcome is positive (not REJECTED or false), route through it
+        if (all.size() == 1 && !port.equalsIgnoreCase("REJECTED") && !port.equalsIgnoreCase("false")) {
+            return all;
+        }
+
+        return List.of();
+    }
+
+    private Set<String> getPortAliases(String port) {
+        String p = port == null ? "" : port.toUpperCase(Locale.ROOT);
+        return switch (p) {
+            case "SUBMITTED", "COMPLETED", "SUCCESS", "SUBMIT" -> Set.of("SUBMITTED", "COMPLETED", "SUCCESS", "SUBMIT", "DEFAULT");
+            case "REVIEW_COMPLETED" -> Set.of("REVIEW_COMPLETED", "SUCCESS", "COMPLETED", "DEFAULT");
+            case "APPROVED" -> Set.of("APPROVED", "SUCCESS", "COMPLETED", "DEFAULT");
+            case "TRUE" -> Set.of("TRUE", "SUCCESS");
+            case "FALSE" -> Set.of("FALSE", "REJECTED");
+            default -> Set.of(p);
+        };
     }
 
     public ObjectNode executeNotification(String instanceId, String peId, JsonNode node, ObjectNode context) {
         JsonNode config = node.path("config");
-        List<String> recipients = resolveAssignees(config.path("assignee"), context, instanceId);
-        String title = resolver.render(config.path("title").asText(node.path("name").asText()), context),
-                body = resolver.render(config.path("bodyTemplate").asText(config.path("message").asText()), context);
+        JsonNode assigneeConfig = config.path("assignee");
+        String assigneeType = assigneeConfig.path("type").asText("").toLowerCase(Locale.ROOT);
         List<String> channels = new ArrayList<>();
         config.path("channels").forEach(c -> channels.add(c.asText()));
-        for (String recipient : recipients)
-            for (String channel : channels)
-                insertNotification(instanceId, null, recipient, channel, title, body,
-                        "node:" + node.path("id").asText() + ":" + peId + ":" + recipient + ":" + channel);
-        return jsons.object().put("recipientCount", recipients.size()).put("deliveryCount",
-                recipients.size() * channels.size());
+
+        int totalDeliveries = 0;
+        List<String> recipients = resolveAssignees(assigneeConfig, context, instanceId);
+
+        // For personalized each_participant notifications, render the message template
+        // individually for each recipient so that name, result and reason are accurate.
+        if ("each_participant".equals(assigneeType) && !recipients.isEmpty()) {
+            for (String recipientId : recipients) {
+                ObjectNode recipientContext = context.deepCopy();
+                try {
+                    recipientContext.set("notifiedParticipant", jsons.value(directory.user(recipientId)));
+                } catch (Exception ignored) {
+                    recipientContext.set("notifiedParticipant", jsons.object().put("id", recipientId));
+                }
+                String title = resolver.render(config.path("title").asText(node.path("name").asText()),
+                        recipientContext);
+                String body = resolver.render(config.path("bodyTemplate").asText(config.path("message").asText()),
+                        recipientContext);
+                for (String channel : channels) {
+                    insertNotification(instanceId, null, recipientId, channel, title, body,
+                            "node:" + node.path("id").asText() + ":" + peId + ":" + recipientId + ":" + channel);
+                    totalDeliveries++;
+                }
+            }
+        } else {
+            // Standard notification: same rendered message for all recipients
+            String title = resolver.render(config.path("title").asText(node.path("name").asText()), context);
+            String body = resolver.render(config.path("bodyTemplate").asText(config.path("message").asText()), context);
+            for (String recipient : recipients)
+                for (String channel : channels) {
+                    insertNotification(instanceId, null, recipient, channel, title, body,
+                            "node:" + node.path("id").asText() + ":" + peId + ":" + recipient + ":" + channel);
+                    totalDeliveries++;
+                }
+        }
+        return jsons.object().put("recipientCount", recipients.size()).put("deliveryCount", totalDeliveries);
     }
 
     private void sendParticipantStart(ObjectNode definition, String instanceId, String peId, Map<String, Object> user,
@@ -1337,6 +1701,10 @@ public class RuntimeEngineService {
 
     private void event(String instanceId, String peId, String executionId, String type, String title,
             String description, String status, String actor, Object data) {
+
+        log.info("Title: {}", title);
+        log.info("Event: {}", data);
+
         RuntimeEventEntity event = new RuntimeEventEntity();
         event.id = Ids.uuid();
         event.instanceId = instanceId;

@@ -156,7 +156,9 @@ export type AssigneeResolverType =
   | 'PARTICIPANT_MANAGER'
   | 'CREATOR_MANAGER'
   | 'DEPARTMENT_HEAD'
-  | 'DYNAMIC';
+  | 'DYNAMIC'
+  | 'EACH_PARTICIPANT_MANAGER'
+  | 'EACH_PARTICIPANT';
 
 export interface AssigneeResolver {
   type: AssigneeResolverType;
@@ -200,6 +202,7 @@ export interface WorkflowDefinition {
   name: string;
   description?: string;
   type: string;
+  executionPattern?: 'ON_DEMAND' | 'BATCH_CAMPAIGN';
   module?: string;
   ownerId: string;
   status: WorkflowStatus;

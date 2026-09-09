@@ -308,7 +308,7 @@ export default function WorkflowBuilder() {
       connections: edges.filter(edge => persistedIds.has(edge.source) && persistedIds.has(edge.target)).map(edge => {
         const source = persistedNodes.find(node => node.id === edge.source);
         const sourceType = runtimeNodeType(source?.data.nodeType);
-        const defaultPort = sourceType === 'APPROVAL' ? 'APPROVED' : sourceType === 'REVIEW' ? 'REVIEW_COMPLETED' : 'SUCCESS';
+        const defaultPort = sourceType === 'APPROVAL' ? 'APPROVED' : sourceType === 'REVIEW' ? 'REVIEW_COMPLETED' : sourceType === 'FORM' ? 'SUBMITTED' : 'SUCCESS';
         return { id: edge.id, sourceNodeId: edge.source, sourcePort: edge.sourceHandle ?? (sourceType === 'CONDITION' ? String(edge.data?.label ?? 'true').toLowerCase() : defaultPort), targetNodeId: edge.target, label: String(edge.data?.label ?? ''), isDefault: Boolean(edge.data?.isDefault) };
       }),
       settings: { maxIterations: 10 },

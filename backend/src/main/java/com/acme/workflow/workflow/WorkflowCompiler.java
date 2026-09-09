@@ -21,7 +21,9 @@ public class WorkflowCompiler {
     private static final Set<String> HUMAN_TYPES = Set.of("ASSIGNMENT", "APPROVAL", "REVIEW", "FORM");
     private static final Set<String> TRIGGERS = Set.of("manual", "schedule", "form", "webhook");
     private static final Set<String> RESOLVERS = Set.of("fixed", "fixed_user", "role", "group", "current_participant",
-            "participant_manager", "creator_manager", "department_head", "dynamic", "initiator", "creator");
+            "participant_manager", "creator_manager", "department_head", "dynamic", "initiator", "creator",
+            // Per-participant dynamic resolution types
+            "each_participant_manager", "each_participant");
     private static final Map<String, Set<String>> PORTS = Map.ofEntries(
             Map.entry("START", Set.of("SUCCESS", "STARTED")),
             Map.entry("ASSIGNMENT", Set.of("SUCCESS", "REJECTED", "REQUEST_CHANGE", "TIMEOUT", "ERROR")),
@@ -151,7 +153,7 @@ public class WorkflowCompiler {
             JsonNode assignee = config.has("assigneeResolver") ? config.path("assigneeResolver") : config.path("assignee");
             validateAssignee(id, assignee, errors); validateForm(id, config.path("formFields"), errors);
             String mode = config.path("assignmentMode").asText(config.path("executionMode").asText("DIRECT_ONE")).toUpperCase(Locale.ROOT);
-            if (!Set.of("DIRECT_ONE", "DIRECT_ALL", "CLAIMABLE_POOL", "SINGLE", "ALL").contains(mode)) error(errors, "ASSIGNMENT_MODE_INVALID", "assignmentMode không hợp lệ", id, null);
+            if (!Set.of("DIRECT_ONE", "DIRECT_ALL", "CLAIMABLE_POOL", "SINGLE", "ALL", "FOREACHPARTICIPANT", "FOR_EACH_PARTICIPANT", "DYNAMIC_BATCH").contains(mode)) error(errors, "ASSIGNMENT_MODE_INVALID", "assignmentMode không hợp lệ", id, null);
             validateDuration(id, config.path("slaConfig").path("dueIn").asText(config.path("slaDue").asText()), false, errors);
         }
         if ("CONDITION".equals(type) && config.path("condition").asText(config.path("expression").asText()).isBlank()) error(errors, "CONDITION_REQUIRED", "Condition node cần biểu thức", id, null);
@@ -272,6 +274,13 @@ public class WorkflowCompiler {
         if ("nodes".equals(parts[0]) && parts.length >= 3) {
             JsonNode source = nodes.get(parts[1]); if (source == null) return ExpressionEngine.ValueType.UNKNOWN;
             String key = parts.length >= 4 && "output".equals(parts[2]) ? parts[3] : parts[2];
+            // Built-in output field type inference
+            if ("approved".equalsIgnoreCase(key) || "reviewed".equalsIgnoreCase(key)) return ExpressionEngine.ValueType.BOOLEAN;
+            if ("totalParticipants".equalsIgnoreCase(key) || "totalSubmissions".equalsIgnoreCase(key)) return ExpressionEngine.ValueType.NUMBER;
+            if ("participantIds".equalsIgnoreCase(key) || "participants".equalsIgnoreCase(key) || "submissionList".equalsIgnoreCase(key)) return ExpressionEngine.ValueType.ARRAY;
+            if ("outcome".equalsIgnoreCase(key) || "comment".equalsIgnoreCase(key) || "approverId".equalsIgnoreCase(key) || "reviewerId".equalsIgnoreCase(key)) return ExpressionEngine.ValueType.STRING;
+            if ("submissions".equalsIgnoreCase(key)) return ExpressionEngine.ValueType.OBJECT;
+
             for (JsonNode field : source.path("config").path("formFields")) if (key.equals(field.path("outputMapping").asText(field.path("id").asText()))) return formType(field.path("type").asText());
             JsonNode schema = source.path("outputSchema").path("properties").path(key);
             if (schema.isMissingNode()) schema = source.path("config").path("outputSchema").path("properties").path(key);
@@ -316,11 +325,21 @@ public class WorkflowCompiler {
         String outputKey = canonical ? parts[3] : parts[2];
         if (!canonical) warning(warnings, "LEGACY_NODE_BINDING", "Nên đổi ${" + path + "} thành ${nodes." + referencedNodeId + ".output." + outputKey + "}", currentNodeId);
         Set<String> outputs = new HashSet<>();
+        // Built-in system outputs by node type
+        String refType = referencedNode.path("type").asText().toUpperCase(Locale.ROOT);
+        Set<String> builtInOutputs = switch (refType) {
+            case "ASSIGNMENT" -> Set.of("participantIds", "participants", "totalParticipants", "output");
+            case "APPROVAL" -> Set.of("approved", "outcome", "comment", "approverId", "action", "output");
+            case "REVIEW" -> Set.of("reviewed", "outcome", "comment", "reviewerId", "action", "output");
+            case "FORM" -> Set.of("submissions", "submissionList", "totalSubmissions", "output");
+            default -> Set.of("output");
+        };
+        outputs.addAll(builtInOutputs);
         referencedNode.path("config").path("formFields").forEach(field -> outputs.add(field.path("outputMapping").asText(field.path("id").asText())));
         referencedNode.path("config").path("outputSchema").fieldNames().forEachRemaining(outputs::add);
         referencedNode.path("outputSchema").path("properties").fieldNames().forEachRemaining(outputs::add);
         if (!outputs.isEmpty() && !outputs.contains(outputKey))
-            error(errors, "BINDING_OUTPUT_NOT_FOUND", "Node " + referencedNodeId + " không khai báo output " + outputKey, currentNodeId, null);
+            error(errors, "BINDING_OUTPUT_NOT_FOUND", "Node " + referencedNodeId + " (" + refType + ") không khai báo output " + outputKey, currentNodeId, null);
     }
 
     private void collectReferences(JsonNode value, java.util.function.Consumer<String> consumer) {

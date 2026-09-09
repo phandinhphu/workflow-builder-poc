@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { 
-  Sparkles, 
-  Search, 
-  ArrowRight, 
-  PlusCircle, 
-  Clock, 
-  Tag, 
-  CheckCircle2, 
+import {
+  Sparkles,
+  Search,
+  ArrowRight,
+  PlusCircle,
+  Tag,
+  CheckCircle2,
   Layers,
   FileSpreadsheet
 } from 'lucide-react';
@@ -100,11 +99,10 @@ export default function ServiceCatalog({ onNavigateToInstance, onNavigateToTasks
             <button
               key={mod}
               onClick={() => setSelectedModule(mod)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                selectedModule === mod
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${selectedModule === mod
                   ? 'bg-primary text-white shadow-sm'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+                }`}
             >
               {mod === 'ALL' ? 'Tất cả danh mục' : mod}
             </button>
@@ -154,10 +152,10 @@ export default function ServiceCatalog({ onNavigateToInstance, onNavigateToTasks
                   </div>
 
                   <div className="pt-2 flex items-center gap-4 text-[11px] text-gray-500 border-t border-gray-100">
-                    <span className="flex items-center gap-1">
+                    {/* <span className="flex items-center gap-1">
                       <Clock className="w-3.5 h-3.5 text-gray-400" />
                       {wf.nodes?.length || 0} bước xử lý
-                    </span>
+                    </span> */}
                     {isAssignmentBased && (
                       <span className="flex items-center gap-1 text-purple-700 font-semibold bg-purple-50 px-2 py-0.5 rounded">
                         <FileSpreadsheet className="w-3.5 h-3.5" />
