@@ -1,7 +1,14 @@
+import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Squares2X2Icon, UsersIcon, HomeIcon, DocumentTextIcon, BuildingOffice2Icon, ShieldCheckIcon, ChevronDownIcon, ClipboardDocumentCheckIcon, LinkIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import {
+  Squares2X2Icon, UsersIcon, HomeIcon, DocumentTextIcon,
+  BuildingOffice2Icon, ShieldCheckIcon, ChevronDownIcon,
+  ClipboardDocumentCheckIcon, LinkIcon, SparklesIcon,
+  ArrowRightOnRectangleIcon, UserCircleIcon,
+} from '@heroicons/react/24/outline';
 import clsx from 'clsx';
-import { getCurrentUser } from '../data/mockData';
+import { useAuthStore } from '../stores/authStore';
+import { useNotificationStore } from '../stores/notificationStore';
 
 const navigation = [
   { name: 'Cổng Dịch vụ (Catalog)', href: '/catalog', icon: SparklesIcon },
@@ -24,7 +31,34 @@ function isActivePath(pathname: string, href: string) {
 
 export default function Sidebar() {
   const location = useLocation();
-  const currentUser = getCurrentUser();
+  const { currentUser, logout } = useAuthStore();
+  const { stopPolling } = useNotificationStore();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handler(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
+
+  const handleLogout = async () => {
+    setMenuOpen(false);
+    stopPolling();
+    await logout();
+    // App.tsx will detect missing token and switch to LoginPage
+    window.location.reload();
+  };
+
+  const initials = currentUser?.displayName
+    ? currentUser.displayName.charAt(0).toUpperCase()
+    : '?';
 
   return (
     <div className="flex w-[260px] flex-col border-r border-gray-800 bg-navy text-white">
@@ -76,17 +110,58 @@ export default function Sidebar() {
         })}
       </div>
 
-      <div className="p-4 border-t border-gray-800 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-gray-500 flex items-center justify-center text-sm font-bold">
-          {currentUser.name.charAt(0)}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-white truncate">{currentUser.name}</p>
-          <p className="text-xs text-gray-400 truncate">{currentUser.role}</p>
-        </div>
-        <button className="text-gray-400 hover:text-white" aria-label="Menu tài khoản">
-          <ChevronDownIcon className="w-4 h-4" />
+      {/* User section with logout dropdown */}
+      <div className="relative p-4 border-t border-gray-800" ref={menuRef}>
+        <button
+          onClick={() => setMenuOpen((v) => !v)}
+          className="w-full flex items-center gap-3 rounded-md p-1 hover:bg-gray-800 transition-colors text-left"
+          aria-label="Menu tài khoản"
+        >
+          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-sm font-bold flex-shrink-0">
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-white truncate">
+              {currentUser?.displayName ?? 'Đang tải…'}
+            </p>
+            <p className="text-xs text-gray-400 truncate">
+              {currentUser?.jobTitle ?? currentUser?.organizationName ?? ''}
+            </p>
+          </div>
+          <ChevronDownIcon
+            className={clsx(
+              'w-4 h-4 text-gray-400 flex-shrink-0 transition-transform duration-200',
+              menuOpen && 'rotate-180'
+            )}
+          />
         </button>
+
+        {/* Dropdown menu */}
+        {menuOpen && (
+          <div className="absolute bottom-full left-4 right-4 mb-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50">
+            {/* User info header */}
+            <div className="px-3 py-2.5 border-b border-gray-700 flex items-center gap-2">
+              <UserCircleIcon className="w-4 h-4 text-gray-400" />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-white truncate">
+                  {currentUser?.displayName ?? '—'}
+                </p>
+                <p className="text-[11px] text-gray-400 truncate">
+                  {currentUser?.email ?? ''}
+                </p>
+              </div>
+            </div>
+
+            {/* Logout */}
+            <button
+              onClick={() => void handleLogout()}
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-red-900/30 hover:text-red-300 transition-colors"
+            >
+              <ArrowRightOnRectangleIcon className="w-4 h-4" />
+              Đăng xuất
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

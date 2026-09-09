@@ -18,6 +18,8 @@ import { ApiError } from './api/client';
 import { replaceBackendData } from './data/mockData';
 import LoginPage from './pages/LoginPage';
 import ServiceCatalog from './pages/ServiceCatalog';
+import { useAuthStore } from './stores/authStore';
+import { useNotificationStore } from './stores/notificationStore';
 
 function AppLayout() {
   return (
@@ -60,6 +62,8 @@ const router = createBrowserRouter([
 function App() {
   const [state, setState] = useState<'loading' | 'ready' | 'error' | 'unauthenticated'>('loading');
   const [error, setError] = useState('');
+  const { loadCurrentUser } = useAuthStore();
+  const { startPolling, stopPolling } = useNotificationStore();
 
   const bootstrap = useCallback(async () => {
     setState('loading');
@@ -72,13 +76,27 @@ function App() {
       ]);
       const workflowDefinitions = await Promise.all(workflowSummaries.map(workflow => api.workflows.get(workflow.id)));
       replaceBackendData({ users, workflowDefinitions, workflowInstances });
+      // Load current user profile from /auth/me
+      await loadCurrentUser();
       setState('ready');
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) { localStorage.removeItem('workflow.authToken'); setState('unauthenticated'); return; }
       setError(cause instanceof Error ? cause.message : 'Không thể kết nối backend');
       setState('error');
     }
-  }, []);
+  }, [loadCurrentUser]);
+
+  // Start/stop notification polling based on auth state
+  useEffect(() => {
+    if (state === 'ready') {
+      startPolling();
+    } else {
+      stopPolling();
+    }
+    return () => {
+      // No-op: polling is managed by state transitions
+    };
+  }, [state, startPolling, stopPolling]);
 
   useEffect(() => { void bootstrap(); }, [bootstrap]);
 

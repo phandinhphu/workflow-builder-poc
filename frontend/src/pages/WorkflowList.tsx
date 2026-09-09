@@ -6,8 +6,9 @@ import CreateWorkflowModal from '../components/CreateWorkflowModal';
 import Pagination from '../components/Pagination';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Toast, { useToasts } from '../components/Toast';
-import { workflows, workflowTemplates, getCurrentUser, userDisplayName, hasRunningInstances } from '../data/mockData';
+import { workflows, workflowTemplates, userDisplayName, hasRunningInstances } from '../data/mockData';
 import { api } from '../api/client';
+import { useAuthStore } from '../stores/authStore';
 
 const STATUS_LABELS: Record<string, string> = {
   PUBLISHED: 'Published',
@@ -36,14 +37,14 @@ export default function WorkflowList() {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const toasts = useToasts();
 
-  const currentUser = getCurrentUser();
+  const currentUser = useAuthStore((s) => s.currentUser);
 
   const filteredWorkflows = workflows.filter(w => {
     const ownerName = userDisplayName(w.ownerId);
     const matchesSearch = w.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       ownerName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'All' || STATUS_LABELS[w.status] === statusFilter;
-    const matchesOwner = !myWorkflowsOnly || w.ownerId === currentUser.id;
+    const matchesOwner = !myWorkflowsOnly || (currentUser && w.ownerId === currentUser.id);
     return matchesSearch && matchesStatus && matchesOwner;
   });
 

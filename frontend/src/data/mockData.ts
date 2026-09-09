@@ -8,11 +8,14 @@ import type {
   InstanceTask,
   ParticipantScope,
 } from '../types/workflow';
+import { useAuthStore } from '../stores/authStore';
 
-const CURRENT_USER = { id: 'U000', name: 'Nguyễn Văn B', role: 'Admin' };
-
+/**
+ * Returns the current authenticated user from authStore.
+ * Returns null if not authenticated — callers should redirect to login in that case.
+ */
 export function getCurrentUser() {
-  return CURRENT_USER;
+  return useAuthStore.getState().currentUser;
 }
 
 export let orgUsers: OrgUser[] = [

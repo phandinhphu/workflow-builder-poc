@@ -359,14 +359,20 @@ public class RuntimeEngineService {
         String assigneeType = assignee.path("type").asText("").toLowerCase(Locale.ROOT);
         String nodeType = node.path("type").asText().toUpperCase(Locale.ROOT);
 
-        // Item-level per-participant manager approval:
-        // For APPROVAL/REVIEW nodes that review a multi-participant form, create one
-        // task
-        // per participant with the participant's own manager as the approver.
-        if (("APPROVAL".equals(nodeType) || "REVIEW".equals(nodeType))
-                && "each_participant_manager".equals(assigneeType)) {
-            createPerParticipantApprovalTasks(instanceId, peId, execution, node, config, context);
-            return;
+        // Item-level per-submission approval:
+        // Triggered when an APPROVAL/REVIEW node reviews a Form node that has multiple
+        // submissions (i.e. a forEachParticipant Form where each participant fills
+        // separately). We auto-detect this situation regardless of the assignee resolver
+        // type – each submission gets its own dedicated approval task.
+        if ("APPROVAL".equals(nodeType) || "REVIEW".equals(nodeType)) {
+            List<ObjectNode> submissionEntries = collectUpstreamSubmissions(config, context);
+            if (!submissionEntries.isEmpty()) {
+                log.info("[createTasks] Detected {} upstream submissions for nodeId={}. Routing to per-submission task creation.",
+                        submissionEntries.size(), node.path("id").asText());
+                createPerParticipantApprovalTasks(instanceId, peId, execution, node, config, context, assignee,
+                        submissionEntries);
+                return;
+            }
         }
 
         List<String> resolved = resolveAssignees(assignee, context, instanceId);
@@ -399,72 +405,109 @@ public class RuntimeEngineService {
     }
 
     /**
-     * Creates one approval/review task per participant from the upstream form node.
-     * Each task is assigned to that participant's direct manager and contains only
-     * that participant's form submission data, so each manager sees exactly the
-     * information relevant to their direct report.
+     * Collects the list of per-participant form submissions that were produced by an
+     * upstream FORM node.  The source node is determined by:
+     * 1. {@code config.reviewSourceNodeId} (explicit configuration), or
+     * 2. Auto-scan of all FORM nodes stored in {@code context.nodes} whose output
+     *    contains a non-empty {@code submissionList} array.
+     *
+     * Returns an empty list when no submissions are found.
      */
-    private void createPerParticipantApprovalTasks(String instanceId, String peId, NodeExecutionEntity execution,
-            JsonNode node, JsonNode config, ObjectNode context) {
+    private List<ObjectNode> collectUpstreamSubmissions(JsonNode config, ObjectNode context) {
+        List<ObjectNode> entries = new ArrayList<>();
         String reviewSourceNodeId = config.path("reviewSourceNodeId").asText(null);
-        String nodeType = node.path("type").asText().toUpperCase(Locale.ROOT);
-
-        // Collect submission entries from the upstream Form node output stored in
-        // context
-        List<ObjectNode> submissionEntries = new ArrayList<>();
-        if (reviewSourceNodeId != null) {
+        if (reviewSourceNodeId != null && !reviewSourceNodeId.isBlank()) {
             JsonNode formOutput = context.path("nodes").path(reviewSourceNodeId);
             JsonNode submissionList = formOutput.path("submissionList");
             if (submissionList.isArray()) {
-                submissionList.forEach(entry -> {
-                    if (entry.isObject())
-                        submissionEntries.add((ObjectNode) entry.deepCopy());
+                submissionList.forEach(e -> { if (e.isObject()) entries.add((ObjectNode) e.deepCopy()); });
+            }
+        } else {
+            // Auto-detect: scan every node output in context for a submissionList
+            JsonNode nodesCtx = context.path("nodes");
+            if (nodesCtx.isObject()) {
+                nodesCtx.fields().forEachRemaining(field -> {
+                    if (!entries.isEmpty()) return; // stop at first match
+                    JsonNode submissionList = field.getValue().path("submissionList");
+                    if (submissionList.isArray() && submissionList.size() > 0) {
+                        submissionList.forEach(e -> { if (e.isObject()) entries.add((ObjectNode) e.deepCopy()); });
+                    }
                 });
             }
         }
+        return entries;
+    }
 
-        if (submissionEntries.isEmpty()) {
-            // Fallback: treat as a normal approval with creator_manager resolver
-            log.warn(
-                    "[createPerParticipantApprovalTasks] No submissions found from reviewSourceNodeId={}, nodeId={}. Falling back to creator_manager.",
-                    reviewSourceNodeId, node.path("id").asText());
-            ObjectNode fallbackAssignee = jsons.object().put("type", "creator_manager");
-            List<String> fallback = resolveAssignees(fallbackAssignee, context, instanceId);
-            if (!fallback.isEmpty()) {
-                createSingleTask(instanceId, peId, execution, node, config, context, fallback.getFirst(), "DIRECT_ONE",
-                        fallback);
-            } else {
-                failExecution(execution, "ASSIGNEE_NOT_FOUND", "Không tìm được manager để phê duyệt");
-                failParticipant(instanceId, peId, "ASSIGNEE_NOT_FOUND", "Không tìm được manager để phê duyệt");
+    /**
+     * Creates one approval/review task per upstream form submission.
+     * <p>
+     * Assignee resolution strategy (per submission entry):
+     * <ul>
+     *   <li>{@code participant_manager} / {@code each_participant_manager}: resolve the
+     *       direct manager of the participant who submitted that form entry.</li>
+     *   <li>Any other resolver ({@code fixed}, {@code role}, {@code initiator},
+     *       {@code creator_manager}, {@code dynamic}, …): resolve once and assign
+     *       every submission's task to the same approver.</li>
+     * </ul>
+     * Each task is enriched with the specific participant's form data
+     * ({@code reviewedParticipantId}, {@code reviewedParticipantName},
+     * {@code reviewedSubmission}) so the approver sees exactly what that participant
+     * submitted.
+     */
+    private void createPerParticipantApprovalTasks(String instanceId, String peId, NodeExecutionEntity execution,
+            JsonNode node, JsonNode config, ObjectNode context, JsonNode assigneeConfig,
+            List<ObjectNode> submissionEntries) {
+
+        String assigneeType = assigneeConfig.path("type").asText("").toLowerCase(Locale.ROOT);
+        boolean managerPerParticipant = "participant_manager".equals(assigneeType)
+                || "each_participant_manager".equals(assigneeType);
+
+        // For non-manager resolvers, resolve the approver once and reuse for all tasks.
+        List<String> sharedApprovers = List.of();
+        if (!managerPerParticipant) {
+            sharedApprovers = resolveAssignees(assigneeConfig, context, instanceId);
+            if (sharedApprovers.isEmpty()) {
+                log.warn(
+                        "[createPerParticipantApprovalTasks] Could not resolve approver (type={}) for nodeId={}. Falling back to creator_manager.",
+                        assigneeType, node.path("id").asText());
+                ObjectNode fallbackAssignee = jsons.object().put("type", "creator_manager");
+                sharedApprovers = resolveAssignees(fallbackAssignee, context, instanceId);
+            }
+            if (sharedApprovers.isEmpty()) {
+                failExecution(execution, "ASSIGNEE_NOT_FOUND", "Không resolve được người phê duyệt");
+                failParticipant(instanceId, peId, "ASSIGNEE_NOT_FOUND", "Không resolve được người phê duyệt");
                 return;
             }
-            execution.state = "WAITING";
-            executions.save(execution);
-            return;
         }
 
         String mode = "DIRECT_ONE";
         int tasksCreated = 0;
+
         for (ObjectNode entry : submissionEntries) {
             String participantId = entry.path("userId").asText(null);
-            if (participantId == null || participantId.isBlank())
-                continue;
+            if (participantId == null || participantId.isBlank()) continue;
 
-            // Resolve this participant's manager
-            String managerId = users.findById(participantId).map(u -> u.managerId).orElse(null);
-            if (managerId == null || managerId.isBlank()) {
-                log.warn("[createPerParticipantApprovalTasks] No manager for participantId={}, skipping task.",
-                        participantId);
-                continue;
-            }
-            // Verify manager is active
-            if (users.findById(managerId).map(u -> !"ACTIVE".equals(u.status)).orElse(true)) {
-                log.warn("[createPerParticipantApprovalTasks] Manager {} is not active, skipping task.", managerId);
-                continue;
+            // --- Resolve approver for this submission entry ---
+            String approverId;
+            if (managerPerParticipant) {
+                // Resolve the direct manager of the participant who submitted this form
+                String managerId = users.findById(participantId).map(u -> u.managerId).orElse(null);
+                if (managerId == null || managerId.isBlank()) {
+                    log.warn("[createPerParticipantApprovalTasks] No manager for participantId={}, skipping.",
+                            participantId);
+                    continue;
+                }
+                if (users.findById(managerId).map(u -> !"ACTIVE".equals(u.status)).orElse(true)) {
+                    log.warn("[createPerParticipantApprovalTasks] Manager {} is not active, skipping.", managerId);
+                    continue;
+                }
+                approverId = managerId;
+            } else {
+                // Use the pre-resolved shared approver
+                approverId = sharedApprovers.getFirst();
             }
 
-            // Build a per-participant context enriched with this participant's submission
-            // data
+            // --- Build per-participant context with this submission's data ---
             ObjectNode participantContext = context.deepCopy();
             participantContext.set("reviewedParticipantId", jsons.value(participantId));
             participantContext.set("reviewedSubmission", entry.path("data"));
@@ -475,14 +518,16 @@ public class RuntimeEngineService {
                 participantContext.set("reviewedParticipant", jsons.object().put("id", participantId));
             }
 
+            List<String> approverList = managerPerParticipant ? List.of(approverId) : sharedApprovers;
             createSingleTask(instanceId, peId, execution, node, config, participantContext,
-                    managerId, mode, List.of(managerId));
+                    approverId, mode, approverList);
             tasksCreated++;
         }
 
         if (tasksCreated == 0) {
-            failExecution(execution, "ASSIGNEE_NOT_FOUND", "Không tìm được manager nào để phê duyệt");
-            failParticipant(instanceId, peId, "ASSIGNEE_NOT_FOUND", "Không tìm được manager nào để phê duyệt");
+            failExecution(execution, "ASSIGNEE_NOT_FOUND", "Không tìm được người phê duyệt cho bất kỳ submission nào");
+            failParticipant(instanceId, peId, "ASSIGNEE_NOT_FOUND",
+                    "Không tìm được người phê duyệt cho bất kỳ submission nào");
             return;
         }
         execution.state = "WAITING";

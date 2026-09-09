@@ -1,22 +1,23 @@
 import { useState } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { workflowTemplates, orgUsers, getCurrentUser, resolveParticipantScope } from '../data/mockData';
+import { workflowTemplates, orgUsers, resolveParticipantScope } from '../data/mockData';
 import type { ParticipantScope, ParticipantNotification } from '../types/workflow';
+import { useAuthStore } from '../stores/authStore';
 
 export default function CreateWorkflowModal({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const templateFromUrl = searchParams.get('template');
   const [createType, setCreateType] = useState<'blank' | 'template'>('blank');
-  const currentUser = getCurrentUser();
+  const currentUser = useAuthStore((s) => s.currentUser);
   const [formData, setFormData] = useState({
     templateId: templateFromUrl || '',
-    name: `${currentUser.name} - Phê duyệt nghỉ phép`,
+    name: `${currentUser?.displayName ?? ''} - Phê duyệt nghỉ phép`,
     description: '',
     type: 'Approval',
     module: 'Operations',
-    owner: currentUser.id,
+    owner: currentUser?.id ?? '',
     version: '1.0',
     executionPattern: 'ON_DEMAND' as 'ON_DEMAND' | 'BATCH_CAMPAIGN',
   });
