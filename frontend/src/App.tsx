@@ -18,6 +18,7 @@ import { ApiError } from './api/client';
 import { replaceBackendData } from './data/mockData';
 import LoginPage from './pages/LoginPage';
 import ServiceCatalog from './pages/ServiceCatalog';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 import { useAuthStore } from './stores/authStore';
 import { useNotificationStore } from './stores/notificationStore';
 
@@ -41,20 +42,83 @@ const router = createBrowserRouter([
     children: [
       { path: '/', element: <Navigate to="/catalog" replace /> },
       { path: '/catalog', element: <ServiceCatalog /> },
-      { path: '/dashboard', element: <Dashboard /> },
-      { path: '/workflows', element: <WorkflowList /> },
-      { path: '/workflows/new', element: <WorkflowBuilder /> },
-      { path: '/workflows/new/designer', element: <WorkflowBuilder /> },
+      {
+        path: '/dashboard',
+        element: (
+          <ProtectedRoute permission="INSTANCE_VIEW">
+            <Dashboard />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/workflows',
+        element: (
+          <ProtectedRoute permissions={['WORKFLOW_VIEW', 'WORKFLOW_EDIT']}>
+            <WorkflowList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/workflows/new',
+        element: (
+          <ProtectedRoute permissions={['WORKFLOW_CREATE', 'WORKFLOW_EDIT']}>
+            <WorkflowBuilder />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/workflows/new/designer',
+        element: (
+          <ProtectedRoute permissions={['WORKFLOW_CREATE', 'WORKFLOW_EDIT']}>
+            <WorkflowBuilder />
+          </ProtectedRoute>
+        ),
+      },
       { path: '/workflows/:id', element: <WorkflowDetail /> },
       { path: '/workflows/:id/history', element: <WorkflowDetail /> },
       { path: '/workflows/:id/runtime', element: <InstancesList /> },
-      { path: '/workflows/:id/designer', element: <WorkflowBuilder /> },
+      {
+        path: '/workflows/:id/designer',
+        element: (
+          <ProtectedRoute permissions={['WORKFLOW_EDIT']}>
+            <WorkflowBuilder />
+          </ProtectedRoute>
+        ),
+      },
       { path: '/workflows/:workflowId/instances/:instanceId', element: <InstanceDetail /> },
       { path: '/my-tasks', element: <MyTasksPage /> },
-      { path: '/connectors', element: <ConnectorManagementPage /> },
-      { path: '/users', element: <UsersList /> },
-      { path: '/sync', element: <OrganizationsPage /> },
-      { path: '/settings', element: <RolesPage /> },
+      {
+        path: '/connectors',
+        element: (
+          <ProtectedRoute permission="CONNECTOR_MANAGE">
+            <ConnectorManagementPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/users',
+        element: (
+          <ProtectedRoute permissions={['USER_VIEW', 'USER_MANAGE']}>
+            <UsersList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/sync',
+        element: (
+          <ProtectedRoute permissions={['ORG_VIEW', 'ORG_MANAGE']}>
+            <OrganizationsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/settings',
+        element: (
+          <ProtectedRoute permission="ROLE_MANAGE">
+            <RolesPage />
+          </ProtectedRoute>
+        ),
+      },
     ],
   },
 ]);
@@ -67,20 +131,37 @@ function App() {
 
   const bootstrap = useCallback(async () => {
     setState('loading');
-    if (!localStorage.getItem('workflow.authToken') && !(import.meta.env.DEV && import.meta.env.VITE_ALLOW_DEV_USER_HEADER === 'true')) { setState('unauthenticated'); return; }
+    if (!localStorage.getItem('workflow.authToken') && !(import.meta.env.DEV && import.meta.env.VITE_ALLOW_DEV_USER_HEADER === 'true')) {
+      setState('unauthenticated');
+      return;
+    }
     try {
-      const [users, workflowSummaries, workflowInstances] = await Promise.all([
+      // Load current user profile & permissions first
+      await loadCurrentUser();
+
+      // Fetch background data resilience-wrapped
+      const [usersRes, workflowsRes, instancesRes] = await Promise.allSettled([
         api.users.list(),
         api.workflows.list(),
         api.runtime.instances(),
       ]);
-      const workflowDefinitions = await Promise.all(workflowSummaries.map(workflow => api.workflows.get(workflow.id)));
+      const users = usersRes.status === 'fulfilled' ? usersRes.value : [];
+      const workflowSummaries = workflowsRes.status === 'fulfilled' ? workflowsRes.value : [];
+      const workflowInstances = instancesRes.status === 'fulfilled' ? instancesRes.value : [];
+
+      const workflowDefsRes = await Promise.allSettled(workflowSummaries.map((w) => api.workflows.get(w.id)));
+      const workflowDefinitions = workflowDefsRes
+        .map((r) => (r.status === 'fulfilled' ? r.value : null))
+        .filter((w): w is NonNullable<typeof w> => w !== null);
+
       replaceBackendData({ users, workflowDefinitions, workflowInstances });
-      // Load current user profile from /auth/me
-      await loadCurrentUser();
       setState('ready');
     } catch (cause) {
-      if (cause instanceof ApiError && cause.status === 401) { localStorage.removeItem('workflow.authToken'); setState('unauthenticated'); return; }
+      if (cause instanceof ApiError && cause.status === 401) {
+        localStorage.removeItem('workflow.authToken');
+        setState('unauthenticated');
+        return;
+      }
       setError(cause instanceof Error ? cause.message : 'Không thể kết nối backend');
       setState('error');
     }

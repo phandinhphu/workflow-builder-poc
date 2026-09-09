@@ -16,6 +16,8 @@ class AuthAndPermissionIT {
     @Autowired AuthController auth;
     @Autowired PermissionService permissions;
 
+    @Autowired CurrentUserService currentUserService;
+
     @Test
     void authenticatesSeedAdminAndEnforcesOrganizationScope(){
         var login=auth.login(new AuthController.LoginRequest("admin","admin123"));
@@ -24,5 +26,12 @@ class AuthAndPermissionIT {
         assertThat(permissions.has("U001","USER_MANAGE","ORG-TECH-BE")).isTrue();
         assertThat(permissions.has("U002","USER_MANAGE","ORG-TECH-BE")).isFalse();
         assertThatThrownBy(()->permissions.require("U002","USER_MANAGE","ORG-TECH-BE")).isInstanceOf(ApiException.class);
+
+        var profile = currentUserService.profile();
+        assertThat(profile.get("roles")).isInstanceOf(java.util.List.class);
+        assertThat(profile.get("permissions")).isInstanceOf(java.util.List.class);
+        @SuppressWarnings("unchecked")
+        java.util.List<String> roles = (java.util.List<String>) profile.get("roles");
+        assertThat(roles).contains("SYSTEM_ADMIN");
     }
 }

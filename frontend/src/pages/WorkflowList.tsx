@@ -9,6 +9,7 @@ import Toast, { useToasts } from '../components/Toast';
 import { workflows, workflowTemplates, userDisplayName, hasRunningInstances } from '../data/mockData';
 import { api } from '../api/client';
 import { useAuthStore } from '../stores/authStore';
+import Can from '../components/auth/Can';
 
 const STATUS_LABELS: Record<string, string> = {
   PUBLISHED: 'Published',
@@ -142,12 +143,14 @@ export default function WorkflowList() {
                 Workflow của tôi
               </label>
             )}
-            <button
-              onClick={() => setIsCreateModalOpen(true)}
-              className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary-dark flex items-center gap-2"
-            >
-              <PlusIcon className="w-4 h-4" /> Tạo workflow
-            </button>
+            <Can permissions={['WORKFLOW_CREATE', 'WORKFLOW_EDIT']}>
+              <button
+                onClick={() => setIsCreateModalOpen(true)}
+                className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary-dark flex items-center gap-2"
+              >
+                <PlusIcon className="w-4 h-4" /> Tạo workflow
+              </button>
+            </Can>
           </div>
         </div>
 
@@ -215,13 +218,15 @@ export default function WorkflowList() {
                         </button>
                         {openMenuId === item.id && (
                           <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-border rounded-lg shadow-lg z-20 py-1">
-                            <Link
-                              to={linkTo}
-                              onClick={() => setOpenMenuId(null)}
-                              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                            >
-                              <PencilSquareIcon className="w-4 h-4 text-gray-400" /> Chỉnh sửa thiết kế
-                            </Link>
+                            <Can permissions={['WORKFLOW_EDIT']}>
+                              <Link
+                                to={linkTo}
+                                onClick={() => setOpenMenuId(null)}
+                                className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              >
+                                <PencilSquareIcon className="w-4 h-4 text-gray-400" /> Chỉnh sửa thiết kế
+                              </Link>
+                            </Can>
                             {isWorkflow && (
                               <Link
                                 to={`/workflows/${(item as any).id}`}
@@ -232,12 +237,14 @@ export default function WorkflowList() {
                               </Link>
                             )}
                             {isWorkflow && (
-                              <button
-                                onClick={() => confirmDelete((item as any).id)}
-                                className="flex items-center gap-2 px-3 py-2 text-sm text-danger hover:bg-red-50 w-full text-left"
-                              >
-                                <TrashIcon className="w-4 h-4" /> Xóa
-                              </button>
+                              <Can permissions={['WORKFLOW_DELETE', 'WORKFLOW_EDIT']}>
+                                <button
+                                  onClick={() => confirmDelete((item as any).id)}
+                                  className="flex items-center gap-2 px-3 py-2 text-sm text-danger hover:bg-red-50 w-full text-left"
+                                >
+                                  <TrashIcon className="w-4 h-4" /> Xóa
+                                </button>
+                              </Can>
                             )}
                           </div>
                         )}

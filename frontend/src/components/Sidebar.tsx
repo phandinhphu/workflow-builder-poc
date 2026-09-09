@@ -10,18 +10,26 @@ import clsx from 'clsx';
 import { useAuthStore } from '../stores/authStore';
 import { useNotificationStore } from '../stores/notificationStore';
 
-const navigation = [
+interface NavItem {
+  name: string;
+  href: string;
+  icon: any;
+  permissions?: string[];
+  roles?: string[];
+}
+
+const navigation: NavItem[] = [
   { name: 'Cổng Dịch vụ (Catalog)', href: '/catalog', icon: SparklesIcon },
   { name: 'Nhiệm vụ của tôi', href: '/my-tasks', icon: ClipboardDocumentCheckIcon },
-  { name: 'Danh sách Workflow', href: '/workflows', icon: DocumentTextIcon },
-  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-  { name: 'Người dùng', href: '/users', icon: UsersIcon },
-  { name: 'Kết nối & API', href: '/connectors', icon: LinkIcon },
+  { name: 'Danh sách Workflow', href: '/workflows', icon: DocumentTextIcon, permissions: ['WORKFLOW_VIEW', 'WORKFLOW_EDIT'] },
+  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, permissions: ['INSTANCE_VIEW'] },
+  { name: 'Người dùng', href: '/users', icon: UsersIcon, permissions: ['USER_VIEW', 'USER_MANAGE'] },
+  { name: 'Kết nối & API', href: '/connectors', icon: LinkIcon, permissions: ['CONNECTOR_MANAGE'] },
 ];
 
-const bottomItems = [
-  { name: 'Cơ cấu tổ chức', href: '/sync', icon: BuildingOffice2Icon },
-  { name: 'Vai trò hệ thống', href: '/settings', icon: ShieldCheckIcon },
+const bottomItems: NavItem[] = [
+  { name: 'Cơ cấu tổ chức', href: '/sync', icon: BuildingOffice2Icon, permissions: ['ORG_VIEW', 'ORG_MANAGE'] },
+  { name: 'Vai trò hệ thống', href: '/settings', icon: ShieldCheckIcon, permissions: ['ROLE_MANAGE'] },
 ];
 
 function isActivePath(pathname: string, href: string) {
@@ -31,10 +39,21 @@ function isActivePath(pathname: string, href: string) {
 
 export default function Sidebar() {
   const location = useLocation();
-  const { currentUser, logout } = useAuthStore();
+  const { currentUser, logout, hasAnyPermission, hasRole, isAdmin } = useAuthStore();
   const { stopPolling } = useNotificationStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const canAccess = (item: NavItem) => {
+    if (isAdmin()) return true;
+    if (!item.permissions && !item.roles) return true;
+    if (item.permissions && hasAnyPermission(item.permissions)) return true;
+    if (item.roles && item.roles.some((r) => hasRole(r))) return true;
+    return false;
+  };
+
+  const visibleNavItems = navigation.filter(canAccess);
+  const visibleBottomItems = bottomItems.filter(canAccess);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -71,7 +90,7 @@ export default function Sidebar() {
 
       <nav className="flex flex-1 flex-col px-4 py-4 overflow-y-auto">
         <ul role="list" className="flex flex-1 flex-col gap-y-1">
-          {navigation.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive = isActivePath(location.pathname, item.href);
             return (
               <li key={item.name}>
@@ -91,24 +110,26 @@ export default function Sidebar() {
         </ul>
       </nav>
 
-      <div className="px-4 pb-4 pt-4 border-t border-gray-800 flex flex-col gap-1">
-        {bottomItems.map((item) => {
-          const isActive = isActivePath(location.pathname, item.href);
-          return (
-            <Link
-              key={item.name}
-              to={item.href}
-              className={clsx(
-                isActive ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-800',
-                'group flex items-center gap-x-3 rounded-md p-2 text-sm leading-6 font-medium'
-              )}
-            >
-              <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-              {item.name}
-            </Link>
-          );
-        })}
-      </div>
+      {visibleBottomItems.length > 0 && (
+        <div className="px-4 pb-4 pt-4 border-t border-gray-800 flex flex-col gap-1">
+          {visibleBottomItems.map((item) => {
+            const isActive = isActivePath(location.pathname, item.href);
+            return (
+              <Link
+                key={item.name}
+                to={item.href}
+                className={clsx(
+                  isActive ? 'bg-primary text-white' : 'text-gray-300 hover:text-white hover:bg-gray-800',
+                  'group flex items-center gap-x-3 rounded-md p-2 text-sm leading-6 font-medium'
+                )}
+              >
+                <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                {item.name}
+              </Link>
+            );
+          })}
+        </div>
+      )}
 
       {/* User section with logout dropdown */}
       <div className="relative p-4 border-t border-gray-800" ref={menuRef}>

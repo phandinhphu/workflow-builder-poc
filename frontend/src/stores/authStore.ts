@@ -14,6 +14,8 @@ export interface CurrentUser {
   email?: string;
   jobTitle?: string;
   organizationName?: string;
+  roles: string[];
+  permissions: string[];
 }
 
 interface AuthState {
@@ -25,11 +27,23 @@ interface AuthState {
 
   /** Call logout API, clear token from localStorage, reset store. */
   logout: () => Promise<void>;
+
+  /** Check if current user has a specific permission. */
+  hasPermission: (permission: string) => boolean;
+
+  /** Check if current user has any of the given permissions. */
+  hasAnyPermission: (permissions: string[]) => boolean;
+
+  /** Check if current user has a specific role (e.g. 'SYSTEM_ADMIN'). */
+  hasRole: (role: string) => boolean;
+
+  /** Check if current user is system admin. */
+  isAdmin: () => boolean;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       currentUser: null,
       loading: false,
 
@@ -37,6 +51,9 @@ export const useAuthStore = create<AuthState>()(
         set({ loading: true });
         try {
           const profile = await api.auth.me();
+          const roles = Array.isArray(profile['roles']) ? (profile['roles'] as string[]) : [];
+          const permissions = Array.isArray(profile['permissions']) ? (profile['permissions'] as string[]) : [];
+
           set({
             currentUser: {
               id: String(profile['id'] ?? ''),
@@ -45,6 +62,8 @@ export const useAuthStore = create<AuthState>()(
               email: profile['email'] ? String(profile['email']) : undefined,
               jobTitle: profile['jobTitle'] ? String(profile['jobTitle']) : undefined,
               organizationName: profile['organizationName'] ? String(profile['organizationName']) : undefined,
+              roles,
+              permissions,
             },
             loading: false,
           });
@@ -64,6 +83,32 @@ export const useAuthStore = create<AuthState>()(
         localStorage.removeItem('workflow.currentUserId');
         localStorage.removeItem('workflow.authExpiresAt');
         set({ currentUser: null });
+      },
+
+      hasPermission: (permission: string) => {
+        const user = get().currentUser;
+        if (!user) return false;
+        if (user.roles.includes('SYSTEM_ADMIN') || user.roles.includes('ROLE-ADMIN')) return true;
+        return user.permissions.includes(permission);
+      },
+
+      hasAnyPermission: (permissions: string[]) => {
+        const user = get().currentUser;
+        if (!user) return false;
+        if (user.roles.includes('SYSTEM_ADMIN') || user.roles.includes('ROLE-ADMIN')) return true;
+        return permissions.some((p) => user.permissions.includes(p));
+      },
+
+      hasRole: (role: string) => {
+        const user = get().currentUser;
+        if (!user) return false;
+        return user.roles.includes(role);
+      },
+
+      isAdmin: () => {
+        const user = get().currentUser;
+        if (!user) return false;
+        return user.roles.includes('SYSTEM_ADMIN') || user.roles.includes('ROLE-ADMIN');
       },
     }),
     {

@@ -1696,8 +1696,7 @@ public class RuntimeEngineService {
 
     private void ensureActor(String actor, WorkflowTaskEntity task) {
         if (actor.equals(task.assigneeId) || actor.equals(task.claimantId)
-                || candidates.existsByTaskIdAndUserId(task.id, actor)
-                || permissions.has(actor, "TASK_MANAGE_ALL", null))
+                || candidates.existsByTaskIdAndUserId(task.id, actor))
             return;
         throw ApiException.forbidden("Task không được giao cho người dùng hiện tại");
     }
