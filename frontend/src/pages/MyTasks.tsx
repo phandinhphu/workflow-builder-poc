@@ -219,21 +219,21 @@ export default function MyTasksPage() {
                           Claim
                         </button>
                       )}
-                      {task.status === 'CLAIMED' && (
-                        <>
-                          <button
-                            onClick={() => handleComplete(task.id, {})}
-                            className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
-                          >
-                            Complete
-                          </button>
-                          <button
-                            onClick={() => handleReject(task.id)}
-                            className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
-                          >
-                            Reject
-                          </button>
-                        </>
+                      {task.status === 'CLAIMED' && (task.allowedActions ?? []).includes('COMPLETE') && (
+                        <button
+                          onClick={() => handleComplete(task.id, {})}
+                          className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
+                        >
+                          {['APPROVAL', 'REVIEW'].includes(task.taskType) ? 'Approve' : 'Complete'}
+                        </button>
+                      )}
+                      {task.status === 'CLAIMED' && (task.allowedActions ?? []).includes('REJECT') && (
+                        <button
+                          onClick={() => handleReject(task.id)}
+                          className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+                        >
+                          Reject
+                        </button>
                       )}
                     </div>
                   </td>
@@ -341,11 +341,30 @@ export default function MyTasksPage() {
 
             <div className="flex justify-end gap-2 mt-6 pt-4 border-t">
               <button onClick={() => setSelectedTask(null)} className="px-4 py-2 border rounded text-sm hover:bg-gray-50 font-medium">Đóng</button>
-              {selectedTask.status === 'PENDING' && <button onClick={async () => { await handleClaim(selectedTask.id); setSelectedTask(null); }} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold">Nhận việc (Claim)</button>}
-              {selectedTask.status === 'CLAIMED' && <>
-                <button onClick={() => void handleReject(selectedTask.id)} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-semibold">Từ chối</button>
-                <button onClick={() => void handleComplete(selectedTask.id, formData)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-sm font-semibold">Phê duyệt (Complete)</button>
-              </>}
+              {selectedTask.status === 'PENDING' && (
+                <button
+                  onClick={async () => { await handleClaim(selectedTask.id); setSelectedTask(null); }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold"
+                >
+                  Nhận việc (Claim)
+                </button>
+              )}
+              {selectedTask.status === 'CLAIMED' && (selectedTask.allowedActions ?? []).includes('REJECT') && (
+                <button
+                  onClick={() => void handleReject(selectedTask.id)}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-semibold"
+                >
+                  Từ chối
+                </button>
+              )}
+              {selectedTask.status === 'CLAIMED' && (selectedTask.allowedActions ?? []).includes('COMPLETE') && (
+                <button
+                  onClick={() => void handleComplete(selectedTask.id, formData)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-sm font-semibold"
+                >
+                  {['APPROVAL', 'REVIEW'].includes(selectedTask.taskType) ? 'Phê duyệt (Approve)' : 'Hoàn thành'}
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -10,7 +10,9 @@ import com.acme.workflow.runtime.domain.*;
 import com.acme.workflow.runtime.executor.*;
 import com.acme.workflow.runtime.repository.*;
 import com.acme.workflow.workflow.WorkflowService;
+import com.acme.workflow.workflow.domain.WorkflowDefinitionEntity;
 import com.acme.workflow.workflow.domain.WorkflowVersionEntity;
+import com.acme.workflow.workflow.repository.WorkflowDefinitionRepository;
 import com.acme.workflow.workflow.repository.WorkflowVersionRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.*;
@@ -49,6 +51,7 @@ public class RuntimeEngineService {
     private final Jsons jsons;
     private final WorkflowService workflows;
     private final WorkflowVersionRepository workflowVersions;
+    private final WorkflowDefinitionRepository workflowDefinitions;
     private final DirectoryService directory;
     private final DirectoryGroupService groups;
     private final RuntimeValueResolver resolver;
@@ -67,6 +70,7 @@ public class RuntimeEngineService {
             HrmUserRepository users, OrganizationUnitRepository organizations,
             SystemRoleRepository roles, UserRoleAssignmentRepository roleAssignments,
             Jsons jsons, WorkflowService workflows, WorkflowVersionRepository workflowVersions,
+            WorkflowDefinitionRepository workflowDefinitions,
             DirectoryService directory, DirectoryGroupService groups, RuntimeValueResolver resolver,
             IntegrationService integrations, CurrentUserService current, PermissionService permissions,
             AuditService audit, NodeExecutorFactory nodeExecutorFactory,
@@ -89,6 +93,7 @@ public class RuntimeEngineService {
         this.jsons = jsons;
         this.workflows = workflows;
         this.workflowVersions = workflowVersions;
+        this.workflowDefinitions = workflowDefinitions;
         this.directory = directory;
         this.groups = groups;
         this.resolver = resolver;
@@ -586,7 +591,12 @@ public class RuntimeEngineService {
         event(instanceId, peId, execution.id, "TASK_ASSIGNED", node.path("name").asText(),
                 "Giao task '" + task.title + "' cho: " + assigneeNames,
                 "WAITING", null, Map.of("taskId", task.id, "taskTitle", task.title, "assigneeIds", candidateIds, "assignmentMode", mode, "assigneeNames", assigneeNames));
-        sendTaskNotification(instanceId, task, config.path("channels"), candidateIds);
+        String stepName = node.path("name").asText("");
+        String workflowName = instances.findById(instanceId)
+                .flatMap(inst -> workflowDefinitions.findById(inst.workflowId))
+                .map(def -> def.name)
+                .orElse("");
+        sendTaskNotification(instanceId, task, config.path("channels"), candidateIds, stepName, workflowName);
         scheduleSla(task, config);
     }
 
@@ -1635,10 +1645,10 @@ public class RuntimeEngineService {
     }
 
     private void sendTaskNotification(String instanceId, WorkflowTaskEntity task, JsonNode channels,
-            List<String> recipients) {
-        
-        log.info("sendTaskNotification: instanceId={}, taskId={}, channels={}, recipients={}", 
-                instanceId, task.id, channels, recipients);
+            List<String> recipients, String stepName, String workflowName) {
+
+        log.info("sendTaskNotification: instanceId={}, taskId={}, workflowName={}, stepName={}, channels={}, recipients={}",
+                instanceId, task.id, workflowName, stepName, channels, recipients);
 
         List<String> channelList = new ArrayList<>();
         if (channels != null && channels.isArray() && !channels.isEmpty()) {
@@ -1647,9 +1657,23 @@ public class RuntimeEngineService {
             channelList.add("inapp");
         }
 
+        String notificationBody = buildTaskNotificationBody(task, stepName, workflowName);
         channelList.forEach(channel -> recipients.forEach(
                 recipient -> insertNotification(instanceId, task.id, recipient, channel, task.title,
-                        task.description, "task:" + task.id + ":" + recipient + ":" + channel)));
+                        notificationBody, "task:" + task.id + ":" + recipient + ":" + channel)));
+    }
+
+    private String buildTaskNotificationBody(WorkflowTaskEntity task, String stepName, String workflowName) {
+        StringBuilder sb = new StringBuilder();
+        if (workflowName != null && !workflowName.isBlank())
+            sb.append("Quy trình: ").append(workflowName).append("\n");
+        if (stepName != null && !stepName.isBlank())
+            sb.append("Bước: ").append(stepName).append("\n");
+        if (sb.length() > 0 && task.description != null && !task.description.isBlank())
+            sb.append("---\n");
+        if (task.description != null && !task.description.isBlank())
+            sb.append(task.description);
+        return sb.toString();
     }
 
     private void insertNotification(String instanceId, String taskId, String recipient, String channel, String title,
