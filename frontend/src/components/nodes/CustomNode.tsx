@@ -47,6 +47,9 @@ const nodeTypeLabels: Record<string, string> = {
 export default function CustomNode({ data, isConnectable, selected }: any) {
   const config = nodeConfig[data.nodeType] || nodeConfig.system;
   const Icon = config.icon;
+  const isApproval = data.nodeType === 'approval';
+  const isReview = data.nodeType === 'review';
+  const isApprovalOrReview = isApproval || isReview;
   const isCondition = data.nodeType === 'condition';
   const isStart = data.nodeType === 'start';
   const isEnd = data.nodeType === 'end';
@@ -97,25 +100,62 @@ export default function CustomNode({ data, isConnectable, selected }: any) {
           </div>
         )}
 
-        {!isEnd && (
-          <Handle
-            type="source"
-            position={Position.Bottom}
-            id={isCondition ? 'true' : undefined}
-            isConnectable={isConnectable}
-            className={clsx(
-              'w-3 h-3 border-2 border-white',
-              isCondition ? 'left-1/4 bg-emerald-500' : 'left-1/2 bg-gray-300'
-            )}
-          />
+        {isApprovalOrReview && (
+          <div className="flex border-t border-gray-100 rounded-b-lg overflow-hidden">
+            <div className="flex-1 px-3 py-2 bg-emerald-50/60 text-[11px] font-bold text-emerald-700 flex justify-center items-center">
+              <span>{isApproval ? 'DUYỆT' : 'ĐỒNG Ý'}</span>
+            </div>
+            <div className="flex-1 px-3 py-2 bg-red-50/60 text-[11px] font-bold text-red-600 flex justify-center items-center">
+              <span>TỪ CHỐI</span>
+            </div>
+          </div>
         )}
+
+        {/* Output handles */}
         {isCondition && !isEnd && (
+          <>
+            <Handle
+              type="source"
+              position={Position.Bottom}
+              id="true"
+              isConnectable={isConnectable}
+              className="left-1/4 w-3 h-3 bg-emerald-500 border-2 border-white"
+            />
+            <Handle
+              type="source"
+              position={Position.Bottom}
+              id="false"
+              isConnectable={isConnectable}
+              className="left-3/4 w-3 h-3 bg-red-500 border-2 border-white"
+            />
+          </>
+        )}
+
+        {isApprovalOrReview && !isEnd && (
+          <>
+            <Handle
+              type="source"
+              position={Position.Bottom}
+              id="APPROVED"
+              isConnectable={isConnectable}
+              className="left-1/4 w-3 h-3 bg-emerald-500 border-2 border-white"
+            />
+            <Handle
+              type="source"
+              position={Position.Bottom}
+              id="REJECTED"
+              isConnectable={isConnectable}
+              className="left-3/4 w-3 h-3 bg-red-500 border-2 border-white"
+            />
+          </>
+        )}
+
+        {!isCondition && !isApprovalOrReview && !isEnd && (
           <Handle
             type="source"
             position={Position.Bottom}
-            id="false"
             isConnectable={isConnectable}
-            className="left-3/4 w-3 h-3 bg-red-500 border-2 border-white"
+            className="left-1/2 w-3 h-3 bg-gray-300 border-2 border-white"
           />
         )}
       </div>

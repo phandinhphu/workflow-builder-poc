@@ -149,9 +149,18 @@ function buildWorkflowNodes(wf?: ReturnType<typeof getWorkflow>): { nodes: Node[
   if (!targets.has(defs[0].id)) pushEdge(startNode.id, defs[0].id, 'SUCCESS');
   if (!sources.has(lastDef.id)) pushEdge(lastDef.id, endNode.id);
   conns.forEach(c => {
-    const isCondition = defs.find(d => d.id === c.sourceNodeId)?.type === 'CONDITION';
-    const port = isCondition ? (c.sourcePort === 'false' ? 'false' : 'true') : undefined;
-    const label = isCondition ? (port === 'false' ? 'FALSE' : 'TRUE') : (c.label ?? '');
+    const srcType = defs.find(d => d.id === c.sourceNodeId)?.type;
+    const isCondition = srcType === 'CONDITION';
+    const isApprovalOrReview = srcType === 'APPROVAL' || srcType === 'REVIEW';
+    let port: string | undefined = undefined;
+    let label = c.label ?? '';
+    if (isCondition) {
+      port = c.sourcePort === 'false' ? 'false' : 'true';
+      label = port === 'false' ? 'FALSE' : 'TRUE';
+    } else if (isApprovalOrReview) {
+      port = c.sourcePort?.toUpperCase() === 'REJECTED' ? 'REJECTED' : 'APPROVED';
+      label = port === 'REJECTED' ? 'TỪ CHỐI' : 'DUYỆT';
+    }
     pushEdge(c.sourceNodeId, c.targetNodeId, port, label);
   });
 

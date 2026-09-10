@@ -173,7 +173,13 @@ export const useDesignerStore = create<DesignerStore>((set) => ({
     if (sourceNode.data.nodeType === 'end' || targetNode.data.nodeType === 'start') return {};
 
     const isConditionSource = sourceNode.data.nodeType === 'condition';
-    const label = isConditionSource ? (sourceHandle === 'false' ? 'FALSE' : 'TRUE') : '';
+    const isApprovalSource = sourceNode.data.nodeType === 'approval' || sourceNode.data.nodeType === 'review';
+    let label = '';
+    if (isConditionSource) {
+      label = sourceHandle === 'false' ? 'FALSE' : 'TRUE';
+    } else if (isApprovalSource) {
+      label = (sourceHandle === 'REJECTED' || sourceHandle === 'false') ? 'TỪ CHỐI' : 'DUYỆT';
+    }
     const edge: Edge = {
       id: `e-${source}-${target}-${Date.now()}`,
       source,

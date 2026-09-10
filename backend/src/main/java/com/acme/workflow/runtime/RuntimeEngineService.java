@@ -886,7 +886,18 @@ public class RuntimeEngineService {
         tasks.saveAndFlush(task);
         NodeExecutionEntity execution = executions.findById(task.nodeExecutionId).orElseThrow();
         String port = outcome(execution.nodeType, normalized);
-        boolean routeNow = !"COMPLETE".equals(normalized) || completionReached(task.nodeExecutionId, resolution);
+        boolean isPerParticipantTask = jsons.object(task.resolutionSnapshot).has("reviewedParticipantId");
+        boolean routeNow;
+        if (isPerParticipantTask) {
+            List<WorkflowTaskEntity> siblings = tasks.findByNodeExecutionIdOrderByCreatedAtAsc(task.nodeExecutionId);
+            routeNow = siblings.stream().allMatch(t -> !OPEN_TASK.contains(t.status));
+            if (routeNow) {
+                boolean anyRejected = siblings.stream().anyMatch(t -> "REJECTED".equals(t.status));
+                port = anyRejected ? "REJECTED" : "APPROVED";
+            }
+        } else {
+            routeNow = !"COMPLETE".equals(normalized) || completionReached(task.nodeExecutionId, resolution);
+        }
         if (routeNow) {
             log.info("1. Task is routed now...");
 
@@ -1069,6 +1080,10 @@ public class RuntimeEngineService {
     }
 
     private void cancelSiblingTasks(WorkflowTaskEntity currentTask) {
+        ObjectNode snap = jsons.object(currentTask.resolutionSnapshot);
+        if (snap.has("reviewedParticipantId")) {
+            return;
+        }
         tasks.findByNodeExecutionIdOrderByCreatedAtAsc(currentTask.nodeExecutionId).stream()
                 .filter(t -> !t.id.equals(currentTask.id) && OPEN_TASK.contains(t.status)).forEach(t -> {
                     t.status = "CANCELLED";
@@ -1535,9 +1550,20 @@ public class RuntimeEngineService {
         if (!defaults.isEmpty())
             return defaults;
 
-        // 4. If single outgoing connection and outcome is positive (not REJECTED or false), route through it
-        if (all.size() == 1 && !port.equalsIgnoreCase("REJECTED") && !port.equalsIgnoreCase("false")) {
-            return all;
+        // 4. If single outgoing connection:
+        // - Allow pass-through to CONDITION node regardless of port (user evaluates outcome in Condition node)
+        // - Or if outcome is positive (not REJECTED or false), route through it
+        if (all.size() == 1) {
+            JsonNode singleConn = all.getFirst();
+            String targetNodeId = singleConn.path("targetNodeId").asText();
+            JsonNode targetNode = findNode(definition, targetNodeId);
+            String targetType = targetNode != null ? targetNode.path("type").asText("").toUpperCase(Locale.ROOT) : "";
+            if ("CONDITION".equals(targetType)) {
+                return all;
+            }
+            if (!port.equalsIgnoreCase("REJECTED") && !port.equalsIgnoreCase("false")) {
+                return all;
+            }
         }
 
         return List.of();
@@ -1547,10 +1573,11 @@ public class RuntimeEngineService {
         String p = port == null ? "" : port.toUpperCase(Locale.ROOT);
         return switch (p) {
             case "SUBMITTED", "COMPLETED", "SUCCESS", "SUBMIT" -> Set.of("SUBMITTED", "COMPLETED", "SUCCESS", "SUBMIT", "DEFAULT");
-            case "REVIEW_COMPLETED" -> Set.of("REVIEW_COMPLETED", "SUCCESS", "COMPLETED", "DEFAULT");
-            case "APPROVED" -> Set.of("APPROVED", "SUCCESS", "COMPLETED", "DEFAULT");
+            case "REVIEW_COMPLETED" -> Set.of("REVIEW_COMPLETED", "SUCCESS", "COMPLETED", "DEFAULT", "APPROVED");
+            case "APPROVED" -> Set.of("APPROVED", "SUCCESS", "COMPLETED", "DEFAULT", "REVIEW_COMPLETED");
             case "TRUE" -> Set.of("TRUE", "SUCCESS");
             case "FALSE" -> Set.of("FALSE", "REJECTED");
+            case "REJECTED", "REJECT" -> Set.of("REJECTED", "REJECT", "FALSE");
             default -> Set.of(p);
         };
     }

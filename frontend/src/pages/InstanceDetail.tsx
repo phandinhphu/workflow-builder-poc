@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeftIcon, XCircleIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 import { ReactFlow, MiniMap, Controls, Background, BackgroundVariant, type Node, type Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -13,22 +12,6 @@ import type { NodeType, WorkflowDefinition } from '../types/workflow';
 
 const customNodeTypes = {
   custom: CustomNode,
-};
-
-const STATUS_STYLES: Record<string, string> = {
-  COMPLETED: 'bg-green-100 text-green-700',
-  PENDING: 'bg-orange-100 text-orange-700',
-  RUNNING: 'bg-blue-100 text-blue-700',
-  REJECTED: 'bg-red-100 text-red-700',
-  CANCELLED: 'bg-gray-100 text-gray-700',
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  COMPLETED: 'Completed',
-  PENDING: 'Pending',
-  RUNNING: 'Running',
-  REJECTED: 'Rejected',
-  CANCELLED: 'Cancelled',
 };
 
 function designerNodeType(type: NodeType): string {
@@ -81,7 +64,11 @@ function buildFlowNodes(instanceStatus: string, workflow?: WorkflowDefinition, n
         id: connection.id,
         source: connection.sourceNodeId,
         target: connection.targetNodeId,
-        sourceHandle: connection.sourcePort?.toLowerCase() === 'false' ? 'false' : connection.sourcePort?.toLowerCase() === 'true' ? 'true' : undefined,
+        sourceHandle: connection.sourcePort?.toLowerCase() === 'false' ? 'false' :
+                      connection.sourcePort?.toLowerCase() === 'true' ? 'true' :
+                      connection.sourcePort?.toUpperCase() === 'APPROVED' ? 'APPROVED' :
+                      connection.sourcePort?.toUpperCase() === 'REJECTED' ? 'REJECTED' :
+                      undefined,
         label: connection.label,
         animated: active,
         style: { strokeDasharray: active ? '5 5' : undefined },
@@ -237,7 +224,7 @@ export default function InstanceDetail() {
             )}>
               {instance.status}
             </span>
-            {instance.status === 'RUNNING' && (
+            {canCancel && (
               <button
                 onClick={() => setIsCancelConfirmOpen(true)}
                 className="btn-danger text-xs px-3 py-1.5"
