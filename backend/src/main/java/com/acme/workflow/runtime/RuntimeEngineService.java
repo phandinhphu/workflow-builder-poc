@@ -157,9 +157,10 @@ public class RuntimeEngineService {
         instance.startedAt = Instant.now();
         instance.updatedAt = instance.startedAt;
         instances.saveAndFlush(instance);
-        event(instance.id, null, null, "TRIGGER", "Khởi tạo workflow", resolved.size() + " participant được snapshot",
+        String actorName = users.findById(actor).map(u -> u.displayName).orElse(actor);
+        event(instance.id, null, null, "TRIGGER", "Khởi tạo workflow", "Khởi tạo bởi " + actorName + " (" + resolved.size() + " participant)",
                 "SUCCESS", actor,
-                Map.of("workflowVersion", version.versionNo, "participantCount", resolved.size()));
+                Map.of("workflowVersion", version.versionNo, "participantCount", resolved.size(), "actorName", actorName));
         String startNode = startNode(definition);
         for (Map<String, Object> user : resolved) {
             ParticipantExecutionEntity pe = new ParticipantExecutionEntity();
@@ -171,7 +172,7 @@ public class RuntimeEngineService {
             pe.startedAt = Instant.now();
             participants.saveAndFlush(pe);
             event(instance.id, pe.id, null, "PARTICIPANT_RESOLVED", "Đã xác định participant",
-                    String.valueOf(user.get("displayName")), "SUCCESS", null, user);
+                    "Người tham gia: " + user.get("displayName"), "SUCCESS", null, user);
             sendParticipantStart(definition, instance.id, pe.id, user, variables);
             executeNode(instance.id, pe.id, startNode, definition, 0);
         }
@@ -579,8 +580,12 @@ public class RuntimeEngineService {
                 candidate.userId = userId;
                 candidates.save(candidate);
             });
-        event(instanceId, peId, execution.id, "TASK_ASSIGNED", node.path("name").asText(), "Task đã được giao",
-                "WAITING", null, Map.of("taskId", task.id, "assigneeIds", candidateIds, "assignmentMode", mode));
+        String assigneeNames = candidateIds.stream()
+                .map(id -> users.findById(id).map(u -> u.displayName).orElse(id))
+                .reduce((a, b) -> a + ", " + b).orElse("Chưa gán");
+        event(instanceId, peId, execution.id, "TASK_ASSIGNED", node.path("name").asText(),
+                "Giao task '" + task.title + "' cho: " + assigneeNames,
+                "WAITING", null, Map.of("taskId", task.id, "taskTitle", task.title, "assigneeIds", candidateIds, "assignmentMode", mode, "assigneeNames", assigneeNames));
         sendTaskNotification(instanceId, task, config.path("channels"), candidateIds);
         scheduleSla(task, config);
     }
@@ -592,7 +597,16 @@ public class RuntimeEngineService {
         switch (type) {
             case "fixed", "fixed_user" -> result.add(value);
             case "initiator", "creator" -> instances.findById(instanceId).ifPresent(i -> result.add(i.creatorId));
-            case "current_participant" -> result.add(context.path("participant").path("id").asText(null));
+            case "current_participant" -> {
+                String pId = context.path("participant").path("id").asText(null);
+                String creatorId = instances.findById(instanceId).map(i -> i.creatorId).orElse(null);
+                Set<String> upstreamPids = extractAllUpstreamParticipants(context);
+                if (!upstreamPids.isEmpty() && (pId == null || pId.equals(creatorId))) {
+                    result.addAll(upstreamPids);
+                } else if (pId != null) {
+                    result.add(pId);
+                }
+            }
             case "participant_manager" -> result.add(context.path("participant").path("managerId").asText(null));
             case "creator_manager" -> result.add(instances.findById(instanceId)
                     .flatMap(i -> users.findById(i.creatorId)).map(u -> u.managerId).orElse(null));
@@ -608,6 +622,9 @@ public class RuntimeEngineService {
             case "dynamic" -> {
                 JsonNode dynamic = resolver.path(context, value);
                 extractDynamicAssignees(dynamic, result);
+                if (result.isEmpty()) {
+                    result.addAll(extractAllUpstreamParticipants(context));
+                }
             }
             // Personalized: resolves every participantId from the upstream Assignment/Form
             // node output.
@@ -615,14 +632,8 @@ public class RuntimeEngineService {
             case "each_participant" -> {
                 JsonNode dynamic = resolver.path(context, value);
                 extractDynamicAssignees(dynamic, result);
-                // If no expression value, fall back to the assignment node participantIds in
-                // context
                 if (result.isEmpty()) {
-                    context.path("nodes").fields().forEachRemaining(entry -> {
-                        JsonNode pIds = entry.getValue().path("participantIds");
-                        if (pIds.isArray())
-                            extractDynamicAssignees(pIds, result);
-                    });
+                    result.addAll(extractAllUpstreamParticipants(context));
                 }
             }
             // each_participant_manager is handled specially in createTasks - not used
@@ -635,6 +646,40 @@ public class RuntimeEngineService {
         if (result.isEmpty() && config.path("fallback").isObject())
             return resolveAssignees(config.path("fallback"), context, instanceId);
         return result.stream().sorted().toList();
+    }
+
+    private Set<String> extractAllUpstreamParticipants(ObjectNode context) {
+        LinkedHashSet<String> pids = new LinkedHashSet<>();
+        JsonNode nodes = context.path("nodes");
+        if (nodes.isObject()) {
+            nodes.fields().forEachRemaining(entry -> {
+                JsonNode nodeData = entry.getValue();
+                // 1. Form node submissionList
+                JsonNode subList = nodeData.path("submissionList");
+                if (subList.isArray()) {
+                    subList.forEach(item -> {
+                        String uid = item.path("userId").asText(null);
+                        if (uid != null && !uid.isBlank()) pids.add(uid);
+                    });
+                }
+                // 2. Assignment node participantIds
+                JsonNode pIdArray = nodeData.path("participantIds");
+                if (pIdArray.isArray()) {
+                    pIdArray.forEach(item -> {
+                        String uid = item.isObject() ? item.path("id").asText(null) : item.asText(null);
+                        if (uid != null && !uid.isBlank()) pids.add(uid);
+                    });
+                }
+                // 3. Form submissions map
+                JsonNode submissions = nodeData.path("submissions");
+                if (submissions.isObject()) {
+                    submissions.fieldNames().forEachRemaining(uid -> {
+                        if (uid != null && !uid.isBlank()) pids.add(uid);
+                    });
+                }
+            });
+        }
+        return pids;
     }
 
     private void extractDynamicAssignees(JsonNode node, Set<String> target) {
@@ -793,8 +838,9 @@ public class RuntimeEngineService {
         task.claimantId = actor;
         task.claimedAt = Instant.now();
         tasks.saveAndFlush(task);
+        String actorName = users.findById(actor).map(u -> u.displayName).orElse(actor);
         event(task.instanceId, task.participantExecutionId, task.nodeExecutionId, "TASK_CLAIMED", "Task đã được nhận",
-                taskId, "RUNNING", actor, Map.of());
+                actorName + " đã nhận xử lý task '" + task.title + "'", "RUNNING", actor, Map.of("taskId", task.id, "taskTitle", task.title));
         return Map.of("success", true, "taskId", taskId, "claimedBy", actor, "message", "Task claimed successfully");
     }
 
@@ -851,14 +897,18 @@ public class RuntimeEngineService {
             log.info("3. Aggregated outputs...");
             completeExecution(execution, "COMPLETED", port, finalOutput);
             log.info("4. Completed execution...");
+            String actorName = users.findById(actor).map(u -> u.displayName).orElse(actor);
+            String actionDesc = "COMPLETE".equals(normalized) ? "Đã hoàn thành" : "REJECT".equals(normalized) ? "Đã từ chối" : "Đã yêu cầu chỉnh sửa";
             event(task.instanceId, task.participantExecutionId, task.nodeExecutionId, "TASK_" + task.status,
-                    "Hoàn thành task", task.id, "SUCCESS", actor, finalOutput);
+                    actionDesc + " task", actorName + " " + actionDesc.toLowerCase(Locale.ROOT) + " task '" + task.title + "'", "SUCCESS", actor, finalOutput);
             route(task.instanceId, task.participantExecutionId, findNode(definition(task.instanceId), task.nodeId),
                     definition(task.instanceId), port, 0);
         } else {
             log.info("waiting for completion policy...");
+            String actorName = users.findById(actor).map(u -> u.displayName).orElse(actor);
+            String actionDesc = "COMPLETE".equals(normalized) ? "Đã duyệt/hoàn thành" : "REJECT".equals(normalized) ? "Đã từ chối" : "Đã yêu cầu chỉnh sửa";
             event(task.instanceId, task.participantExecutionId, task.nodeExecutionId, "TASK_VOTE_RECORDED",
-                    "Đã ghi nhận kết quả task", "Đang chờ completion policy", "WAITING", actor, output);
+                    "Đã ghi nhận kết quả", actorName + " " + actionDesc.toLowerCase(Locale.ROOT) + " task '" + task.title + "' (đang chờ các lượt xử lý khác)", "WAITING", actor, output);
         }
         audit.append(actor, normalized, "TASK", task.id, null, null, output,
                 Map.of("outcomePort", port, "routed", routeNow));
@@ -877,6 +927,27 @@ public class RuntimeEngineService {
             if (comment != null && !comment.isBlank())
                 result.put("comment", comment);
             result.put("approverId", actor);
+
+            List<WorkflowTaskEntity> siblings = tasks.findByNodeExecutionIdOrderByCreatedAtAsc(execution.id);
+            if (!siblings.isEmpty()) {
+                ArrayNode approvalList = jsons.mapper().createArrayNode();
+                for (WorkflowTaskEntity sibling : siblings) {
+                    submissions.findTopByTaskIdOrderByRevisionNoDesc(sibling.id).ifPresent(sub -> {
+                        ObjectNode entry = jsons.object();
+                        entry.put("taskId", sibling.id);
+                        entry.put("approverId", sub.actorId);
+                        entry.put("action", sub.action);
+                        entry.put("comment", sub.commentText);
+                        entry.put("completedAt", sub.createdAt.toString());
+                        ObjectNode snap = jsons.object(sibling.resolutionSnapshot);
+                        if (snap.has("reviewedParticipantId")) {
+                            entry.put("reviewedParticipantId", snap.path("reviewedParticipantId").asText());
+                        }
+                        approvalList.add(entry);
+                    });
+                }
+                result.set("approvalList", approvalList);
+            }
             return result;
         }
         // Set built-in fields for Review nodes
@@ -887,6 +958,27 @@ public class RuntimeEngineService {
             if (comment != null && !comment.isBlank())
                 result.put("comment", comment);
             result.put("reviewerId", actor);
+
+            List<WorkflowTaskEntity> siblings = tasks.findByNodeExecutionIdOrderByCreatedAtAsc(execution.id);
+            if (!siblings.isEmpty()) {
+                ArrayNode reviewList = jsons.mapper().createArrayNode();
+                for (WorkflowTaskEntity sibling : siblings) {
+                    submissions.findTopByTaskIdOrderByRevisionNoDesc(sibling.id).ifPresent(sub -> {
+                        ObjectNode entry = jsons.object();
+                        entry.put("taskId", sibling.id);
+                        entry.put("reviewerId", sub.actorId);
+                        entry.put("action", sub.action);
+                        entry.put("comment", sub.commentText);
+                        entry.put("completedAt", sub.createdAt.toString());
+                        ObjectNode snap = jsons.object(sibling.resolutionSnapshot);
+                        if (snap.has("reviewedParticipantId")) {
+                            entry.put("reviewedParticipantId", snap.path("reviewedParticipantId").asText());
+                        }
+                        reviewList.add(entry);
+                    });
+                }
+                result.set("reviewList", reviewList);
+            }
             return result;
         }
 
@@ -1391,7 +1483,8 @@ public class RuntimeEngineService {
     public void completeAutomatic(String instanceId, String peId, NodeExecutionEntity execution, JsonNode node,
             ObjectNode definition, String port, ObjectNode output, int depth) {
         completeExecution(execution, "COMPLETED", port, output);
-        event(instanceId, peId, execution.id, "NODE_COMPLETED", node.path("name").asText(), "Outcome: " + port,
+        event(instanceId, peId, execution.id, "NODE_COMPLETED", node.path("name").asText(),
+                "Hoàn thành bước " + node.path("name").asText() + " (Outcome: " + port + ")",
                 "SUCCESS", null, output);
         route(instanceId, peId, node, definition, port, depth + 1);
     }
@@ -1465,43 +1558,36 @@ public class RuntimeEngineService {
     public ObjectNode executeNotification(String instanceId, String peId, JsonNode node, ObjectNode context) {
         JsonNode config = node.path("config");
         JsonNode assigneeConfig = config.path("assignee");
-        String assigneeType = assigneeConfig.path("type").asText("").toLowerCase(Locale.ROOT);
         List<String> channels = new ArrayList<>();
-        config.path("channels").forEach(c -> channels.add(c.asText()));
+        if (config.has("channels") && config.path("channels").isArray() && !config.path("channels").isEmpty()) {
+            config.path("channels").forEach(c -> channels.add(c.asText()));
+        } else {
+            channels.add("inapp");
+        }
 
         int totalDeliveries = 0;
         List<String> recipients = resolveAssignees(assigneeConfig, context, instanceId);
+        log.info("[executeNotification] Resolved {} recipients for nodeId={}: {}", recipients.size(), node.path("id").asText(), recipients);
 
-        // For personalized each_participant notifications, render the message template
-        // individually for each recipient so that name, result and reason are accurate.
-        if ("each_participant".equals(assigneeType) && !recipients.isEmpty()) {
-            for (String recipientId : recipients) {
-                ObjectNode recipientContext = context.deepCopy();
-                try {
-                    recipientContext.set("notifiedParticipant", jsons.value(directory.user(recipientId)));
-                } catch (Exception ignored) {
-                    recipientContext.set("notifiedParticipant", jsons.object().put("id", recipientId));
-                }
-                String title = resolver.render(config.path("title").asText(node.path("name").asText()),
-                        recipientContext);
-                String body = resolver.render(config.path("bodyTemplate").asText(config.path("message").asText()),
-                        recipientContext);
-                for (String channel : channels) {
-                    insertNotification(instanceId, null, recipientId, channel, title, body,
-                            "node:" + node.path("id").asText() + ":" + peId + ":" + recipientId + ":" + channel);
-                    totalDeliveries++;
-                }
+        for (String recipientId : recipients) {
+            ObjectNode recipientContext = context.deepCopy();
+            try {
+                ObjectNode u = (ObjectNode) jsons.value(directory.user(recipientId));
+                if (!u.has("name") && u.has("displayName")) u.set("name", u.get("displayName"));
+                recipientContext.set("notifiedParticipant", u);
+                recipientContext.set("participant", u);
+            } catch (Exception ignored) {
+                ObjectNode fallbackU = jsons.object().put("id", recipientId).put("name", recipientId).put("displayName", recipientId);
+                recipientContext.set("notifiedParticipant", fallbackU);
+                recipientContext.set("participant", fallbackU);
             }
-        } else {
-            // Standard notification: same rendered message for all recipients
-            String title = resolver.render(config.path("title").asText(node.path("name").asText()), context);
-            String body = resolver.render(config.path("bodyTemplate").asText(config.path("message").asText()), context);
-            for (String recipient : recipients)
-                for (String channel : channels) {
-                    insertNotification(instanceId, null, recipient, channel, title, body,
-                            "node:" + node.path("id").asText() + ":" + peId + ":" + recipient + ":" + channel);
-                    totalDeliveries++;
-                }
+            String title = resolver.render(config.path("title").asText(node.path("name").asText()), recipientContext);
+            String body = resolver.render(config.path("bodyTemplate").asText(config.path("message").asText()), recipientContext);
+            for (String channel : channels) {
+                insertNotification(instanceId, null, recipientId, channel, title, body,
+                        "node:" + node.path("id").asText() + ":" + peId + ":" + recipientId + ":" + channel);
+                totalDeliveries++;
+            }
         }
         return jsons.object().put("recipientCount", recipients.size()).put("deliveryCount", totalDeliveries);
     }
@@ -1523,10 +1609,20 @@ public class RuntimeEngineService {
 
     private void sendTaskNotification(String instanceId, WorkflowTaskEntity task, JsonNode channels,
             List<String> recipients) {
-        if (channels.isArray())
-            channels.forEach(channel -> recipients.forEach(
-                    recipient -> insertNotification(instanceId, task.id, recipient, channel.asText(), task.title,
-                            task.description, "task:" + task.id + ":" + recipient + ":" + channel.asText())));
+        
+        log.info("sendTaskNotification: instanceId={}, taskId={}, channels={}, recipients={}", 
+                instanceId, task.id, channels, recipients);
+
+        List<String> channelList = new ArrayList<>();
+        if (channels != null && channels.isArray() && !channels.isEmpty()) {
+            channels.forEach(channel -> channelList.add(channel.asText()));
+        } else {
+            channelList.add("inapp");
+        }
+
+        channelList.forEach(channel -> recipients.forEach(
+                recipient -> insertNotification(instanceId, task.id, recipient, channel, task.title,
+                        task.description, "task:" + task.id + ":" + recipient + ":" + channel)));
     }
 
     private void insertNotification(String instanceId, String taskId, String recipient, String channel, String title,

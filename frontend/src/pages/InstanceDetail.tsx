@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeftIcon, XCircleIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
@@ -122,6 +122,71 @@ export default function InstanceDetail() {
 
   const instance: any = detail ?? (instanceId ? getInstance(instanceId) : undefined);
   const workflow = instance ? getWorkflow(instance.workflowId) : undefined;
+  const timeline = detail?.timeline ?? [];
+  const runtimeTasks = detail?.tasks ?? [];
+  const maskedContext = {
+    trigger: maskContext(detail?.context?.trigger ?? {}),
+    variables: maskContext(detail?.context?.variables ?? {}),
+  };
+
+  const formatEventTime = (timeStr: string) => {
+    if (!timeStr) return '';
+    try {
+      const d = new Date(timeStr);
+      if (isNaN(d.getTime())) return timeStr;
+      return d.toLocaleString('vi-VN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    } catch {
+      return timeStr;
+    }
+  };
+
+  const groupedSteps = useMemo(() => {
+    const groups: { stepNo: number; stepName: string; nodeType: string; state: string; events: any[] }[] = [];
+    const map = new Map<string, typeof groups[0]>();
+
+    timeline.forEach((entry: any) => {
+      const stepNo = entry.stepNo || 1;
+      const stepName = entry.stepName || 'Khởi tạo quy trình';
+      const key = `${stepNo}_${stepName}`;
+      if (!map.has(key)) {
+        const group = {
+          stepNo,
+          stepName,
+          nodeType: entry.nodeType || 'TRIGGER',
+          state: 'completed',
+          events: []
+        };
+        map.set(key, group);
+        groups.push(group);
+      }
+      const grp = map.get(key)!;
+      grp.events.push(entry);
+      if (entry.state === 'failed') {
+        grp.state = 'failed';
+      } else if (entry.state === 'waiting' && grp.state !== 'failed') {
+        grp.state = 'waiting';
+      } else if (entry.state === 'running' && grp.state !== 'failed' && grp.state !== 'waiting') {
+        grp.state = 'running';
+      }
+    });
+    return groups;
+  }, [timeline]);
+
+  const doCancel = async () => {
+    try {
+      await api.runtime.cancel(instance?.id);
+      setDetail(await api.runtime.instance(instance?.id));
+      toasts.pushToast('success', `Instance ${instance?.requestCode} đã được hủy.`);
+      setIsCancelConfirmOpen(false);
+    } catch (cause) { toasts.pushToast('error', cause instanceof Error ? cause.message : 'Không hủy được instance'); }
+  };
 
   if (loading && !instance) return <div className="h-full grid place-items-center text-sm text-gray-500">Đang tải runtime snapshot…</div>;
   if (!instance) {
@@ -134,23 +199,7 @@ export default function InstanceDetail() {
   }
 
   const canCancel = instance.status === 'PENDING' || instance.status === 'RUNNING';
-  const flow = buildFlowNodes(instance.status, workflow, detail?.nodeExecutions ?? []);
-
-  const maskedContext = {
-    trigger: maskContext(detail?.context?.trigger ?? {}),
-    variables: maskContext(detail?.context?.variables ?? {}),
-  };
-  const timeline = detail?.timeline ?? [];
-  const runtimeTasks = detail?.tasks ?? [];
-
-  const doCancel = async () => {
-    try {
-      await api.runtime.cancel(instance.id);
-      setDetail(await api.runtime.instance(instance.id));
-      toasts.pushToast('success', `Instance ${instance.requestCode} đã được hủy.`);
-      setIsCancelConfirmOpen(false);
-    } catch (cause) { toasts.pushToast('error', cause instanceof Error ? cause.message : 'Không hủy được instance'); }
-  };
+  const { nodes, edges } = buildFlowNodes(instance.status, workflow, detail?.nodeExecutions ?? []);
 
   return (
     <div className="h-full flex flex-col p-6">
@@ -158,135 +207,117 @@ export default function InstanceDetail() {
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
           <Link to="/workflows" className="hover:text-primary">Workflow</Link>
           <span>/</span>
-          <Link to={workflow ? `/workflows/${workflow.id}` : '/workflows'} className="hover:text-primary">{instance.workflowName}</Link>
+          <Link to={`/workflows/${instance.workflowId}`} className="hover:text-primary">{instance.workflowName}</Link>
           <span>/</span>
-          <Link to={workflow ? `/workflows/${workflow.id}/runtime` : '/workflows'} className="hover:text-primary">Theo dõi Runtime</Link>
+          <Link to={`/workflows/${instance.workflowId}/instances`} className="hover:text-primary">Theo dõi Runtime</Link>
           <span>/</span>
-          <span className="text-navy font-medium">{instance.requestCode}</span>
+          <span className="text-gray-900 font-medium">{instance.requestCode}</span>
         </div>
+
         <div className="flex items-center justify-between">
-          <Link to={workflow ? `/workflows/${workflow.id}/runtime` : '/workflows'} className="text-gray-400 hover:text-navy p-2 rounded hover:bg-gray-100 transition-colors" aria-label="Quay lại">
-            <ArrowLeftIcon className="w-5 h-5" />
-          </Link>
-          <h2 className="text-lg font-bold text-navy flex items-center gap-3 flex-1">
-            Request: {instance.requestCode}
-          </h2>
-          <div className="flex items-center gap-2">
-            <span className={clsx("inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium", STATUS_STYLES[instance.status])}>
-              {STATUS_LABELS[instance.status] || instance.status}
+          <div className="flex items-center gap-3">
+            <Link to={`/workflows/${instance.workflowId}/instances`} className="p-1 hover:bg-gray-100 rounded text-gray-500">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </Link>
+            <div>
+              <h1 className="text-xl font-bold text-navy flex items-center gap-2">
+                Request: {instance.requestCode}
+              </h1>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className={clsx(
+              "px-2.5 py-1 rounded text-xs font-semibold uppercase tracking-wider",
+              instance.status === 'RUNNING' ? 'bg-blue-50 text-primary border border-blue-200' :
+              instance.status === 'COMPLETED' ? 'bg-green-50 text-success border border-green-200' :
+              instance.status === 'FAILED' ? 'bg-red-50 text-danger border border-red-200' :
+              'bg-gray-50 text-muted border border-border'
+            )}>
+              {instance.status}
             </span>
-            {canCancel && (
+            {instance.status === 'RUNNING' && (
               <button
                 onClick={() => setIsCancelConfirmOpen(true)}
-                className="px-4 py-2 text-sm font-medium border border-danger/40 text-danger rounded bg-white hover:bg-red-50 flex items-center gap-1"
+                className="btn-danger text-xs px-3 py-1.5"
               >
-                <XCircleIcon className="w-4 h-4" /> Hủy instance
+                Hủy Instance
               </button>
             )}
           </div>
         </div>
       </div>
 
-      <div className="bg-surface rounded-xl border border-border shadow-sm flex flex-col h-full overflow-hidden">
-        <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-gray-50/50">
-          <div className="flex items-center gap-4">
+      <div className="bg-white border border-border rounded-lg shadow-sm flex-1 flex flex-col min-h-0">
+        <div className="border-b border-border px-6 pt-4">
+          <div className="flex justify-between items-start mb-4">
             <div>
-              <span className="block text-xs text-muted uppercase tracking-wide">Workflow</span>
-              <span className="text-sm font-medium text-navy">{instance.workflowName} (v{instance.workflowVersion})</span>
+              <span className="text-xs text-muted uppercase font-semibold">Workflow</span>
+              <p className="text-sm font-bold text-navy flex items-center gap-2 mt-0.5">
+                {instance.workflowName} ({instance.workflowVersion})
+                <span className="text-[11px] font-normal px-1.5 py-0.5 bg-gray-100 border border-border rounded text-gray-600">
+                  {instance.status === 'RUNNING' ? 'In-progress' : instance.status === 'COMPLETED' ? 'Completed' : instance.status}
+                </span>
+                <span className={clsx(
+                  "text-[11px] font-normal px-1.5 py-0.5 rounded border",
+                  instance.slaStatus === 'OVERDUE' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                )}>
+                  {instance.slaStatus === 'OVERDUE' ? 'Overdue' : 'On-time'}
+                </span>
+              </p>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-1 bg-gray-100 border border-border rounded text-xs text-navy font-medium">
-                {STATUS_LABELS[instance.status] || instance.status}
-              </span>
-              <span className={clsx("px-2 py-1 border rounded text-xs font-medium", instance.slaStatus === 'OVERDUE' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700')}>
-                {instance.slaStatus === 'OVERDUE' ? 'Overdue' : 'On-time'}
-              </span>
-            </div>
+          </div>
+
+          <div className="flex gap-2">
+            {[
+              { id: 'info', label: 'Thông tin' },
+              { id: 'flow', label: 'View Flow' },
+              { id: 'audit', label: 'Audit & History' },
+              { id: 'tasks', label: 'Tasks' },
+              { id: 'context', label: 'Workflow Context' },
+              { id: 'participants', label: `Người tham gia (${instance.participants?.length ?? instance.participantCount ?? 0})` },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={clsx(
+                  "px-4 py-2 border-b-2 text-sm font-medium transition-colors -mb-[1px]",
+                  activeTab === tab.id
+                    ? "border-primary text-primary font-bold"
+                    : "border-transparent text-muted hover:text-navy"
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="flex border-b border-border bg-white">
-          {[
-            { id: 'info', name: 'Thông tin' },
-            { id: 'flow', name: 'View Flow' },
-            { id: 'audit', name: 'Audit & History' },
-            { id: 'tasks', name: 'Tasks' },
-            { id: 'context', name: 'Workflow Context' },
-            ...(instance.participants ? [{ id: 'participants' as const, name: `Người tham gia (${instance.participantCount ?? instance.participants.length})` }] : []),
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={clsx(
-                "px-6 py-3 text-sm font-medium transition-colors relative",
-                activeTab === tab.id ? "text-primary" : "text-gray-500 hover:text-navy"
-              )}
-            >
-              {tab.name}
-              {activeTab === tab.id && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary" />}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex-1 overflow-auto bg-page relative">
-
+        <div className="flex-1 overflow-y-auto min-h-0 bg-[#F8FAFC]">
           {activeTab === 'info' && (
             <div className="p-6 max-w-4xl mx-auto space-y-6">
               <div className="bg-white border border-border rounded-lg p-6 shadow-sm">
-                <h3 className="text-base font-bold text-navy mb-4 border-b border-gray-100 pb-2">Thông tin instance</h3>
-                <div className="grid grid-cols-2 gap-y-4 gap-x-8">
-                  <div>
-                    <span className="block text-xs text-muted mb-1 uppercase tracking-wide">Request ID</span>
-                    <span className="text-sm font-medium text-navy">{instance.requestCode}</span>
-                  </div>
-                  <div>
-                    <span className="block text-xs text-muted mb-1 uppercase tracking-wide">Người tạo</span>
-                    <span className="text-sm font-medium text-navy">{instance.creatorName}</span>
-                  </div>
-                  <div>
-                    <span className="block text-xs text-muted mb-1 uppercase tracking-wide">Thời gian bắt đầu</span>
-                    <span className="text-sm font-medium text-navy">{instance.startedAt}</span>
-                  </div>
-                  <div>
-                    <span className="block text-xs text-muted mb-1 uppercase tracking-wide">Bước hiện tại</span>
-                    <span className="text-sm font-medium text-navy">{instance.currentStepLabels.join(', ')}</span>
-                  </div>
-                  <div>
-                    <span className="block text-xs text-muted mb-1 uppercase tracking-wide">Người xử lý</span>
-                    <span className="text-sm font-medium text-navy">{instance.activeAssignees.length > 0 ? instance.activeAssignees.join(', ') : 'Hệ thống tự động'}</span>
-                  </div>
-                  <div>
-                    <span className="block text-xs text-muted mb-1 uppercase tracking-wide">SLA</span>
-                    <span className={clsx("inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase", instance.slaStatus === 'OVERDUE' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700')}>
-                      {instance.slaStatus === 'OVERDUE' ? 'Overdue' : 'On-time'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="block text-xs text-muted mb-1 uppercase tracking-wide">Due Date</span>
-                    <span className="text-sm font-medium text-navy">
-                      {runtimeTasks.find((task: any) => ['PENDING', 'CLAIMED', 'OVERDUE'].includes(task.status))?.dueAt ?? 'Không có task đang chờ'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white border border-border rounded-lg p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-2">
-                  <h3 className="text-base font-bold text-navy">Dữ liệu Context</h3>
-                  <span className="text-xs text-muted">Dữ liệu nhạy cảm được che để bảo mật</span>
-                </div>
-                <div className="bg-gray-50 rounded border border-gray-200 p-4 font-mono text-xs overflow-auto">
-                  <pre className="text-gray-700">{JSON.stringify(maskedContext, null, 2)}</pre>
+                <h3 className="text-base font-bold text-navy mb-4">Thông tin Thực thi</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><span className="text-muted">Mã yêu cầu:</span> <span className="font-semibold text-navy ml-2">{instance.requestCode}</span></div>
+                  <div><span className="text-muted">Người tạo:</span> <span className="font-semibold text-navy ml-2">{instance.creatorName}</span></div>
+                  <div><span className="text-muted">Bắt đầu lúc:</span> <span className="font-medium text-gray-700 ml-2">{instance.startedAt}</span></div>
+                  <div><span className="text-muted">Kết thúc lúc:</span> <span className="font-medium text-gray-700 ml-2">{instance.completedAt ?? '—'}</span></div>
+                  <div><span className="text-muted">Số người tham gia:</span> <span className="font-semibold text-navy ml-2">{instance.participantCount}</span></div>
+                  <div><span className="text-muted">Số người hoàn thành:</span> <span className="font-semibold text-navy ml-2">{instance.completedParticipantCount}</span></div>
+                  <div><span className="text-muted">SLA Status:</span> <span className="font-semibold text-navy ml-2">{instance.slaStatus ?? 'ON_TIME'}</span></div>
+                  <div><span className="text-muted">Trạng thái:</span> <span className="font-semibold text-navy ml-2">{instance.status}</span></div>
                 </div>
               </div>
             </div>
           )}
 
           {activeTab === 'flow' && (
-            <div className="absolute inset-0">
+            <div className="h-[600px] w-full bg-white relative">
               <ReactFlow
-                nodes={flow.nodes}
-                edges={flow.edges}
+                nodes={nodes}
+                edges={edges}
                 nodeTypes={customNodeTypes}
                 fitView
                 nodesDraggable={false}
@@ -301,43 +332,152 @@ export default function InstanceDetail() {
           )}
 
           {activeTab === 'audit' && (
-            <div className="p-6 max-w-4xl mx-auto">
-              <div className="bg-white border border-border rounded-lg p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-base font-bold text-navy">Timeline Execution</h3>
-                  <div className="flex gap-2">
-                    <span className="px-2 py-1 bg-gray-100 border border-border rounded text-xs text-navy font-medium flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-success"></div> Thành công</span>
-                    <span className="px-2 py-1 bg-gray-100 border border-border rounded text-xs text-navy font-medium flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-warning"></div> Đang xử lý</span>
-                  </div>
+            <div className="p-6 max-w-4xl mx-auto space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-navy">Audit & History — Tiến trình thực thi theo Bước</h3>
+                  <p className="text-xs text-muted mt-0.5">Theo dõi chi tiết từng bước và nhật ký sự kiện của phiên chạy</p>
                 </div>
-
-                <div className="relative pl-8 border-l-2 border-gray-200 space-y-8 py-2">
-                  {timeline.map((entry: any) => (
-                    <div key={entry.id} className="relative">
-                      <div className={clsx(
-                        "absolute -left-[41px] w-5 h-5 rounded-full border-4 border-white flex items-center justify-center shadow-sm",
-                        entry.state === 'success' ? 'bg-success' : entry.state === 'running' ? 'bg-warning' : 'bg-gray-300'
-                      )}>
-                        {entry.state === 'success' && (
-                          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                        )}
-                      </div>
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="text-sm font-bold text-navy">{entry.title}</p>
-                          <p className="text-xs text-muted mt-1">{entry.description}</p>
-                          {entry.state === 'running' && (
-                            <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 bg-yellow-50 text-yellow-700 border border-yellow-200 rounded text-xs font-medium">
-                              SLA: Còn 24 giờ
-                            </div>
-                          )}
-                        </div>
-                        {entry.time && <span className="text-xs font-medium text-gray-500">{entry.time}</span>}
-                      </div>
-                    </div>
-                  ))}
+                <div className="flex gap-2">
+                  <span className="px-2.5 py-1 bg-white border border-border rounded-full text-xs text-navy font-medium flex items-center gap-1.5 shadow-xs">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500"></div> Hoàn thành
+                  </span>
+                  <span className="px-2.5 py-1 bg-white border border-border rounded-full text-xs text-navy font-medium flex items-center gap-1.5 shadow-xs">
+                    <div className="w-2 h-2 rounded-full bg-amber-500"></div> Đang chờ xử lý
+                  </span>
                 </div>
               </div>
+
+              {groupedSteps.length === 0 ? (
+                <div className="bg-white border border-border rounded-xl p-8 text-center text-muted text-sm shadow-sm">
+                  Chưa có dữ liệu lịch sử cho quy trình này
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {groupedSteps.map((step, sIdx) => {
+                    const isWaiting = step.state === 'waiting';
+                    const isRunning = step.state === 'running';
+                    const isFailed = step.state === 'failed';
+
+                    return (
+                      <div
+                        key={`step-${step.stepNo}-${sIdx}`}
+                        className={clsx(
+                          "bg-white border rounded-xl p-5 shadow-xs transition-all",
+                          isWaiting ? "border-amber-300 ring-1 ring-amber-200" :
+                          isRunning ? "border-blue-300 ring-1 ring-blue-200" :
+                          isFailed ? "border-red-300" : "border-border"
+                        )}
+                      >
+                        <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                          <div className="flex items-center gap-3">
+                            <span className={clsx(
+                              "w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shadow-xs",
+                              isWaiting ? "bg-amber-100 text-amber-800" :
+                              isRunning ? "bg-blue-100 text-blue-800" :
+                              isFailed ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800"
+                            )}>
+                              {step.stepNo}
+                            </span>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-bold text-navy">{step.stepName}</h4>
+                                {step.nodeType && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-600 uppercase tracking-wide">
+                                    {step.nodeType}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {isWaiting && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> Đang chờ xử lý
+                              </span>
+                            )}
+                            {isRunning && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> Đang thực thi
+                              </span>
+                            )}
+                            {isFailed && (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
+                                Thất bại
+                              </span>
+                            )}
+                            {!isWaiting && !isRunning && !isFailed && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <svg className="w-3 h-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" /></svg> Hoàn thành
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="mt-3.5 space-y-3 pl-1">
+                          {step.events.map((entry: any, eIdx: number) => {
+                            const isEvtSuccess = entry.state === 'success' || entry.state === 'completed';
+                            const isEvtWaiting = entry.state === 'waiting';
+                            const isEvtFailed = entry.state === 'failed';
+
+                            return (
+                              <div key={entry.id || eIdx} className="flex items-start gap-3 text-xs">
+                                <div className="mt-0.5">
+                                  <div className={clsx(
+                                    "w-4 h-4 rounded-full flex items-center justify-center",
+                                    isEvtFailed ? "bg-red-500 text-white" :
+                                    isEvtWaiting ? "bg-amber-500 text-white" :
+                                    isEvtSuccess ? "bg-emerald-500 text-white" : "bg-blue-400 text-white"
+                                  )}>
+                                    {isEvtSuccess ? (
+                                      <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                                    ) : isEvtWaiting ? (
+                                      <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                                    ) : (
+                                      <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-baseline justify-between gap-2">
+                                    <p className="font-semibold text-navy text-xs">{entry.title}</p>
+                                    {entry.time && (
+                                      <span className="text-[11px] text-gray-400 whitespace-nowrap font-mono">
+                                        {formatEventTime(entry.time)}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-gray-600 mt-0.5 text-xs leading-relaxed">{entry.description}</p>
+                                  
+                                  <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                                    {entry.actorName && entry.actorName !== 'Hệ thống' && (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-[11px] font-medium">
+                                        👤 {entry.actorName}
+                                      </span>
+                                    )}
+                                    {entry.slaText && (
+                                      <span className={clsx(
+                                        "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border",
+                                        entry.slaText.includes("Quá hạn")
+                                          ? "bg-red-50 text-red-700 border-red-200"
+                                          : "bg-amber-50 text-amber-700 border-amber-200"
+                                      )}>
+                                        ⏱️ {entry.slaText}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 

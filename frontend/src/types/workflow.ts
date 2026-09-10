@@ -287,7 +287,14 @@ export interface InstanceTimelineEntry {
   time: string;
   title: string;
   description: string;
-  state: 'success' | 'running' | 'waiting' | 'default';
+  state: 'success' | 'completed' | 'running' | 'waiting' | 'failed' | 'default';
+  stepNo?: number;
+  stepName?: string;
+  nodeType?: string;
+  nodeId?: string;
+  actorName?: string;
+  slaText?: string | null;
+  eventType?: string;
 }
 
 export interface InstanceTask {

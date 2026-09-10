@@ -24,7 +24,142 @@ public class RuntimeQueryService {
     }
     private Map<String,Object>taskMap(WorkflowTaskEntity t){WorkflowInstanceEntity i=instances.findById(t.instanceId).orElseThrow();Map<String,Object>m=new LinkedHashMap<>();m.put("id",t.id);m.put("workflowId",i.workflowId);m.put("workflowName",workflows.findById(i.workflowId).map(w->w.name).orElse(i.workflowId));m.put("workflowInstanceId",i.id);m.put("requestCode",i.requestCode);m.put("nodeId",t.nodeId);m.put("taskType",t.taskType);m.put("title",t.title);m.put("description",t.description);Map<String,Object>assignee=new LinkedHashMap<>();assignee.put("id",t.assigneeId);assignee.put("displayName",t.assigneeId==null?"Pool":users.findById(t.assigneeId).map(u->u.displayName).orElse(t.assigneeId));m.put("assignee",assignee);m.put("candidateUserIds",candidates.findByTaskId(t.id).stream().map(c->c.userId).toList());ParticipantExecutionEntity pe=t.participantExecutionId==null?null:participants.findById(t.participantExecutionId).orElse(null);m.put("participantId",pe==null?null:pe.userId);m.put("participantName",pe==null?null:users.findById(pe.userId).map(u->u.displayName).orElse(pe.userId));var snap=jsons.read(t.resolutionSnapshot);if(snap.has("reviewedParticipantId")){m.put("reviewedParticipantId",snap.path("reviewedParticipantId").asText());m.put("reviewedParticipantName",snap.path("reviewedParticipantName").asText(snap.path("reviewedParticipantId").asText()));}if(snap.has("reviewedSubmission")){m.put("reviewedSubmission",jsons.mapper().convertValue(snap.path("reviewedSubmission"),Object.class));}m.put("status",t.status);m.put("priority",t.priority);m.put("dueAt",t.dueAt);m.put("formFields",jsons.mapper().convertValue(jsons.read(t.formSchema),Object.class));m.put("formSchema",jsons.mapper().convertValue(jsons.read(t.formSchema),Object.class));m.put("allowedActions",jsons.mapper().convertValue(jsons.read(t.allowedActions),Object.class));m.put("executionScope","EACH_PARTICIPANT");m.put("completionPolicy",jsons.mapper().convertValue(jsons.read(t.resolutionSnapshot).path("completionPolicy"),Object.class));m.put("createdAt",t.createdAt);m.put("createdBy","system");return m;}
     private Map<String,Object>taskSummary(WorkflowTaskEntity t){Map<String,Object>m=new LinkedHashMap<>();m.put("id",t.id);m.put("title",t.title);m.put("assignee",t.assigneeId==null?"Pool":users.findById(t.assigneeId).map(u->u.displayName).orElse(t.assigneeId));m.put("candidateUserIds",candidates.findByTaskId(t.id).stream().map(c->c.userId).toList());m.put("status",t.status);m.put("dueAt",t.dueAt);ParticipantExecutionEntity participant=t.participantExecutionId==null?null:participants.findById(t.participantExecutionId).orElse(null);m.put("participantExecutionId",t.participantExecutionId);m.put("participantId",participant==null?null:participant.userId);return m;}
-    private List<Map<String,Object>>timeline(String id){return events.findByInstanceIdOrderByCreatedAtAsc(id).stream().map(e->{Map<String,Object>m=new LinkedHashMap<>();m.put("id",e.id);m.put("time",e.createdAt);m.put("timestamp",e.createdAt);m.put("title",e.title);m.put("description",e.description);m.put("eventType",e.eventType);m.put("state",switch(e.eventStatus){case"SUCCESS"->"success";case"RUNNING"->"running";case"WAITING"->"waiting";default->"default";});m.put("status",e.eventStatus);m.put("participantId",e.participantExecutionId);return m;}).toList();}
+    private List<Map<String, Object>> timeline(String id) {
+        List<RuntimeEventEntity> eventList = events.findTimelineEvents(id);
+        List<NodeExecutionEntity> nodeExecList = executions.findByInstanceIdOrderByStartedAtAsc(id);
+        List<WorkflowTaskEntity> taskList = tasks.findByInstanceIdOrderByCreatedAtAsc(id);
+        Map<String, WorkflowTaskEntity> taskMap = new HashMap<>();
+        taskList.forEach(t -> taskMap.put(t.id, t));
+
+        // Map nodeExecutionId -> step info
+        Map<String, Map<String, Object>> stepInfoMap = new HashMap<>();
+        int stepCounter = 1;
+        for (NodeExecutionEntity ne : nodeExecList) {
+            String stepName = switch (ne.nodeType) {
+                case "START" -> "Bắt đầu";
+                case "END" -> "Kết thúc";
+                case "FORM" -> "Biểu mẫu / Khảo sát";
+                case "APPROVAL" -> "Phê duyệt";
+                case "REVIEW" -> "Xem xét / Đánh giá";
+                case "ASSIGNMENT" -> "Phân công / Thêm người";
+                case "NOTIFICATION" -> "Gửi thông báo";
+                case "CONDITION" -> "Điều kiện rẽ nhánh";
+                case "SYSTEM" -> "Hệ thống tự động";
+                default -> ne.nodeType;
+            };
+            Map<String, Object> info = new HashMap<>();
+            info.put("stepNo", stepCounter++);
+            info.put("stepName", stepName);
+            info.put("nodeType", ne.nodeType);
+            info.put("nodeId", ne.nodeId);
+            info.put("state", ne.state);
+            stepInfoMap.put(ne.id, info);
+        }
+
+        for (RuntimeEventEntity e : eventList) {
+            if (e.nodeExecutionId != null && stepInfoMap.containsKey(e.nodeExecutionId)) {
+                if ("NODE_STARTED".equals(e.eventType) && e.title != null && !e.title.isBlank()) {
+                    stepInfoMap.get(e.nodeExecutionId).put("stepName", e.title);
+                }
+            }
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (RuntimeEventEntity e : eventList) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", e.id);
+            m.put("time", e.createdAt);
+            m.put("timestamp", e.createdAt);
+            m.put("title", e.title);
+            m.put("description", e.description);
+            m.put("eventType", e.eventType);
+
+            int stepNo = 1;
+            String stepName = "Khởi tạo quy trình";
+            String nodeType = "TRIGGER";
+            String nodeId = null;
+
+            if (e.nodeExecutionId != null && stepInfoMap.containsKey(e.nodeExecutionId)) {
+                Map<String, Object> sInfo = stepInfoMap.get(e.nodeExecutionId);
+                stepNo = (int) sInfo.get("stepNo");
+                stepName = (String) sInfo.get("stepName");
+                nodeType = (String) sInfo.get("nodeType");
+                nodeId = (String) sInfo.get("nodeId");
+            } else if ("INSTANCE_COMPLETED".equals(e.eventType) || "INSTANCE_CANCELLED".equals(e.eventType)) {
+                stepNo = Math.max(stepCounter, 2);
+                stepName = "Kết thúc quy trình";
+                nodeType = "END";
+            }
+            m.put("stepNo", stepNo);
+            m.put("stepName", stepName);
+            m.put("nodeType", nodeType);
+            m.put("nodeId", nodeId);
+
+            if (e.actorId != null && !e.actorId.isBlank()) {
+                m.put("actorId", e.actorId);
+                m.put("actorName", users.findById(e.actorId).map(u -> u.displayName).orElse(e.actorId));
+            } else {
+                m.put("actorName", "Hệ thống");
+            }
+
+            String state = "completed";
+            String slaText = null;
+
+            if ("EXECUTION_FAILED".equals(e.eventType) || "INSTANCE_CANCELLED".equals(e.eventType) || "TASK_REJECTED".equals(e.eventType)) {
+                state = "failed";
+            } else if ("TASK_ASSIGNED".equals(e.eventType) || "TASK_CLAIMED".equals(e.eventType) || "TASK_VOTE_RECORDED".equals(e.eventType)) {
+                String taskId = null;
+                if (e.eventData != null && e.eventData.contains("\"taskId\"")) {
+                    try {
+                        taskId = jsons.read(e.eventData).path("taskId").asText(null);
+                    } catch (Exception ignored) {}
+                }
+                WorkflowTaskEntity relatedTask = taskId != null ? taskMap.get(taskId) : null;
+                if (relatedTask != null && OPEN.contains(relatedTask.status)) {
+                    state = "waiting";
+                    if (relatedTask.dueAt != null) {
+                        if (relatedTask.dueAt.isBefore(Instant.now())) {
+                            slaText = "Quá hạn " + formatDuration(Instant.now(), relatedTask.dueAt);
+                        } else {
+                            slaText = "SLA: Còn " + formatDuration(relatedTask.dueAt, Instant.now());
+                        }
+                    }
+                } else {
+                    state = "completed";
+                }
+            } else if ("NODE_STARTED".equals(e.eventType) || "NODE_WAITING".equals(e.eventType)) {
+                if (e.nodeExecutionId != null && stepInfoMap.containsKey(e.nodeExecutionId)) {
+                    String execState = (String) stepInfoMap.get(e.nodeExecutionId).get("state");
+                    state = "COMPLETED".equals(execState) ? "completed" : "running";
+                } else {
+                    state = "completed";
+                }
+            } else {
+                state = "completed";
+            }
+
+            m.put("state", state);
+            m.put("status", e.eventStatus);
+            m.put("slaText", slaText);
+            m.put("participantId", e.participantExecutionId);
+            result.add(m);
+        }
+        return result;
+    }
+
+    private String formatDuration(Instant later, Instant earlier) {
+        long seconds = java.time.Duration.between(earlier, later).abs().getSeconds();
+        long hours = seconds / 3600;
+        long minutes = (seconds % 3600) / 60;
+        if (hours > 24) {
+            long days = hours / 24;
+            return days + " ngày " + (hours % 24) + " giờ";
+        }
+        if (hours > 0) {
+            return hours + " giờ " + minutes + " phút";
+        }
+        return Math.max(1, minutes) + " phút";
+    }
     private Map<String,Object>executionMap(NodeExecutionEntity e){Map<String,Object>m=new LinkedHashMap<>();m.put("id",e.id);m.put("nodeId",e.nodeId);m.put("nodeType",e.nodeType);m.put("participantId",e.participantExecutionId);m.put("iterationNo",e.iterationNo);m.put("state",e.state);m.put("outcomePort",e.outcomePort);m.put("output",jsons.mapper().convertValue(jsons.read(e.outputData),Object.class));m.put("startedAt",e.startedAt);m.put("completedAt",e.completedAt);return m;}
     public List<Map<String,Object>>evaluations(String period,String participantId){List<EvaluationResultEntity>source=period!=null&&!period.isBlank()&&participantId!=null&&!participantId.isBlank()?evaluations.findByPeriodKeyAndParticipantUserId(period,participantId):period!=null&&!period.isBlank()?evaluations.findByPeriodKey(period):participantId!=null&&!participantId.isBlank()?evaluations.findByParticipantUserId(participantId):evaluations.findAll();return source.stream().sorted(Comparator.comparing((EvaluationResultEntity e)->e.createdAt).reversed()).map(e->{Map<String,Object>m=new LinkedHashMap<>();m.put("id",e.id);m.put("instanceId",e.instanceId);m.put("participantUserId",e.participantUserId);m.put("participantName",users.findById(e.participantUserId).map(u->u.displayName).orElse(e.participantUserId));m.put("period",e.periodKey);m.put("selfScore",e.selfScore);m.put("managerScore",e.managerScore);m.put("managerCompetency",e.managerCompetency);m.put("evaluationValid",e.evaluationValid);m.put("status",e.status);m.put("createdAt",e.createdAt);return m;}).toList();}
 }

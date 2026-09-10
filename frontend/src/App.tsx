@@ -77,6 +77,7 @@ const router = createBrowserRouter([
       { path: '/workflows/:id', element: <WorkflowDetail /> },
       { path: '/workflows/:id/history', element: <WorkflowDetail /> },
       { path: '/workflows/:id/runtime', element: <InstancesList /> },
+      { path: '/workflows/:id/instances', element: <InstancesList /> },
       {
         path: '/workflows/:id/designer',
         element: (

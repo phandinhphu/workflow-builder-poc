@@ -19,7 +19,7 @@ export default function Topbar() {
       crumbs.push('Danh sách Workflow');
       if (path.includes('/designer')) crumbs.push('Thiết kế Workflow');
       else if (path.includes('/history')) crumbs.push('Audit & History');
-      else if (path.includes('/runtime')) crumbs.push('Theo dõi Runtime');
+      else if (path.includes('/runtime') || path.endsWith('/instances')) crumbs.push('Theo dõi Runtime');
       else if (path.includes('/instances/')) crumbs.push('Chi tiết Instance');
     } else if (path.startsWith('/sync')) crumbs.push('Cơ cấu tổ chức');
     else if (path.startsWith('/settings')) crumbs.push('Vai trò hệ thống');
