@@ -23,6 +23,7 @@ import {
   FileSpreadsheet,
   Layers,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useDesignerStore } from '../stores/designerStore';
@@ -418,10 +419,14 @@ export default function NodeConfigPanel({
   node,
   onClose,
   onUpdate,
+  onDelete,
+  canDelete = true,
 }: {
   node: Node;
   onClose: () => void;
   onUpdate: (data: any) => void;
+  onDelete?: () => void;
+  canDelete?: boolean;
 }) {
   const data = node.data as any;
   const type = (data.nodeType || node.type || '').toLowerCase();
@@ -514,13 +519,27 @@ export default function NodeConfigPanel({
             <p className="text-[10px] text-muted">{config.desc}</p>
           </div>
         </div>
-        <button
-          onClick={onClose}
-          className="p-1 text-gray-400 hover:text-navy hover:bg-gray-200 rounded-md transition-colors"
-          aria-label="Đóng"
-        >
-          <XMarkIcon className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          {canDelete && onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+              aria-label="Xóa node"
+              title="Xóa node và các kết nối liên quan"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 text-gray-400 hover:text-navy hover:bg-gray-200 rounded-md transition-colors"
+            aria-label="Đóng"
+          >
+            <XMarkIcon className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       <div className="flex px-4 border-b border-border bg-white">

@@ -564,6 +564,7 @@ public class RuntimeEngineService {
         snapshot.put("assignmentMode", mode);
         snapshot.set("completionPolicy", config.path("completionPolicy"));
         snapshot.set("candidateUserIds", jsons.value(candidateIds));
+        snapshot.set("notificationChannels", config.path("channels"));
         // Attach the specific participantId being reviewed (for per-participant approval)
         if (context.has("reviewedParticipantId")) {
             snapshot.set("reviewedParticipantId", context.get("reviewedParticipantId"));
@@ -875,6 +876,11 @@ public class RuntimeEngineService {
         ObjectNode resolution = jsons.object(task.resolutionSnapshot);
         if ("CLAIMABLE_POOL".equals(resolution.path("assignmentMode").asText()) && !actor.equals(task.claimantId))
             throw ApiException.badRequest("TASK_MUST_BE_CLAIMED", "Task pool phải được claim trước khi xử lý");
+        String comment = nullable(request.path("comment").asText(null));
+        if (comment != null)
+            comment = comment.trim();
+        if ("REJECT".equals(normalized) && "APPROVAL".equalsIgnoreCase(task.taskType) && comment == null)
+            throw ApiException.badRequest("REJECTION_REASON_REQUIRED", "Vui lòng nhập lý do từ chối phê duyệt");
         ArrayNode fields = (ArrayNode) jsons.read(task.formSchema);
         JsonNode data = request.has("data") ? request.path("data") : request;
         ObjectNode output = normalizeSubmission(fields, data);
@@ -887,13 +893,16 @@ public class RuntimeEngineService {
         submission.action = normalized;
         submission.actorId = actor;
         submission.formData = jsons.write(output);
-        submission.commentText = request.path("comment").asText(null);
+        submission.commentText = comment;
         submission.createdAt = Instant.now();
         submissions.save(submission);
         task.status = "COMPLETE".equals(normalized) ? "COMPLETED"
                 : "REJECT".equals(normalized) ? "REJECTED" : "REQUEST_CHANGE";
         task.completedAt = Instant.now();
         tasks.saveAndFlush(task);
+        String actorName = users.findById(actor).map(u -> u.displayName).orElse(actor);
+        if ("REJECT".equals(normalized) && "APPROVAL".equalsIgnoreCase(task.taskType))
+            sendApprovalRejectionNotification(task, resolution, actorName, comment);
         NodeExecutionEntity execution = executions.findById(task.nodeExecutionId).orElseThrow();
         String port = outcome(execution.nodeType, normalized);
         boolean isPerParticipantTask = jsons.object(task.resolutionSnapshot).has("reviewedParticipantId");
@@ -914,11 +923,10 @@ public class RuntimeEngineService {
             cancelSiblingTasks(task);
             log.info("2. Cancelled sibling tasks...");
             ObjectNode finalOutput = aggregateTaskOutputs(execution, output, port, normalized,
-                    request.path("comment").asText(null), actor);
+                    comment, actor);
             log.info("3. Aggregated outputs...");
             completeExecution(execution, "COMPLETED", port, finalOutput);
             log.info("4. Completed execution...");
-            String actorName = users.findById(actor).map(u -> u.displayName).orElse(actor);
             String actionDesc = "COMPLETE".equals(normalized) ? "Đã hoàn thành" : "REJECT".equals(normalized) ? "Đã từ chối" : "Đã yêu cầu chỉnh sửa";
             event(task.instanceId, task.participantExecutionId, task.nodeExecutionId, "TASK_" + task.status,
                     actionDesc + " task", actorName + " " + actionDesc.toLowerCase(Locale.ROOT) + " task '" + task.title + "'", "SUCCESS", actor, finalOutput);
@@ -926,7 +934,6 @@ public class RuntimeEngineService {
                     definition(task.instanceId), port, 0);
         } else {
             log.info("waiting for completion policy...");
-            String actorName = users.findById(actor).map(u -> u.displayName).orElse(actor);
             String actionDesc = "COMPLETE".equals(normalized) ? "Đã duyệt/hoàn thành" : "REJECT".equals(normalized) ? "Đã từ chối" : "Đã yêu cầu chỉnh sửa";
             event(task.instanceId, task.participantExecutionId, task.nodeExecutionId, "TASK_VOTE_RECORDED",
                     "Đã ghi nhận kết quả", actorName + " " + actionDesc.toLowerCase(Locale.ROOT) + " task '" + task.title + "' (đang chờ các lượt xử lý khác)", "WAITING", actor, output);
@@ -1674,6 +1681,31 @@ public class RuntimeEngineService {
         if (task.description != null && !task.description.isBlank())
             sb.append(task.description);
         return sb.toString();
+    }
+
+    private void sendApprovalRejectionNotification(WorkflowTaskEntity task, ObjectNode resolution,
+            String rejectorName, String reason) {
+        String recipientId = nullable(resolution.path("reviewedParticipantId").asText(null));
+        if (recipientId == null && task.participantExecutionId != null) {
+            recipientId = participants.findById(task.participantExecutionId).map(p -> p.userId).orElse(null);
+        }
+        if (recipientId == null) {
+            recipientId = instances.findById(task.instanceId).map(i -> i.creatorId).orElse(null);
+        }
+        if (recipientId == null)
+            return;
+
+        String title = "Yêu cầu đã bị từ chối: " + task.title;
+        String body = rejectorName + " đã từ chối yêu cầu '" + task.title + "'.\nLý do: " + reason;
+        LinkedHashSet<String> channels = new LinkedHashSet<>();
+        channels.add("inapp");
+        JsonNode configuredChannels = resolution.path("notificationChannels");
+        if (configuredChannels.isArray())
+            configuredChannels.forEach(channel -> channels.add(channel.asText().toLowerCase(Locale.ROOT)));
+        for (String channel : channels) {
+            insertNotification(task.instanceId, task.id, recipientId, channel, title, body,
+                    "approval-rejected:" + task.id + ":" + recipientId + ":" + channel);
+        }
     }
 
     private void insertNotification(String instanceId, String taskId, String recipient, String channel, String title,

@@ -29,6 +29,8 @@ export default function MyTasksPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [formData, setFormData] = useState<Record<string, unknown>>({});
+  const [showRejectForm, setShowRejectForm] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
@@ -62,10 +64,24 @@ export default function MyTasksPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleReject = async (taskId: string) => {
+  const handleReject = async (taskId: string, reason?: string, reasonRequired = false) => {
+    const normalizedReason = reason?.trim();
+    if (reasonRequired && !normalizedReason) {
+      setToast({ message: 'Vui lòng nhập lý do từ chối', type: 'error' });
+      return;
+    }
     try {
-      const result = await rejectTask(taskId);
-      if (result.success) { setToast({ message: 'Task rejected', type: 'success' }); setSelectedTask(null); await loadTasks(); }
+      const result = await rejectTask(taskId, normalizedReason);
+      if (result.success) {
+        setToast({
+          message: reasonRequired ? 'Đã từ chối và gửi lý do đến người được phê duyệt' : 'Task rejected',
+          type: 'success'
+        });
+        setSelectedTask(null);
+        setShowRejectForm(false);
+        setRejectionReason('');
+        await loadTasks();
+      }
     } catch (cause) { setToast({ message: cause instanceof Error ? cause.message : 'Không thể từ chối task', type: 'error' }); }
     setTimeout(() => setToast(null), 3000);
   };
@@ -80,6 +96,8 @@ export default function MyTasksPage() {
       else if (field.type === 'checkbox') initial[key] = false;
     });
     setFormData(initial);
+    setShowRejectForm(false);
+    setRejectionReason('');
     setSelectedTask(task);
   };
 
@@ -332,17 +350,55 @@ export default function MyTasksPage() {
               </div>
             ) : null}
 
+            {showRejectForm && (
+              <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4">
+                <label className="block text-sm font-semibold text-red-900" htmlFor="rejection-reason">
+                  Lý do từ chối <span className="text-red-600">*</span>
+                </label>
+                <textarea
+                  id="rejection-reason"
+                  autoFocus
+                  value={rejectionReason}
+                  onChange={(event) => setRejectionReason(event.target.value)}
+                  placeholder="Nhập lý do để người được phê duyệt biết và điều chỉnh..."
+                  rows={3}
+                  className="mt-2 w-full rounded-md border border-red-300 bg-white px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200"
+                />
+                <p className="mt-1 text-xs text-red-700">Lý do này sẽ được gửi trong thông báo đến người được phê duyệt.</p>
+              </div>
+            )}
+
             <div className="flex justify-end gap-2 mt-6 pt-4 border-t">
               <button onClick={() => setSelectedTask(null)} className="px-4 py-2 border rounded text-sm hover:bg-gray-50 font-medium">Đóng</button>
               {selectedTask.status === 'CLAIMED' && (selectedTask.allowedActions ?? []).includes('REJECT') && (
-                <button
-                  onClick={() => void handleReject(selectedTask.id)}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-semibold"
-                >
-                  Từ chối
-                </button>
+                showRejectForm ? (
+                  <>
+                    <button
+                      onClick={() => { setShowRejectForm(false); setRejectionReason(''); }}
+                      className="px-4 py-2 border rounded text-sm hover:bg-gray-50 font-medium"
+                    >
+                      Hủy từ chối
+                    </button>
+                    <button
+                      disabled={!rejectionReason.trim()}
+                      onClick={() => void handleReject(selectedTask.id, rejectionReason, true)}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed text-white rounded text-sm font-semibold"
+                    >
+                      Gửi từ chối
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => selectedTask.taskType === 'APPROVAL'
+                      ? setShowRejectForm(true)
+                      : void handleReject(selectedTask.id)}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-semibold"
+                  >
+                    Từ chối
+                  </button>
+                )
               )}
-              {selectedTask.status === 'CLAIMED' && (selectedTask.allowedActions ?? []).includes('COMPLETE') && (
+              {!showRejectForm && selectedTask.status === 'CLAIMED' && (selectedTask.allowedActions ?? []).includes('COMPLETE') && (
                 <button
                   onClick={() => void handleComplete(selectedTask.id, formData)}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-sm font-semibold"

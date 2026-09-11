@@ -149,19 +149,48 @@ export const useDesignerStore = create<DesignerStore>((set) => ({
 
   setNodes: (nodesOrUpdater) => set((state) => ({
     nodes: typeof nodesOrUpdater === 'function' ? nodesOrUpdater(state.nodes) : nodesOrUpdater,
+    isDirty: true,
   })),
 
   setEdges: (edgesOrUpdater) => set((state) => ({
     edges: typeof edgesOrUpdater === 'function' ? edgesOrUpdater(state.edges) : edgesOrUpdater,
+    isDirty: true,
   })),
 
-  onNodesChange: (changes) => set((state) => ({
-    nodes: applyNodeChanges(changes, state.nodes),
-  })),
+  onNodesChange: (changes) => set((state) => {
+    const removedNodeIds = new Set(
+      changes.filter(change => change.type === 'remove').map(change => change.id)
+    );
+    const selectedNodeWasRemoved = state.selectedElementType === 'node'
+      && state.selectedElement != null
+      && removedNodeIds.has(state.selectedElement.id);
+    const workflowChanged = changes.some(change =>
+      change.type === 'add'
+      || change.type === 'remove'
+      || change.type === 'replace'
+      || change.type === 'position'
+    );
 
-  onEdgesChange: (changes) => set((state) => ({
-    edges: applyEdgeChanges(changes, state.edges),
-  })),
+    return {
+      nodes: applyNodeChanges(changes, state.nodes),
+      edges: removedNodeIds.size > 0
+        ? state.edges.filter(edge => !removedNodeIds.has(edge.source) && !removedNodeIds.has(edge.target))
+        : state.edges,
+      selectedElement: selectedNodeWasRemoved ? null : state.selectedElement,
+      selectedElementType: selectedNodeWasRemoved ? null : state.selectedElementType,
+      isDirty: workflowChanged ? true : state.isDirty,
+    };
+  }),
+
+  onEdgesChange: (changes) => set((state) => {
+    const workflowChanged = changes.some(change =>
+      change.type === 'add' || change.type === 'remove' || change.type === 'replace'
+    );
+    return {
+      edges: applyEdgeChanges(changes, state.edges),
+      isDirty: workflowChanged ? true : state.isDirty,
+    };
+  }),
 
   onConnect: (connection) => set((state) => {
     const { source, target, sourceHandle } = connection;
@@ -200,6 +229,7 @@ export const useDesignerStore = create<DesignerStore>((set) => ({
     nodes: state.nodes.filter(n => n.id !== id),
     edges: state.edges.filter(e => e.source !== id && e.target !== id),
     selectedElement: state.selectedElement?.id === id ? null : state.selectedElement,
+    selectedElementType: state.selectedElement?.id === id ? null : state.selectedElementType,
     isDirty: true,
   })),
 
