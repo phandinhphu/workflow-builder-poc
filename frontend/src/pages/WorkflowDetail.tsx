@@ -99,7 +99,7 @@ export default function WorkflowDetail() {
         <div className="flex border-b border-border bg-white">
           {[
             { id: 'info', name: 'Thông tin', icon: DocumentTextIcon },
-            { id: 'history', name: 'Audit & History', icon: ClockIcon },
+            // { id: 'history', name: 'Audit & History', icon: ClockIcon },
             { id: 'runtime', name: 'Theo dõi Runtime', icon: PlayIcon },
           ].map((tab) => (
             <button
