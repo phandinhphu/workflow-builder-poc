@@ -18,6 +18,10 @@ const PRIORITY_BADGES: Record<string, { label: string; color: string }> = {
   URGENT: { label: 'Urgent', color: 'bg-red-100 text-red-600' },
 };
 
+const hasTaskBeenClaimed = (task: any) => Boolean(
+  task.claimedAt || task.claimantId || task.status === 'CLAIMED' || task.status === 'IN_PROGRESS'
+);
+
 export default function MyTasksPage() {
   const { tasks, total, loading, error, loadTasks, claimTask, completeTask, rejectTask } = useMyTasksStore();
   const [statusFilter, setStatusFilter] = useState('');
@@ -67,6 +71,8 @@ export default function MyTasksPage() {
   };
 
   const openTask = (task: any) => {
+    if (!hasTaskBeenClaimed(task)) return;
+
     const initial: Record<string, unknown> = {};
     (task.formFields ?? []).forEach((field: any) => {
       const key = field.outputMapping || field.id;
@@ -204,35 +210,22 @@ export default function MyTasksPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1">
-                      <button
-                        onClick={() => openTask(task)}
-                        className="p-1 hover:bg-gray-100 rounded"
-                        title="View Details"
-                      >
-                        <Eye className="w-4 h-4 text-gray-500" />
-                      </button>
+                      {hasTaskBeenClaimed(task) && (
+                        <button
+                          onClick={() => openTask(task)}
+                          className="p-1 hover:bg-gray-100 rounded"
+                          title="Mở task để xử lý"
+                          aria-label={`Mở task ${task.title} để xử lý`}
+                        >
+                          <Eye className="w-4 h-4 text-gray-500" />
+                        </button>
+                      )}
                       {task.status === 'PENDING' && (
                         <button
                           onClick={() => handleClaim(task.id)}
                           className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
                         >
                           Claim
-                        </button>
-                      )}
-                      {task.status === 'CLAIMED' && (task.allowedActions ?? []).includes('COMPLETE') && (
-                        <button
-                          onClick={() => handleComplete(task.id, {})}
-                          className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
-                        >
-                          {['APPROVAL', 'REVIEW'].includes(task.taskType) ? 'Approve' : 'Complete'}
-                        </button>
-                      )}
-                      {task.status === 'CLAIMED' && (task.allowedActions ?? []).includes('REJECT') && (
-                        <button
-                          onClick={() => handleReject(task.id)}
-                          className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
-                        >
-                          Reject
                         </button>
                       )}
                     </div>
@@ -249,7 +242,7 @@ export default function MyTasksPage() {
         )}
       </div>
 
-      {selectedTask && (selectedTask.taskType === 'ASSIGNMENT' ? (
+      {selectedTask && (selectedTask.taskType === 'ASSIGNMENT' && selectedTask.status === 'CLAIMED' ? (
         <AssignmentTaskModal
           taskId={selectedTask.id}
           taskTitle={selectedTask.title}
@@ -341,14 +334,6 @@ export default function MyTasksPage() {
 
             <div className="flex justify-end gap-2 mt-6 pt-4 border-t">
               <button onClick={() => setSelectedTask(null)} className="px-4 py-2 border rounded text-sm hover:bg-gray-50 font-medium">Đóng</button>
-              {selectedTask.status === 'PENDING' && (
-                <button
-                  onClick={async () => { await handleClaim(selectedTask.id); setSelectedTask(null); }}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-semibold"
-                >
-                  Nhận việc (Claim)
-                </button>
-              )}
               {selectedTask.status === 'CLAIMED' && (selectedTask.allowedActions ?? []).includes('REJECT') && (
                 <button
                   onClick={() => void handleReject(selectedTask.id)}

@@ -191,9 +191,9 @@ function FormFieldPreview({ field }: { field: FormField }) {
 
 function findUpstreamNodes(nodeId: string, nodes: Node[], edges: Edge[]): Node[] {
   const upstream: Node[] = [];
-  const visited = new Set<string>();
+  const visited = new Set<string>([nodeId]);
 
-  const incomingEdges = edges.filter(e => e.target === nodeId && e.sourceHandle !== 'false');
+  const incomingEdges = edges.filter(e => e.target === nodeId);
   const queue: string[] = incomingEdges.map(e => e.source);
 
   while (queue.length > 0) {
@@ -204,7 +204,7 @@ function findUpstreamNodes(nodeId: string, nodes: Node[], edges: Edge[]): Node[]
     const found = nodes.find(n => n.id === currentId);
     if (found) {
       upstream.push(found);
-      const prevEdges = edges.filter(e => e.target === currentId && e.sourceHandle !== 'false');
+      const prevEdges = edges.filter(e => e.target === currentId);
       for (const pe of prevEdges) {
         if (!visited.has(pe.source)) queue.push(pe.source);
       }
@@ -258,7 +258,7 @@ function InputDataTab({
             <div className="space-y-2">
               {upstreamNodes.map(node => {
                 const nodeData = node.data as any;
-                const nodeType = (nodeData?.type || node.type || '').toUpperCase();
+                const nodeType = String(nodeData?.nodeType || nodeData?.type || (node.type === 'custom' ? '' : node.type) || '').toUpperCase();
                 const nodeLabel = nodeData?.name || nodeData?.label || node.id;
                 return (
                   <div key={node.id} className="border-b border-gray-100 pb-2 last:border-0 last:pb-0">
@@ -268,30 +268,33 @@ function InputDataTab({
                     <div className="flex flex-wrap gap-1">
                       {nodeType === 'APPROVAL' && (
                         <>
-                          <ContextRefBadge path={`nodes.${node.id}.approved`} />
-                          <ContextRefBadge path={`nodes.${node.id}.outcome`} />
-                          <ContextRefBadge path={`nodes.${node.id}.comment`} />
+                          <ContextRefBadge path={`nodes.${node.id}.output.approved`} />
+                          <ContextRefBadge path={`nodes.${node.id}.output.outcome`} />
+                          <ContextRefBadge path={`nodes.${node.id}.output.comment`} />
                         </>
                       )}
                       {nodeType === 'REVIEW' && (
                         <>
-                          <ContextRefBadge path={`nodes.${node.id}.reviewed`} />
-                          <ContextRefBadge path={`nodes.${node.id}.outcome`} />
+                          <ContextRefBadge path={`nodes.${node.id}.output.reviewed`} />
+                          <ContextRefBadge path={`nodes.${node.id}.output.outcome`} />
                         </>
                       )}
                       {nodeType === 'ASSIGNMENT' && (
                         <>
-                          <ContextRefBadge path={`nodes.${node.id}.participantIds`} />
-                          <ContextRefBadge path={`nodes.${node.id}.totalParticipants`} />
+                          <ContextRefBadge path={`nodes.${node.id}.output.participantIds`} />
+                          <ContextRefBadge path={`nodes.${node.id}.output.totalParticipants`} />
                         </>
                       )}
                       {nodeType === 'FORM' && (
                         <>
-                          <ContextRefBadge path={`nodes.${node.id}.totalSubmissions`} />
+                          <ContextRefBadge path={`nodes.${node.id}.output.totalSubmissions`} />
                           {(nodeData?.formFields || []).map((f: FormField) => (
-                            <ContextRefBadge key={f.id} path={`nodes.${node.id}.${f.id}`} />
+                            <ContextRefBadge key={f.id} path={`nodes.${node.id}.output.${f.outputMapping || f.id}`} />
                           ))}
                         </>
+                      )}
+                      {nodeType === 'CONDITION' && (
+                        <ContextRefBadge path={`nodes.${node.id}.output.result`} />
                       )}
                     </div>
                   </div>
@@ -448,24 +451,22 @@ export default function NodeConfigPanel({
 
   // Upstream Assignment and Form nodes for dynamic binding
   const upstreamAssignmentNodes = useMemo(() => {
-    return nodes.filter(
+    return upstreamNodes.filter(
       n =>
-        n.id !== node.id &&
         ((n.data as any)?.nodeType === 'assignment' ||
           n.type === 'assignment' ||
           (n.data as any)?.type === 'ASSIGNMENT')
     );
-  }, [nodes, node.id]);
+  }, [upstreamNodes]);
 
   const upstreamFormNodes = useMemo(() => {
-    return nodes.filter(
+    return upstreamNodes.filter(
       n =>
-        n.id !== node.id &&
         ((n.data as any)?.nodeType === 'form' ||
           n.type === 'form' ||
           (n.data as any)?.type === 'FORM')
     );
-  }, [nodes, node.id]);
+  }, [upstreamNodes]);
 
   const openTriggerLibrary = () => {
     setPanel('trigger-library');
@@ -1362,6 +1363,7 @@ export default function NodeConfigPanel({
         onClose={() => setConditionModalOpen(false)}
         expression={conditionExpression}
         onSave={setConditionExpression}
+        nodes={upstreamNodes}
       />
     </div>
   );

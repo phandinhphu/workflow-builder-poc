@@ -56,4 +56,18 @@ class RuntimeValueResolverTest {
         assertThat(fallback.resolved()).isTrue();
         assertThat(fallback.value().asInt()).isZero();
     }
+
+    @Test
+    void evaluatesCanonicalFormOutputsAndTypeAwareCollectionOperators() {
+        ObjectNode formOutput = context.withObject("nodes").putObject("form-1").putObject("output");
+        formOutput.put("amount", 12_500_000);
+        formOutput.put("department", "IT");
+        formOutput.putArray("tags").add("urgent").add("hardware");
+        context.putObject("variables").putArray("allowedDepartments").add("HR").add("IT");
+
+        assertThat(resolver.evaluate("${nodes.form-1.output.amount} >= 10000000", context)).isTrue();
+        assertThat(resolver.evaluate("contains(${nodes.form-1.output.tags}, 'urgent')", context)).isTrue();
+        assertThat(resolver.evaluate("in(${nodes.form-1.output.department}, 'HR, IT')", context)).isTrue();
+        assertThat(resolver.evaluate("in(${nodes.form-1.output.department}, ${variables.allowedDepartments})", context)).isTrue();
+    }
 }

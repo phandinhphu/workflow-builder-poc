@@ -276,6 +276,7 @@ public class WorkflowCompiler {
             String key = parts.length >= 4 && "output".equals(parts[2]) ? parts[3] : parts[2];
             // Built-in output field type inference
             if ("approved".equalsIgnoreCase(key) || "reviewed".equalsIgnoreCase(key)) return ExpressionEngine.ValueType.BOOLEAN;
+            if ("result".equalsIgnoreCase(key) && "CONDITION".equalsIgnoreCase(source.path("type").asText())) return ExpressionEngine.ValueType.BOOLEAN;
             if ("totalParticipants".equalsIgnoreCase(key) || "totalSubmissions".equalsIgnoreCase(key)) return ExpressionEngine.ValueType.NUMBER;
             if ("participantIds".equalsIgnoreCase(key) || "participants".equalsIgnoreCase(key) || "submissionList".equalsIgnoreCase(key)) return ExpressionEngine.ValueType.ARRAY;
             if ("outcome".equalsIgnoreCase(key) || "comment".equalsIgnoreCase(key) || "approverId".equalsIgnoreCase(key) || "reviewerId".equalsIgnoreCase(key)) return ExpressionEngine.ValueType.STRING;
@@ -332,6 +333,7 @@ public class WorkflowCompiler {
             case "APPROVAL" -> Set.of("approved", "outcome", "comment", "approverId", "action", "output");
             case "REVIEW" -> Set.of("reviewed", "outcome", "comment", "reviewerId", "action", "output");
             case "FORM" -> Set.of("submissions", "submissionList", "totalSubmissions", "output");
+            case "CONDITION" -> Set.of("result", "output");
             default -> Set.of("output");
         };
         outputs.addAll(builtInOutputs);

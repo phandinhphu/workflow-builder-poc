@@ -18,7 +18,7 @@ public final class ExpressionEngine {
     public record Analysis(boolean valid, ValueType type, List<String> errors, List<String> references) {}
     public record Evaluation(boolean success, JsonNode value, ValueType type, String error) {}
 
-    private static final Pattern EXPRESSION_MARKER = Pattern.compile("(?:\\$\\{[^}]+}|\\([^)]*\\))\\s*(?:[+\\-*/%]|==|!=|>=|<=|>|<|&&|\\|\\|)|^(?:!|NOT\\s+|(?:contains|matches|length|lower|upper|coalesce|isNull|isNotNull)\\s*\\()", Pattern.CASE_INSENSITIVE);
+    private static final Pattern EXPRESSION_MARKER = Pattern.compile("(?:\\$\\{[^}]+}|\\([^)]*\\))\\s*(?:[+\\-*/%]|==|!=|>=|<=|>|<|&&|\\|\\|)|^(?:!|NOT\\s+|(?:contains|in|matches|length|lower|upper|coalesce|isNull|isNotNull)\\s*\\()", Pattern.CASE_INSENSITIVE);
 
     public boolean looksLikeExpression(String value) {
         return value != null && EXPRESSION_MARKER.matcher(value.trim()).find();
@@ -101,6 +101,11 @@ public final class ExpressionEngine {
                 if (!arguments.isEmpty() && !List.of(ValueType.STRING, ValueType.ARRAY).contains(arguments.getFirst())) errors.add("contains yêu cầu đối số đầu là STRING hoặc ARRAY");
                 return ValueType.BOOLEAN;
             }
+            case "in" -> {
+                arity(name, arguments, 2, errors);
+                if (arguments.size() >= 2 && !List.of(ValueType.STRING, ValueType.ARRAY).contains(arguments.get(1))) errors.add("in yêu cầu đối số thứ hai là danh sách ARRAY hoặc chuỗi phân cách bằng dấu phẩy");
+                return ValueType.BOOLEAN;
+            }
             case "matches" -> { arity(name, arguments, 2, errors); arguments.forEach(type -> require(type, ValueType.STRING, name, errors)); return ValueType.BOOLEAN; }
             case "length" -> {
                 arity(name, arguments, 1, errors);
@@ -180,6 +185,20 @@ public final class ExpressionEngine {
                 if (source.type == ValueType.STRING) yield new Value(ValueType.BOOLEAN, String.valueOf(source.value).contains(String.valueOf(needle.value)));
                 if (source.type == ValueType.ARRAY) yield new Value(ValueType.BOOLEAN, ((List<?>) source.value).contains(needle.value));
                 throw new ExpressionException("contains yêu cầu STRING hoặc ARRAY");
+            }
+            case "in" -> {
+                Value needle = arguments.get(0), collection = arguments.get(1);
+                if (collection.type == ValueType.ARRAY) {
+                    yield new Value(ValueType.BOOLEAN, ((List<?>) collection.value).stream()
+                            .anyMatch(item -> Objects.equals(normalizeNumber(item), normalizeNumber(needle.value))));
+                }
+                if (collection.type == ValueType.STRING) {
+                    String expected = String.valueOf(needle.value).trim();
+                    boolean found = java.util.Arrays.stream(String.valueOf(collection.value).split(","))
+                            .map(String::trim).anyMatch(expected::equals);
+                    yield new Value(ValueType.BOOLEAN, found);
+                }
+                throw new ExpressionException("in yêu cầu danh sách ARRAY hoặc chuỗi phân cách bằng dấu phẩy");
             }
             case "matches" -> new Value(ValueType.BOOLEAN, stringValue(arguments.get(0), name).matches(stringValue(arguments.get(1), name)));
             case "length" -> new Value(ValueType.NUMBER, BigDecimal.valueOf(switch (arguments.getFirst().type) { case STRING -> String.valueOf(arguments.getFirst().value).length(); case ARRAY -> ((List<?>) arguments.getFirst().value).size(); case OBJECT -> ((java.util.Map<?, ?>) arguments.getFirst().value).size(); default -> throw new ExpressionException("length yêu cầu STRING, ARRAY hoặc OBJECT"); }));
