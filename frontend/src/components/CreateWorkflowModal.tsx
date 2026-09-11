@@ -19,7 +19,7 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
     module: 'Operations',
     owner: currentUser?.id ?? '',
     version: '1.0',
-    executionPattern: 'ON_DEMAND' as 'ON_DEMAND' | 'BATCH_CAMPAIGN',
+    executionPattern: 'ON_DEMAND',
   });
   const [participantScope, setParticipantScope] = useState<ParticipantScope>({
     enabled: false,
@@ -64,7 +64,7 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 className="text-xl font-bold text-navy">Tạo workflow</h2>
@@ -77,23 +77,23 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
         <div className="flex-1 overflow-y-auto px-6 py-6">
           <div className="mb-6">
             <h3 className="text-base font-semibold text-navy mb-4 border-b border-gray-100 pb-2">Thông tin cơ bản</h3>
-            
+
             <div className="flex gap-4 mb-6">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="radio" 
-                  name="createType" 
-                  checked={createType === 'blank'} 
+                <input
+                  type="radio"
+                  name="createType"
+                  checked={createType === 'blank'}
                   onChange={() => setCreateType('blank')}
                   className="w-4 h-4 text-primary focus:ring-primary border-gray-300"
                 />
                 <span className="text-sm font-medium">Tạo từ workflow trống</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="radio" 
-                  name="createType" 
-                  checked={createType === 'template'} 
+                <input
+                  type="radio"
+                  name="createType"
+                  checked={createType === 'template'}
                   onChange={() => setCreateType('template')}
                   className="w-4 h-4 text-primary focus:ring-primary border-gray-300"
                 />
@@ -107,7 +107,7 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Chọn Template <span className="text-danger">*</span>
                   </label>
-                  <select 
+                  <select
                     name="templateId"
                     value={formData.templateId}
                     onChange={handleChange}
@@ -125,8 +125,8 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Tên workflow <span className="text-danger">*</span>
                 </label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   name="name"
                   required
                   value={formData.name}
@@ -139,7 +139,7 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Mô tả
                 </label>
-                <textarea 
+                <textarea
                   name="description"
                   rows={3}
                   value={formData.description}
@@ -154,7 +154,7 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Loại workflow <span className="text-danger">*</span>
                   </label>
-                  <select 
+                  <select
                     name="type"
                     required
                     value={formData.type}
@@ -170,7 +170,7 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Module
                   </label>
-                  <select 
+                  <select
                     name="module"
                     value={formData.module}
                     onChange={handleChange}
@@ -184,7 +184,7 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
               </div>
 
               {/* Execution Pattern Selector */}
-              <div>
+              {/* <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Mô hình vận hành (Execution Pattern) <span className="text-danger">*</span>
                 </label>
@@ -235,18 +235,18 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
                     </p>
                   </div>
                 </div>
-              </div>
+              </div> */}
 
               <div className="pt-4 mt-2">
                 <h3 className="text-base font-semibold text-navy mb-4 border-b border-gray-100 pb-2">Quyền sở hữu & Phiên bản</h3>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Người sở hữu <span className="text-danger">*</span>
                     </label>
                     <div className="relative">
-                      <select 
+                      <select
                         name="owner"
                         required
                         value={formData.owner}
@@ -266,8 +266,8 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Phiên bản
                     </label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value="1.0"
                       disabled
                       className="w-full border border-border rounded-md px-3 py-2 text-sm bg-gray-50 text-gray-500 cursor-not-allowed"
@@ -447,15 +447,15 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-border bg-gray-50 flex justify-end gap-3">
-          <button 
-            type="button" 
+          <button
+            type="button"
             onClick={onClose}
             className="px-4 py-2 border border-border rounded-md bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Hủy
           </button>
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             form="create-workflow-form"
             className="px-4 py-2 bg-primary rounded-md text-white text-sm font-medium hover:bg-primary-dark"
           >

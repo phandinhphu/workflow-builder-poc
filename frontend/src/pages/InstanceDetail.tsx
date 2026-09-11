@@ -263,7 +263,7 @@ export default function InstanceDetail() {
               { id: 'audit', label: 'Audit & History' },
               { id: 'tasks', label: 'Tasks' },
               { id: 'context', label: 'Workflow Context' },
-              { id: 'participants', label: `Người tham gia (${instance.participants?.length ?? instance.participantCount ?? 0})` },
+            //   { id: 'participants', label: `Người tham gia (${instance.participants?.length ?? instance.participantCount ?? 0})` },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -291,8 +291,8 @@ export default function InstanceDetail() {
                   <div><span className="text-muted">Người tạo:</span> <span className="font-semibold text-navy ml-2">{instance.creatorName}</span></div>
                   <div><span className="text-muted">Bắt đầu lúc:</span> <span className="font-medium text-gray-700 ml-2">{instance.startedAt}</span></div>
                   <div><span className="text-muted">Kết thúc lúc:</span> <span className="font-medium text-gray-700 ml-2">{instance.completedAt ?? '—'}</span></div>
-                  <div><span className="text-muted">Số người tham gia:</span> <span className="font-semibold text-navy ml-2">{instance.participantCount}</span></div>
-                  <div><span className="text-muted">Số người hoàn thành:</span> <span className="font-semibold text-navy ml-2">{instance.completedParticipantCount}</span></div>
+                  {/* <div><span className="text-muted">Số người tham gia:</span> <span className="font-semibold text-navy ml-2">{instance.participantCount}</span></div> */}
+                  {/* <div><span className="text-muted">Số người hoàn thành:</span> <span className="font-semibold text-navy ml-2">{instance.completedParticipantCount}</span></div> */}
                   <div><span className="text-muted">SLA Status:</span> <span className="font-semibold text-navy ml-2">{instance.slaStatus ?? 'ON_TIME'}</span></div>
                   <div><span className="text-muted">Trạng thái:</span> <span className="font-semibold text-navy ml-2">{instance.status}</span></div>
                 </div>
@@ -437,7 +437,7 @@ export default function InstanceDetail() {
                                     )}
                                   </div>
                                   <p className="text-gray-600 mt-0.5 text-xs leading-relaxed">{entry.description}</p>
-                                  
+
                                   <div className="flex flex-wrap items-center gap-2 mt-1.5">
                                     {entry.actorName && entry.actorName !== 'Hệ thống' && (
                                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-[11px] font-medium">
