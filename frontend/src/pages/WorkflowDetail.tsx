@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeftIcon, ClockIcon, DocumentTextIcon, PlayIcon, PauseIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, DocumentTextIcon, PlayIcon, PauseIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 import VersionHistoryModal from '../components/VersionHistoryModal';
 import ConfirmDialog from '../components/ConfirmDialog';

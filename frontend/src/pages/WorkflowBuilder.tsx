@@ -107,8 +107,8 @@ function runtimeNodeType(t: unknown): NodeType {
 
 function buildWorkflowNodes(wf?: ReturnType<typeof getWorkflow>): { nodes: Node[]; edges: Edge[] } {
   const triggerType = wf?.trigger?.type ?? 'manual';
-  const startNode: Node = { id: 'start-1', type: 'custom', data: { label: 'Bắt đầu', nodeType: 'start', subLabel: triggerTypeLabel(triggerType), triggerType }, position: { x: 300, y: 50 } };
-  const endNode: Node = { id: 'end-1', type: 'custom', data: { label: 'Kết thúc', nodeType: 'end' }, position: { x: 300, y: 50 } };
+  const startNode: Node = { id: 'start-1', type: 'custom', data: { label: 'Bắt đầu', nodeType: 'start', subLabel: triggerTypeLabel(triggerType), triggerType }, position: { x: 300, y: 50 }, deletable: false };
+  const endNode: Node = { id: 'end-1', type: 'custom', data: { label: 'Kết thúc', nodeType: 'end' }, position: { x: 300, y: 50 }, deletable: false };
 
   const persisted = wf?.nodes ?? [];
   const persistedStart = persisted.find(node => node.type === 'START');
@@ -181,7 +181,7 @@ export default function WorkflowBuilder() {
     isDirty, savedAt, panel, trigger, variables, participantScope, participantNotification,
     onNodesChange, onEdgesChange, onConnect, setNodes,
     setSelectedElement, setIsDirty, setSavedAt, setPanel, setWorkflowData,
-    updateNodeData, updateEdgeData, removeEdge, reset, setTrigger,
+    updateNodeData, updateEdgeData, removeNode, removeEdge, reset, setTrigger,
   } = store;
 
   const toasts = useToasts();
@@ -279,6 +279,7 @@ export default function WorkflowBuilder() {
         id: `${type}-${Date.now()}`,
         type: 'custom',
         position,
+        deletable: type !== 'start' && type !== 'end',
         data: {
           label: label || 'Bước mới',
           nodeType: type,
@@ -506,6 +507,7 @@ export default function WorkflowBuilder() {
             onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
             nodeTypes={nodeTypes}
+            deleteKeyCode={['Backspace', 'Delete']}
             fitView
           >
             <Controls className="!bg-surface !border-border !shadow-sm [&>button]:!border-b-border [&>button]:!text-navy" />
@@ -519,6 +521,8 @@ export default function WorkflowBuilder() {
             node={selectedElement as Node}
             onClose={() => setSelectedElement(null, null)}
             onUpdate={(data) => updateNodeData(selectedElement.id, data)}
+            onDelete={() => removeNode(selectedElement.id)}
+            canDelete={!['start', 'end'].includes(String((selectedElement as Node).data?.nodeType).toLowerCase())}
           />
         )}
         {selectedElement && selectedElementType === 'edge' && (
