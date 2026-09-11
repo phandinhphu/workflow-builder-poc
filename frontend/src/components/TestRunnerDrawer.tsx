@@ -92,6 +92,25 @@ function unwrapParens(expr: string): string {
 }
 
 function evaluateAtomic(expr: string, ctx: Record<string, unknown>): boolean {
+  const nullFunction = expr.match(/^(isNull|isNotNull)\s*\(\s*\$\{([^}]+)\}\s*\)$/i);
+  if (nullFunction) {
+    const value = get(ctx, nullFunction[2].trim());
+    const isNull = value === null || value === undefined || value === '';
+    return nullFunction[1].toLowerCase() === 'isnull' ? isNull : !isNull;
+  }
+
+  const collectionFunction = expr.match(/^(contains|in)\s*\(\s*\$\{([^}]+)\}\s*,\s*(.*)\)$/i);
+  if (collectionFunction) {
+    const [, operator, path, rawValue] = collectionFunction;
+    const lhs = get(ctx, path.trim());
+    const rhs = parseAtomicValue(rawValue, ctx);
+    if (operator.toLowerCase() === 'contains') {
+      return Array.isArray(lhs) ? lhs.some(item => item === rhs) : String(lhs ?? '').includes(String(rhs ?? ''));
+    }
+    const values = Array.isArray(rhs) ? rhs : String(rhs ?? '').split(',').map(item => item.trim());
+    return values.some(item => String(item) === String(lhs));
+  }
+
   const match = expr.match(/^\$\{([^}]+)\}\s*(==|!=|>=|<=|>|<|contains|in|isNull|isNotNull)\s*(.*)$/);
   if (!match) return expr.length > 0;
   const [, path, op, rawRhs] = match;
@@ -100,17 +119,7 @@ function evaluateAtomic(expr: string, ctx: Record<string, unknown>): boolean {
   if (op === 'isNull') return lhs === null || lhs === undefined || lhs === '';
   if (op === 'isNotNull') return !(lhs === null || lhs === undefined || lhs === '');
 
-  let rhs: unknown;
-  const rhsTrim = rawRhs.trim();
-  if (rhsTrim.startsWith('${')) {
-    rhs = get(ctx, rhsTrim.slice(2, -1).trim());
-  } else if (/^".*"$/.test(rhsTrim) || /^'.*'$/.test(rhsTrim)) {
-    rhs = rhsTrim.slice(1, -1);
-  } else if (rhsTrim !== '' && !Number.isNaN(Number(rhsTrim))) {
-    rhs = Number(rhsTrim);
-  } else {
-    rhs = rhsTrim;
-  }
+  const rhs = parseAtomicValue(rawRhs, ctx);
 
   switch (op) {
     case '==': return lhs == rhs;
@@ -136,9 +145,21 @@ function evaluateAtomic(expr: string, ctx: Record<string, unknown>): boolean {
   }
 }
 
+function parseAtomicValue(rawValue: string, ctx: Record<string, unknown>): unknown {
+  const value = rawValue.trim();
+  if (value.startsWith('${') && value.endsWith('}')) return get(ctx, value.slice(2, -1).trim());
+  if (/^".*"$/.test(value) || /^'.*'$/.test(value)) return value.slice(1, -1);
+  if (/^true$/i.test(value)) return true;
+  if (/^false$/i.test(value)) return false;
+  if (/^null$/i.test(value)) return null;
+  if (value !== '' && !Number.isNaN(Number(value))) return Number(value);
+  return value;
+}
+
 function evaluate(expr: string, ctx: Record<string, unknown>): boolean {
   let s = unwrapParens(expr.trim());
   if (!s) return true;
+  s = s.replace(/\|\|/g, ' OR ').replace(/&&/g, ' AND ');
   const orParts = splitTopLevel(s, 'OR');
   if (orParts.length > 1) return orParts.some(p => evaluate(p, ctx));
   const andParts = splitTopLevel(s, 'AND');
@@ -250,21 +271,22 @@ export default function TestRunnerDrawer({ isOpen, onClose, nodes, edges, trigge
         };
         const outputs: Record<string, unknown> = {};
         formFields.forEach(f => {
-          if (!f.outputMapping) return;
+          const outputKey = String(f.outputMapping || f.id || '').trim();
+          if (!outputKey) return;
           let value: unknown = f.defaultValue ?? '';
           if (!value || String(value).startsWith('${')) {
             const body = (ctx.trigger as any)?.body ?? {};
-            value = body[f.outputMapping] ?? value;
+            value = body[outputKey] ?? body[f.id] ?? value;
           }
-          outputs[f.outputMapping] = value;
-          if (String(f.outputMapping).includes('.')) {
-            const [ns, field] = String(f.outputMapping).split('.');
+          outputs[outputKey] = value;
+          if (outputKey.includes('.')) {
+            const [ns, field] = outputKey.split('.');
             const nsObj = ((ctx as Record<string, unknown>)[ns] ?? {}) as Record<string, unknown>;
             nsObj[field] = value;
             (ctx as Record<string, unknown>)[ns] = nsObj;
           }
         });
-        (ctx.nodes as Record<string, unknown>)[node.id] = outputs;
+        (ctx.nodes as Record<string, unknown>)[node.id] = { ...outputs, output: { ...outputs } };
       }
 
       if (typeof data.message === 'string') step.message = substitute(data.message, ctx);
@@ -276,8 +298,9 @@ export default function TestRunnerDrawer({ isOpen, onClose, nodes, edges, trigge
         const expr = String(data.condition ?? '');
         const result = expr ? evaluate(expr, ctx) : true;
         step.condition = { expression: expr || '(trống → TRUE)', result };
+        (ctx.nodes as Record<string, unknown>)[node.id] = { result, output: { result } };
         nextIds = outgoing.filter(e => (e.sourceHandle ?? 'true') === (result ? 'true' : 'false')).map(e => e.target);
-        if (nextIds.length === 0) nextIds = outgoing.map(e => e.target);
+        if (nextIds.length === 0) nextIds = outgoing.filter(e => e.data?.isDefault === true).map(e => e.target);
       } else {
         nextIds = outgoing.map(e => e.target);
       }

@@ -9,15 +9,12 @@ import {
   Layers,
   FileSpreadsheet
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import type { WorkflowDefinition } from '../types/workflow';
 
-interface ServiceCatalogProps {
-  onNavigateToInstance?: (instanceId: string) => void;
-  onNavigateToTasks?: () => void;
-}
-
-export default function ServiceCatalog({ onNavigateToInstance, onNavigateToTasks }: ServiceCatalogProps) {
+export default function ServiceCatalog() {
+  const navigate = useNavigate();
   const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -51,11 +48,7 @@ export default function ServiceCatalog({ onNavigateToInstance, onNavigateToTasks
         requestCode: `REQ-${workflow.name.replace(/\s+/g, '-').toUpperCase()}-${Date.now().toString().slice(-4)}`
       });
       if (res && res.id) {
-        if (onNavigateToTasks) {
-          onNavigateToTasks();
-        } else if (onNavigateToInstance) {
-          onNavigateToInstance(res.id);
-        }
+        navigate('/my-tasks');
       }
     } catch (err: any) {
       alert(err.message || 'Lỗi khởi tạo quy trình');

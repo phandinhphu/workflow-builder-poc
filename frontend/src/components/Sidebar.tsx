@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   Squares2X2Icon, UsersIcon, HomeIcon, DocumentTextIcon,
   BuildingOffice2Icon, ShieldCheckIcon, ChevronDownIcon,
-  ClipboardDocumentCheckIcon, LinkIcon, SparklesIcon,
+  ClipboardDocumentCheckIcon, SparklesIcon,
   ArrowRightOnRectangleIcon, UserCircleIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';

@@ -1,0 +1,605 @@
+Project workflow_builder {
+  database_type: 'MySQL'
+  Note: 'Workflow Builder POC - MySQL 8.4. Dong bo tu Flyway migrations V1-V4. Khong include flyway_schema_history (bang he thong).'
+}
+
+// =====================================================
+// 1. ORGANIZATION & HRM
+// =====================================================
+
+Table organization_units as org [headercolor: #2D6A4F] {
+  id varchar(36) [pk]
+  code varchar(64) [not null, unique]
+  name varchar(255) [not null]
+  unit_type varchar(32) [not null, note: 'COMPANY | BOARD | DIVISION | DEPARTMENT']
+  hierarchy_level int [not null]
+  parent_id varchar(36)
+  hierarchy_path varchar(1000) [not null, note: 'VD: /ORG-COMPANY/ORG-HR/']
+  head_user_id varchar(36)
+  status varchar(20) [not null, default: 'ACTIVE']
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Cay don vi to chuc (tu tham chieu parent_id)'
+  indexes {
+    parent_id [name: 'idx_org_parent']
+  }
+}
+
+Table hrm_users as usr [headercolor: #2D6A4F] {
+  id varchar(36) [pk]
+  employee_code varchar(64) [not null, unique]
+  username varchar(100) [not null, unique]
+  password_hash varchar(255) [not null]
+  display_name varchar(255) [not null]
+  email varchar(255) [not null, unique]
+  phone varchar(50)
+  job_title varchar(255)
+  organization_unit_id varchar(36) [not null]
+  manager_id varchar(36)
+  employment_level varchar(100)
+  status varchar(20) [not null, default: 'ACTIVE']
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Danh ba nhan su noi bo'
+  indexes {
+    organization_unit_id [name: 'idx_user_org']
+    manager_id [name: 'idx_user_manager']
+  }
+}
+
+Table directory_groups as grp [headercolor: #2D6A4F] {
+  id varchar(36) [pk]
+  code varchar(80) [not null, unique]
+  name varchar(255) [not null]
+  description varchar(1000)
+  organization_scope_id varchar(36)
+  status varchar(20) [not null, default: 'ACTIVE']
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Nhom nguoi dung (VD: HR Reviewers)'
+  indexes {
+    (organization_scope_id, status) [name: 'idx_group_scope']
+  }
+}
+
+Table directory_group_members as grp_mem [headercolor: #2D6A4F] {
+  group_id varchar(36) [not null]
+  user_id varchar(36) [not null]
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (group_id, user_id) [pk]
+  }
+}
+
+// =====================================================
+// 2. AUTH & RBAC
+// =====================================================
+
+Table system_roles as srole [headercolor: #9C6644] {
+  id varchar(36) [pk]
+  code varchar(80) [not null, unique, note: 'SYSTEM_ADMIN | HR_ADMIN | WORKFLOW_DESIGNER | EMPLOYEE']
+  name varchar(255) [not null]
+  description varchar(1000)
+  built_in boolean [not null, default: false]
+  status varchar(20) [not null, default: 'ACTIVE']
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+Table permissions as perm [headercolor: #9C6644] {
+  code varchar(100) [pk, note: 'VD: WORKFLOW_PUBLISH, INSTANCE_START, TASK_MANAGE_ALL...']
+  name varchar(255) [not null]
+  description varchar(1000)
+}
+
+Table role_permissions as rp [headercolor: #9C6644] {
+  role_id varchar(36) [not null]
+  permission_code varchar(100) [not null]
+
+  indexes {
+    (role_id, permission_code) [pk]
+  }
+}
+
+Table user_role_assignments as ura [headercolor: #9C6644] {
+  id varchar(36) [pk]
+  user_id varchar(36) [not null]
+  role_id varchar(36) [not null]
+  organization_scope_id varchar(36) [note: 'Pham vi to chuc (NULL = toan he thong)']
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (user_id, role_id, organization_scope_id) [unique]
+  }
+}
+
+Table auth_tokens as tok [headercolor: #9C6644] {
+  token_hash varchar(64) [pk]
+  user_id varchar(36) [not null]
+  expires_at timestamp [not null]
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+// =====================================================
+// 3. WORKFLOW DESIGN
+// =====================================================
+
+Table workflow_definitions as wf [headercolor: #1D4E89] {
+  id varchar(36) [pk]
+  name varchar(255) [not null]
+  description varchar(2000)
+  workflow_type varchar(100) [not null]
+  module_name varchar(100)
+  owner_id varchar(36) [not null]
+  status varchar(20) [not null]
+  draft_version varchar(30) [not null]
+  draft_definition longtext [not null, note: 'JSON definition ban nhap (designer state)']
+  active_version_id varchar(36)
+  lock_version bigint [not null, default: 0]
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  deleted_at timestamp
+}
+
+Table workflow_versions as wfv [headercolor: #1D4E89] {
+  id varchar(36) [pk]
+  workflow_id varchar(36) [not null]
+  version_no varchar(30) [not null]
+  status varchar(20) [not null]
+  definition_snapshot longtext [not null, note: 'Snapshot bat bien khi publish']
+  checksum varchar(64) [not null]
+  validation_report longtext
+  author_id varchar(36) [not null]
+  published_at timestamp
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (workflow_id, version_no) [unique]
+  }
+}
+
+Table workflow_members as wm [headercolor: #1D4E89] {
+  workflow_id varchar(36) [not null]
+  user_id varchar(36) [not null]
+  workflow_role varchar(20) [not null]
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (workflow_id, user_id) [pk]
+    (user_id, workflow_role) [name: 'idx_workflow_member_user']
+  }
+}
+
+Table trigger_fires as fire [headercolor: #1D4E89] {
+  id varchar(36) [pk]
+  workflow_id varchar(36) [not null]
+  trigger_type varchar(30) [not null]
+  idempotency_key varchar(255) [not null]
+  payload longtext [not null]
+  instance_id varchar(36)
+  status varchar(20) [not null]
+  error_message varchar(2000)
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  completed_at timestamp
+
+  indexes {
+    (workflow_id, trigger_type, idempotency_key) [unique]
+  }
+}
+
+// =====================================================
+// 4. WORKFLOW RUNTIME
+// =====================================================
+
+Table workflow_instances as inst [headercolor: #6A4C93] {
+  id varchar(36) [pk]
+  request_code varchar(64) [not null, unique]
+  workflow_id varchar(36) [not null]
+  workflow_version_id varchar(36) [not null]
+  creator_id varchar(36) [not null]
+  status varchar(20) [not null]
+  business_outcome varchar(50)
+  trigger_data longtext [not null]
+  variables_data longtext [not null]
+  context_data longtext [not null]
+  idempotency_key varchar(255)
+  started_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  completed_at timestamp
+  updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  parent_instance_id varchar(36)
+  parent_node_execution_id varchar(36)
+  lock_version bigint [not null, default: 0]
+
+  indexes {
+    (workflow_id, idempotency_key) [unique]
+    (workflow_id, started_at) [name: 'idx_instance_workflow']
+  }
+}
+
+Table participant_executions as part [headercolor: #6A4C93] {
+  id varchar(36) [pk]
+  instance_id varchar(36) [not null]
+  user_id varchar(36) [not null]
+  participant_snapshot longtext [not null]
+  status varchar(20) [not null]
+  current_node_id varchar(100)
+  iteration_no int [not null, default: 0]
+  started_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  completed_at timestamp
+
+  indexes {
+    (instance_id, user_id) [unique]
+    (instance_id, status) [name: 'idx_participant_instance']
+  }
+}
+
+Table node_executions as node [headercolor: #6A4C93] {
+  id varchar(36) [pk]
+  instance_id varchar(36) [not null]
+  participant_execution_id varchar(36)
+  node_id varchar(100) [not null]
+  node_type varchar(50) [not null]
+  iteration_no int [not null]
+  state varchar(20) [not null]
+  outcome_port varchar(100)
+  input_snapshot longtext [not null]
+  output_data longtext [not null]
+  error_data longtext
+  started_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  completed_at timestamp
+}
+
+Table runtime_jobs as job [headercolor: #6A4C93] {
+  id varchar(36) [pk]
+  instance_id varchar(36)
+  participant_execution_id varchar(36)
+  node_execution_id varchar(36)
+  task_id varchar(36)
+  job_type varchar(40) [not null]
+  dedup_key varchar(255) [not null, unique]
+  state varchar(20) [not null]
+  due_at timestamp [not null]
+  payload longtext [not null]
+  attempts int [not null, default: 0]
+  max_attempts int [not null, default: 5]
+  last_error varchar(2000)
+  locked_at timestamp
+  completed_at timestamp
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Hang doi job nen (scheduler delay 5s)'
+  indexes {
+    (state, due_at) [name: 'idx_runtime_job_due']
+  }
+}
+
+Table wait_subscriptions as wait [headercolor: #6A4C93] {
+  id varchar(36) [pk]
+  instance_id varchar(36) [not null]
+  participant_execution_id varchar(36)
+  node_execution_id varchar(36) [not null]
+  event_name varchar(100) [not null]
+  correlation_key varchar(500) [not null]
+  state varchar(20) [not null]
+  expires_at timestamp
+  event_payload longtext
+  consumed_at timestamp
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (event_name, correlation_key, state) [unique]
+    (event_name, correlation_key, state) [name: 'idx_wait_lookup']
+  }
+}
+
+// =====================================================
+// 5. HUMAN TASKS
+// =====================================================
+
+Table workflow_tasks as task [headercolor: #CA6702] {
+  id varchar(36) [pk]
+  instance_id varchar(36) [not null]
+  participant_execution_id varchar(36)
+  node_execution_id varchar(36) [not null]
+  node_id varchar(100) [not null]
+  task_type varchar(50) [not null]
+  title varchar(500) [not null]
+  description varchar(2000)
+  assignee_id varchar(36)
+  claimant_id varchar(36)
+  status varchar(20) [not null]
+  priority varchar(20) [not null, default: 'NORMAL']
+  due_at timestamp
+  form_schema longtext [not null]
+  allowed_actions longtext [not null]
+  resolution_snapshot longtext [not null]
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  claimed_at timestamp
+  completed_at timestamp
+
+  indexes {
+    (assignee_id, status, due_at) [name: 'idx_task_assignee']
+    (instance_id, status) [name: 'idx_task_instance']
+  }
+}
+
+Table task_candidate_users as tcu [headercolor: #CA6702] {
+  task_id varchar(36) [not null]
+  user_id varchar(36) [not null]
+
+  indexes {
+    (task_id, user_id) [pk]
+    (user_id, task_id) [name: 'idx_candidate_user']
+  }
+}
+
+Table task_submissions as sub [headercolor: #CA6702] {
+  id varchar(36) [pk]
+  task_id varchar(36) [not null]
+  revision_no int [not null]
+  action varchar(30) [not null]
+  actor_id varchar(36) [not null]
+  form_data longtext [not null]
+  comment_text varchar(2000)
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (task_id, revision_no) [unique]
+  }
+}
+
+Table evaluation_results as eval [headercolor: #A4133C] {
+  id varchar(36) [pk]
+  instance_id varchar(36) [not null]
+  participant_user_id varchar(36) [not null]
+  period_key varchar(100) [not null]
+  self_score decimal(10,2)
+  manager_score decimal(10,2)
+  manager_competency varchar(100)
+  evaluation_valid boolean [not null]
+  result_data longtext [not null]
+  status varchar(30) [not null]
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  Note: 'Ket qua danh gia - business domain chinh'
+  indexes {
+    (instance_id, participant_user_id) [unique]
+  }
+}
+
+// =====================================================
+// 6. NOTIFICATIONS, EVENTS & AUDIT
+// =====================================================
+
+Table notification_deliveries as notif [headercolor: #6D597A] {
+  id varchar(36) [pk]
+  instance_id varchar(36)
+  task_id varchar(36)
+  recipient_id varchar(36) [not null]
+  channel varchar(30) [not null]
+  title_text varchar(500) [not null]
+  body_text longtext [not null]
+  delivery_status varchar(30) [not null]
+  dedup_key varchar(255) [not null, unique]
+  attempts int [not null, default: 0]
+  next_attempt_at timestamp
+  last_error varchar(2000)
+  provider_message_id varchar(255)
+  read_at timestamp
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  sent_at timestamp
+
+  indexes {
+    (delivery_status, next_attempt_at) [name: 'idx_notice_dispatch']
+  }
+}
+
+Table runtime_events as ev [headercolor: #6D597A] {
+  id varchar(36) [pk]
+  instance_id varchar(36) [not null]
+  participant_execution_id varchar(36)
+  node_execution_id varchar(36)
+  event_type varchar(50) [not null]
+  title varchar(500) [not null]
+  description varchar(2000)
+  event_status varchar(30) [not null]
+  actor_id varchar(36)
+  event_data longtext [not null]
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (instance_id, created_at) [name: 'idx_event_instance']
+  }
+}
+
+Table audit_logs as audit [headercolor: #6D597A] {
+  id varchar(36) [pk]
+  actor_id varchar(36)
+  action varchar(80) [not null]
+  resource_type varchar(80) [not null]
+  resource_id varchar(100) [not null]
+  organization_scope_id varchar(36)
+  before_data longtext
+  after_data longtext
+  metadata longtext
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (resource_type, resource_id, created_at) [name: 'idx_audit_resource']
+    (actor_id, created_at) [name: 'idx_audit_actor']
+  }
+}
+
+// =====================================================
+// 7. INTEGRATIONS
+// =====================================================
+
+Table integration_connectors as conn [headercolor: #0E7490] {
+  id varchar(36) [pk]
+  connector_key varchar(100) [not null, unique]
+  name varchar(255) [not null]
+  connector_type varchar(40) [not null]
+  base_url varchar(1000)
+  auth_type varchar(40) [not null, default: 'NONE']
+  configuration longtext [not null]
+  enabled boolean [not null, default: true]
+  lock_version bigint [not null, default: 0]
+  created_by varchar(36) [not null]
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+Table credential_references as cred [headercolor: #0E7490] {
+  id varchar(36) [pk]
+  name varchar(255) [not null]
+  credential_type varchar(40) [not null]
+  secret_reference varchar(500) [not null, note: 'Tro toi secret store, KHONG luu secret tho']
+  organization_scope_id varchar(36)
+  metadata longtext [not null]
+  enabled boolean [not null, default: true]
+  created_by varchar(36) [not null]
+  created_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+// =====================================================
+// RELATIONSHIPS - FK thuc te trong DB
+// =====================================================
+
+// Organization & HRM
+Ref: org.parent_id > org.id
+Ref: usr.organization_unit_id > org.id
+Ref: usr.manager_id > usr.id
+Ref: grp.organization_scope_id > org.id
+Ref: grp_mem.group_id > grp.id
+Ref: grp_mem.user_id > usr.id
+
+// Auth & RBAC
+Ref: rp.role_id > srole.id
+Ref: rp.permission_code > perm.code
+Ref: ura.user_id > usr.id
+Ref: ura.role_id > srole.id
+Ref: ura.organization_scope_id > org.id
+Ref: tok.user_id > usr.id
+
+// Workflow design
+Ref: wf.owner_id > usr.id
+Ref: wfv.workflow_id > wf.id
+Ref: wfv.author_id > usr.id
+Ref: wm.workflow_id > wf.id
+Ref: wm.user_id > usr.id
+Ref: fire.workflow_id > wf.id
+Ref: fire.instance_id > inst.id
+
+// Runtime
+Ref: inst.workflow_id > wf.id
+Ref: inst.workflow_version_id > wfv.id
+Ref: inst.creator_id > usr.id
+Ref: part.instance_id > inst.id
+Ref: part.user_id > usr.id
+Ref: node.instance_id > inst.id
+Ref: node.participant_execution_id > part.id
+Ref: job.instance_id > inst.id
+Ref: job.participant_execution_id > part.id
+Ref: job.node_execution_id > node.id
+Ref: job.task_id > task.id
+Ref: wait.instance_id > inst.id
+Ref: wait.participant_execution_id > part.id
+Ref: wait.node_execution_id > node.id
+
+// Human tasks
+Ref: task.instance_id > inst.id
+Ref: task.participant_execution_id > part.id
+Ref: task.node_execution_id > node.id
+Ref: task.assignee_id > usr.id
+Ref: task.claimant_id > usr.id
+Ref: tcu.task_id > task.id
+Ref: tcu.user_id > usr.id
+Ref: sub.task_id > task.id
+Ref: sub.actor_id > usr.id
+Ref: eval.instance_id > inst.id
+Ref: eval.participant_user_id > usr.id
+
+// Notifications & events
+Ref: notif.instance_id > inst.id
+Ref: notif.task_id > task.id
+Ref: notif.recipient_id > usr.id
+Ref: ev.instance_id > inst.id
+
+// Integrations
+Ref: conn.created_by > usr.id
+Ref: cred.organization_scope_id > org.id
+Ref: cred.created_by > usr.id
+
+// =====================================================
+// LOGICAL REFS - khong co FK constraint trong DB
+// (de tranh dependency vong / giu audit log doc lap)
+// =====================================================
+
+Ref: org.head_user_id > usr.id
+Ref: wf.active_version_id > wfv.id
+Ref: inst.parent_instance_id > inst.id
+Ref: inst.parent_node_execution_id > node.id
+Ref: ev.participant_execution_id > part.id
+Ref: ev.node_execution_id > node.id
+Ref: audit.actor_id > usr.id
+Ref: audit.organization_scope_id > org.id
+
+// =====================================================
+// TABLE GROUPS - sap xep tren diagram
+// =====================================================
+
+TableGroup "Org & HRM" {
+  organization_units
+  hrm_users
+  directory_groups
+  directory_group_members
+}
+
+TableGroup "Auth & RBAC" {
+  system_roles
+  permissions
+  role_permissions
+  user_role_assignments
+  auth_tokens
+}
+
+TableGroup "Workflow Design" {
+  workflow_definitions
+  workflow_versions
+  workflow_members
+  trigger_fires
+}
+
+TableGroup "Workflow Runtime" {
+  workflow_instances
+  participant_executions
+  node_executions
+  runtime_jobs
+  wait_subscriptions
+}
+
+TableGroup "Human Tasks" {
+  workflow_tasks
+  task_candidate_users
+  task_submissions
+}
+
+TableGroup "Events & Audit" {
+  notification_deliveries
+  runtime_events
+  audit_logs
+}
+
+TableGroup "Integrations" {
+  integration_connectors
+  credential_references
+}
+
+TableGroup "Evaluation (Business)" {
+  evaluation_results
+}

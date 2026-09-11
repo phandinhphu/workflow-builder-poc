@@ -27,6 +27,9 @@ export interface TaskDefinition {
   formSchema?: JSONSchema;
   outputMapping?: Record<string, string>;
   dueAt?: string;
+  status?: TaskStatus;
+  claimantId?: string;
+  claimedAt?: string;
   slaConfig?: SlaConfig;
   allowedActions: ('COMPLETE' | 'REJECT' | 'REQUEST_CHANGE' | 'COMMENT' | 'CLAIM')[];
   notificationChannels?: ('email' | 'inapp' | 'teams')[];

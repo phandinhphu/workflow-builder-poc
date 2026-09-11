@@ -2,15 +2,19 @@ import { Fragment, useState, useEffect, useMemo } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { CheckCircle2, XCircle, Zap, Code2 } from 'lucide-react';
+import type { Node } from '@xyflow/react';
 import { useDesignerStore } from '../stores/designerStore';
+
+type ConditionDataType = 'boolean' | 'string' | 'number' | 'array' | 'object' | 'date';
+type ConditionOperator = '==' | '!=' | '>' | '>=' | '<' | '<=' | 'contains' | 'in' | 'isNull' | 'isNotNull';
 
 export interface ConditionRule {
   id: string;
   field: string;
-  operator: '==' | '!=' | '>' | '>=' | '<' | '<=' | 'contains' | 'in' | 'isNull' | 'isNotNull';
+  operator: ConditionOperator;
   value: string;
   type: 'literal' | 'binding';
-  dataType?: 'boolean' | 'string' | 'number' | 'array';
+  dataType?: ConditionDataType;
 }
 
 export interface ConditionGroup {
@@ -24,6 +28,7 @@ interface ConditionBuilderModalProps {
   onClose: () => void;
   expression: string;
   onSave: (expression: string) => void;
+  nodes?: Node[];
 }
 
 interface ContextOption {
@@ -31,101 +36,263 @@ interface ContextOption {
   groupLabel: string;
   label: string;
   path: string;
-  dataType: 'boolean' | 'string' | 'number' | 'array';
+  dataType: ConditionDataType;
   description?: string;
   suggestedValues?: string[];
+  sourceNodeId?: string;
 }
 
-/**
- * Parse an expression string into visual rule groups.
- * Handles patterns like: ${nodes.n1.approved} == true && ${variables.amount} > 500
- */
+let parsedRuleSequence = 0;
+
+const nextParsedId = (prefix: string) => `${prefix}_${Date.now()}_${parsedRuleSequence++}`;
+
+const unwrapOuterParentheses = (value: string): string => {
+  let result = value.trim();
+  while (result.startsWith('(') && result.endsWith(')')) {
+    let depth = 0;
+    let wrapsWholeExpression = true;
+    let quote = '';
+    for (let i = 0; i < result.length; i += 1) {
+      const char = result[i];
+      if (quote) {
+        if (char === '\\') i += 1;
+        else if (char === quote) quote = '';
+        continue;
+      }
+      if (char === "'" || char === '"') {
+        quote = char;
+        continue;
+      }
+      if (char === '(') depth += 1;
+      if (char === ')') {
+        depth -= 1;
+        if (depth === 0 && i < result.length - 1) {
+          wrapsWholeExpression = false;
+          break;
+        }
+      }
+    }
+    if (!wrapsWholeExpression || depth !== 0) break;
+    result = result.slice(1, -1).trim();
+  }
+  return result;
+};
+
+const splitTopLevel = (value: string, operator: 'AND' | 'OR'): string[] => {
+  const result: string[] = [];
+  const symbol = operator === 'AND' ? '&&' : '||';
+  let depth = 0;
+  let quote = '';
+  let start = 0;
+
+  for (let i = 0; i < value.length; i += 1) {
+    const char = value[i];
+    if (quote) {
+      if (char === '\\') i += 1;
+      else if (char === quote) quote = '';
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      continue;
+    }
+    if (char === '(') depth += 1;
+    else if (char === ')') depth -= 1;
+    if (depth !== 0) continue;
+
+    const symbolMatch = value.slice(i, i + symbol.length) === symbol;
+    const word = value.slice(i, i + operator.length);
+    const wordMatch = word.toUpperCase() === operator
+      && !/[A-Za-z0-9_]/.test(value[i - 1] || '')
+      && !/[A-Za-z0-9_]/.test(value[i + operator.length] || '');
+    if (!symbolMatch && !wordMatch) continue;
+
+    result.push(value.slice(start, i).trim());
+    i += (symbolMatch ? symbol.length : operator.length) - 1;
+    start = i + 1;
+  }
+  if (result.length > 0) result.push(value.slice(start).trim());
+  return result.filter(Boolean);
+};
+
+const splitFunctionArguments = (value: string): string[] => {
+  let depth = 0;
+  let quote = '';
+  for (let i = 0; i < value.length; i += 1) {
+    const char = value[i];
+    if (quote) {
+      if (char === '\\') i += 1;
+      else if (char === quote) quote = '';
+      continue;
+    }
+    if (char === "'" || char === '"') quote = char;
+    else if (char === '(') depth += 1;
+    else if (char === ')') depth -= 1;
+    else if (char === ',' && depth === 0) return [value.slice(0, i).trim(), value.slice(i + 1).trim()];
+  }
+  return [value.trim()];
+};
+
+const parseValue = (rawValue: string): Pick<ConditionRule, 'value' | 'type' | 'dataType'> => {
+  let value = rawValue.trim();
+  if (value.startsWith('${') && value.endsWith('}')) {
+    return { value: value.slice(2, -1).trim(), type: 'binding', dataType: 'string' };
+  }
+  if ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith('"') && value.endsWith('"'))) {
+    value = value.slice(1, -1);
+    return { value, type: 'literal', dataType: 'string' };
+  }
+  if (/^(true|false)$/i.test(value)) return { value: value.toLowerCase(), type: 'literal', dataType: 'boolean' };
+  if (value !== '' && !Number.isNaN(Number(value))) return { value, type: 'literal', dataType: 'number' };
+  return { value, type: 'literal', dataType: 'string' };
+};
+
+const parseAtomicRule = (rawExpression: string): ConditionRule => {
+  const expression = unwrapOuterParentheses(rawExpression);
+  const nullFunction = expression.match(/^(isNull|isNotNull)\s*\(\s*\$\{([^}]+)\}\s*\)$/i);
+  if (nullFunction) {
+    return {
+      id: nextParsedId('parsed'),
+      field: nullFunction[2].trim(),
+      operator: nullFunction[1].toLowerCase() === 'isnull' ? 'isNull' : 'isNotNull',
+      value: '',
+      type: 'literal',
+      dataType: 'string',
+    };
+  }
+
+  const functionMatch = expression.match(/^(contains|in)\s*\((.*)\)$/i);
+  if (functionMatch) {
+    const args = splitFunctionArguments(functionMatch[2]);
+    const fieldMatch = args[0]?.match(/^\$\{([^}]+)\}$/);
+    if (args.length !== 2 || !fieldMatch) throw new Error('Biểu thức hàm không thể chuyển sang chế độ trực quan');
+    return {
+      id: nextParsedId('parsed'),
+      field: fieldMatch[1].trim(),
+      operator: functionMatch[1].toLowerCase() as 'contains' | 'in',
+      ...parseValue(args[1]),
+    };
+  }
+
+  const match = expression.match(/^\$\{([^}]+)\}\s*(==|!=|>=|<=|>|<|contains|in)\s*(.*)$/i);
+  if (!match) {
+    const directReference = expression.match(/^\$\{([^}]+)\}$/);
+    if (directReference) {
+      return { id: nextParsedId('parsed'), field: directReference[1].trim(), operator: '==', value: 'true', type: 'literal', dataType: 'boolean' };
+    }
+    throw new Error('Biểu thức không thể chuyển sang chế độ trực quan');
+  }
+
+  if ((match[2] === '==' || match[2] === '!=') && match[3].trim().toLowerCase() === 'null') {
+    return {
+      id: nextParsedId('parsed'),
+      field: match[1].trim(),
+      operator: match[2] === '==' ? 'isNull' : 'isNotNull',
+      value: '',
+      type: 'literal',
+      dataType: 'string',
+    };
+  }
+
+  return {
+    id: nextParsedId('parsed'),
+    field: match[1].trim(),
+    operator: match[2] as ConditionOperator,
+    ...parseValue(match[3]),
+  };
+};
+
 const parseExpressionToGroup = (expr: string): ConditionGroup => {
   if (!expr || expr.trim() === '') {
     return { id: 'root', logicalOperator: 'AND', rules: [] };
   }
+  parsedRuleSequence = 0;
 
-  const cleanExpr = expr.trim();
-  const isOr = cleanExpr.includes(' || ') || cleanExpr.includes(' OR ');
-  const delimiter = isOr ? (cleanExpr.includes(' || ') ? ' || ' : ' OR ') : (cleanExpr.includes(' && ') ? ' && ' : ' AND ');
-  const parts = cleanExpr.split(delimiter).map(p => p.replace(/^\(|\)$/g, '').trim()).filter(Boolean);
-
-  const rules: ConditionRule[] = parts.map((part, idx) => {
-    const match = part.match(/(?:\$\{([^\}]+)\}|([a-zA-Z0-9_\.]+))\s*(==|!=|>=|<=|>|<|contains|in)\s*(.*)/);
-    if (match) {
-      const field = match[1] || match[2];
-      const operator = match[3] as ConditionRule['operator'];
-      let rawVal = (match[4] || '').trim();
-      let type: 'literal' | 'binding' = 'literal';
-
-      if (rawVal.startsWith('${') && rawVal.endsWith('}')) {
-        type = 'binding';
-        rawVal = rawVal.slice(2, -1);
-      } else if ((rawVal.startsWith("'") && rawVal.endsWith("'")) || (rawVal.startsWith('"') && rawVal.endsWith('"'))) {
-        rawVal = rawVal.slice(1, -1);
-      }
-
-      const isBool = rawVal.toLowerCase() === 'true' || rawVal.toLowerCase() === 'false' || field.endsWith('.approved') || field.endsWith('.reviewed');
-      const isNum = !isNaN(Number(rawVal)) && rawVal !== '';
-
-      return {
-        id: `parsed_${Date.now()}_${idx}`,
-        field: field.trim(),
-        operator,
-        value: rawVal,
-        type,
-        dataType: isBool ? 'boolean' : (isNum ? 'number' : 'string')
-      };
+  const parseNode = (value: string, isRoot = false): ConditionRule | ConditionGroup => {
+    const clean = unwrapOuterParentheses(value);
+    const orParts = splitTopLevel(clean, 'OR');
+    if (orParts.length > 1) {
+      return { id: isRoot ? 'root' : nextParsedId('group'), logicalOperator: 'OR', rules: orParts.map(part => parseNode(part)) };
     }
-
-    return {
-      id: `fallback_${Date.now()}_${idx}`,
-      field: part.replace(/^\$\{/, '').replace(/\}$/, '').trim(),
-      operator: '==',
-      value: 'true',
-      type: 'literal',
-      dataType: 'boolean'
-    };
-  });
-
-  return {
-    id: 'root',
-    logicalOperator: isOr ? 'OR' : 'AND',
-    rules
+    const andParts = splitTopLevel(clean, 'AND');
+    if (andParts.length > 1) {
+      return { id: isRoot ? 'root' : nextParsedId('group'), logicalOperator: 'AND', rules: andParts.map(part => parseNode(part)) };
+    }
+    return parseAtomicRule(clean);
   };
+
+  const parsed = parseNode(expr, true);
+  return 'logicalOperator' in parsed
+    ? parsed
+    : { id: 'root', logicalOperator: 'AND', rules: [parsed] };
 };
+
+const quoteLiteral = (value: string) => `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 
 const buildExpressionFromGroup = (group: ConditionGroup): string => {
   if (!group.rules || group.rules.length === 0) return '';
 
   const parts = group.rules.map(rule => {
     if ('logicalOperator' in rule) {
-      return `(${buildExpressionFromGroup(rule)})`;
+      const nested = buildExpressionFromGroup(rule);
+      return nested ? `(${nested})` : '';
     } else {
-      if (rule.operator === 'isNull') return `\${${rule.field}} == null`;
-      if (rule.operator === 'isNotNull') return `\${${rule.field}} != null`;
+      if (rule.operator === 'isNull') return `isNull(\${${rule.field}})`;
+      if (rule.operator === 'isNotNull') return `isNotNull(\${${rule.field}})`;
 
       let valStr = '';
       if (rule.type === 'binding') {
         valStr = `\${${rule.value}}`;
+      } else if (rule.operator === 'in') {
+        valStr = quoteLiteral(rule.value);
       } else if (rule.dataType === 'boolean' || rule.value === 'true' || rule.value === 'false') {
         valStr = rule.value.toLowerCase() === 'true' ? 'true' : 'false';
       } else if (rule.dataType === 'number' || (!isNaN(Number(rule.value)) && rule.value.trim() !== '')) {
         valStr = rule.value;
       } else {
-        valStr = `'${rule.value}'`;
+        valStr = quoteLiteral(rule.value);
       }
 
+      if (rule.operator === 'contains' || rule.operator === 'in') {
+        return `${rule.operator}(\${${rule.field}}, ${valStr})`;
+      }
       return `\${${rule.field}} ${rule.operator} ${valStr}`;
     }
-  });
+  }).filter(Boolean);
 
   const sep = group.logicalOperator === 'AND' ? ' && ' : ' || ';
   return parts.join(sep);
 };
 
-export default function ConditionBuilderModal({ isOpen, onClose, expression, onSave }: ConditionBuilderModalProps) {
-  const { nodes, variables, trigger } = useDesignerStore();
+const OPERATOR_OPTIONS: { value: ConditionOperator; label: string }[] = [
+  { value: '==', label: 'bằng (==)' },
+  { value: '!=', label: 'khác (!=)' },
+  { value: '>', label: 'lớn hơn (>)' },
+  { value: '>=', label: 'lớn hơn hoặc bằng (>=)' },
+  { value: '<', label: 'nhỏ hơn (<)' },
+  { value: '<=', label: 'nhỏ hơn hoặc bằng (<=)' },
+  { value: 'contains', label: 'chứa (contains)' },
+  { value: 'in', label: 'nằm trong danh sách (in)' },
+  { value: 'isNull', label: 'là rỗng (is null)' },
+  { value: 'isNotNull', label: 'không rỗng (not null)' },
+];
+
+const operatorsFor = (dataType: ConditionDataType | undefined): ConditionOperator[] => {
+  if (dataType === 'boolean') return ['==', '!=', 'isNull', 'isNotNull'];
+  if (dataType === 'number' || dataType === 'date') return ['==', '!=', '>', '>=', '<', '<=', 'in', 'isNull', 'isNotNull'];
+  if (dataType === 'array') return ['contains', 'isNull', 'isNotNull'];
+  if (dataType === 'object') return ['isNull', 'isNotNull'];
+  return ['==', '!=', '>', '>=', '<', '<=', 'contains', 'in', 'isNull', 'isNotNull'];
+};
+
+const canonicalNodeOutputPath = (path: string) => path.replace(
+  /^nodes\.([^.}\s]+)\.(?!output\.)([A-Za-z_][\w-]*)/,
+  'nodes.$1.output.$2',
+);
+
+export default function ConditionBuilderModal({ isOpen, onClose, expression, onSave, nodes: availableNodes }: ConditionBuilderModalProps) {
+  const { nodes: storeNodes, variables } = useDesignerStore();
+  const nodes = availableNodes ?? storeNodes;
   const [rootGroup, setRootGroup] = useState<ConditionGroup>({ id: 'root', logicalOperator: 'AND', rules: [] });
   const [mode, setMode] = useState<'visual' | 'code'>('visual');
   const [rawExpression, setRawExpression] = useState('');
@@ -133,98 +300,94 @@ export default function ConditionBuilderModal({ isOpen, onClose, expression, onS
   // Context field options gathered from upstream nodes, variables, and trigger
   const contextOptions: ContextOption[] = useMemo(() => {
     const list: ContextOption[] = [];
+    const seenPaths = new Set<string>();
+    const addOption = (option: ContextOption) => {
+      if (!seenPaths.has(option.path)) {
+        seenPaths.add(option.path);
+        list.push(option);
+      }
+    };
+    const dataTypeOf = (rawType: unknown, format?: unknown): ConditionDataType => {
+      const type = String(rawType ?? '').toLowerCase();
+      if (type === 'boolean' || type === 'checkbox') return 'boolean';
+      if (type === 'number' || type === 'integer') return 'number';
+      if (type === 'array' || type === 'list') return 'array';
+      if (type === 'object' || type === 'file') return 'object';
+      if (type === 'date' || format === 'date' || format === 'date-time') return 'date';
+      return 'string';
+    };
 
     // 1. Upstream Nodes
     nodes.forEach(n => {
       const nodeData = n.data as any;
-      const nodeType = (nodeData?.type || n.type || '').toUpperCase();
+      const nodeType = String(nodeData?.nodeType || nodeData?.type || (n.type === 'custom' ? '' : n.type) || '').toUpperCase();
       const nodeLabel = nodeData?.name || nodeData?.label || n.id;
+      const nodeGroupLabel = `Node: ${nodeLabel} (${nodeType || 'Không xác định'})`;
+      const addNodeOutput = (
+        key: string,
+        label: string,
+        dataType: ConditionDataType,
+        extra: Pick<ContextOption, 'description' | 'suggestedValues'> = {},
+      ) => addOption({
+        group: 'node',
+        groupLabel: nodeGroupLabel,
+        label: `${nodeLabel} → ${label}`,
+        path: `nodes.${n.id}.output.${key}`,
+        dataType,
+        sourceNodeId: n.id,
+        ...extra,
+      });
 
       if (nodeType === 'APPROVAL') {
-        list.push({
-          group: 'node',
-          groupLabel: `Node: ${nodeLabel} (Phê duyệt)`,
-          label: `${nodeLabel} → Kết quả phê duyệt (approved)`,
-          path: `nodes.${n.id}.approved`,
-          dataType: 'boolean',
-          description: 'true (Đồng ý) / false (Từ chối)'
-        });
-        list.push({
-          group: 'node',
-          groupLabel: `Node: ${nodeLabel} (Phê duyệt)`,
-          label: `${nodeLabel} → Trạng thái outcome`,
-          path: `nodes.${n.id}.outcome`,
-          dataType: 'string',
-          description: 'APPROVED / REJECTED',
-          suggestedValues: ['APPROVED', 'REJECTED']
-        });
-        list.push({
-          group: 'node',
-          groupLabel: `Node: ${nodeLabel} (Phê duyệt)`,
-          label: `${nodeLabel} → Ý kiến người duyệt (comment)`,
-          path: `nodes.${n.id}.comment`,
-          dataType: 'string'
-        });
+        addNodeOutput('approved', 'Kết quả phê duyệt (approved)', 'boolean', { description: 'true (Đồng ý) / false (Từ chối)' });
+        addNodeOutput('outcome', 'Trạng thái outcome', 'string', { description: 'APPROVED / REJECTED', suggestedValues: ['APPROVED', 'REJECTED'] });
+        addNodeOutput('comment', 'Ý kiến người duyệt (comment)', 'string');
+        addNodeOutput('approverId', 'Mã người duyệt (approverId)', 'string');
       } else if (nodeType === 'REVIEW') {
-        list.push({
-          group: 'node',
-          groupLabel: `Node: ${nodeLabel} (Kiểm duyệt)`,
-          label: `${nodeLabel} → Kết quả kiểm duyệt (reviewed)`,
-          path: `nodes.${n.id}.reviewed`,
-          dataType: 'boolean',
-          description: 'true (Đạt) / false (Từ chối)'
-        });
-        list.push({
-          group: 'node',
-          groupLabel: `Node: ${nodeLabel} (Kiểm duyệt)`,
-          label: `${nodeLabel} → Trạng thái outcome`,
-          path: `nodes.${n.id}.outcome`,
-          dataType: 'string',
-          description: 'REVIEW_COMPLETED / REJECTED',
-          suggestedValues: ['REVIEW_COMPLETED', 'REJECTED']
-        });
+        addNodeOutput('reviewed', 'Kết quả kiểm duyệt (reviewed)', 'boolean', { description: 'true (Đạt) / false (Từ chối)' });
+        addNodeOutput('outcome', 'Trạng thái outcome', 'string', { description: 'REVIEW_COMPLETED / REJECTED', suggestedValues: ['REVIEW_COMPLETED', 'REJECTED'] });
+        addNodeOutput('comment', 'Ý kiến người kiểm duyệt (comment)', 'string');
+        addNodeOutput('reviewerId', 'Mã người kiểm duyệt (reviewerId)', 'string');
       } else if (nodeType === 'ASSIGNMENT') {
-        list.push({
-          group: 'node',
-          groupLabel: `Node: ${nodeLabel} (Tập người tham gia)`,
-          label: `${nodeLabel} → Tổng số người tham gia`,
-          path: `nodes.${n.id}.totalParticipants`,
-          dataType: 'number'
-        });
-        list.push({
-          group: 'node',
-          groupLabel: `Node: ${nodeLabel} (Tập người tham gia)`,
-          label: `${nodeLabel} → Danh sách ID người tham gia`,
-          path: `nodes.${n.id}.participantIds`,
-          dataType: 'array'
-        });
+        addNodeOutput('totalParticipants', 'Tổng số người tham gia', 'number');
+        addNodeOutput('participantIds', 'Danh sách ID người tham gia', 'array');
+        addNodeOutput('participants', 'Danh sách người tham gia', 'array');
       } else if (nodeType === 'FORM') {
-        list.push({
-          group: 'node',
-          groupLabel: `Node: ${nodeLabel} (Biểu mẫu)`,
-          label: `${nodeLabel} → Tổng số phản hồi (totalSubmissions)`,
-          path: `nodes.${n.id}.totalSubmissions`,
-          dataType: 'number'
-        });
-        const formFields = nodeData?.config?.formSchema?.fields || nodeData?.formSchema?.fields || [];
-        formFields.forEach((f: any) => {
-          list.push({
-            group: 'node',
-            groupLabel: `Node: ${nodeLabel} (Biểu mẫu)`,
-            label: `${nodeLabel} → Trường: ${f.label || f.name} (${f.name})`,
-            path: `nodes.${n.id}.${f.name}`,
-            dataType: f.type === 'number' ? 'number' : (f.type === 'boolean' || f.type === 'checkbox' ? 'boolean' : 'string')
+        addNodeOutput('totalSubmissions', 'Tổng số phản hồi (totalSubmissions)', 'number');
+        addNodeOutput('submissionList', 'Danh sách phản hồi (submissionList)', 'array');
+        addNodeOutput('submissions', 'Dữ liệu phản hồi theo người dùng (submissions)', 'object');
+      } else if (nodeType === 'CONDITION') {
+        addNodeOutput('result', 'Kết quả điều kiện (result)', 'boolean', { description: 'true / false' });
+      }
+
+      // Form fields are valid outputs for every human-task node, not only FORM.
+      const formFieldSources = [
+        nodeData?.formFields,
+        nodeData?.config?.formFields,
+        nodeData?.formSchema?.fields,
+        nodeData?.config?.formSchema?.fields,
+      ];
+      const formFields = formFieldSources.find(Array.isArray) || [];
+      formFields.forEach((field: any) => {
+        const outputKey = String(field?.outputMapping || field?.id || field?.name || '').trim();
+        if (!outputKey) return;
+        addNodeOutput(outputKey, `Trường biểu mẫu: ${field.label || outputKey} (${outputKey})`, dataTypeOf(field.type));
+      });
+
+      // Generic named outputs declared by a node's output schema/mapping.
+      const outputSchema = nodeData?.outputSchema || nodeData?.config?.outputSchema;
+      const properties = outputSchema?.properties || (outputSchema?.type ? undefined : outputSchema);
+      if (properties && typeof properties === 'object' && !Array.isArray(properties)) {
+        Object.entries(properties).forEach(([key, schema]: [string, any]) => {
+          addNodeOutput(key, `Dữ liệu đầu ra: ${key}`, dataTypeOf(schema?.type, schema?.format), {
+            description: schema?.description,
+            suggestedValues: Array.isArray(schema?.enum) ? schema.enum.map(String) : undefined,
           });
         });
-      } else if (nodeType !== 'CONDITION') {
-        list.push({
-          group: 'node',
-          groupLabel: `Node: ${nodeLabel}`,
-          label: `${nodeLabel} → Trạng thái hoàn thành (status)`,
-          path: `nodes.${n.id}.status`,
-          dataType: 'string',
-          suggestedValues: ['COMPLETED', 'FAILED']
-        });
+      }
+      const outputMapping = nodeData?.outputMapping || nodeData?.config?.outputMapping;
+      if (outputMapping && typeof outputMapping === 'object' && !Array.isArray(outputMapping)) {
+        Object.keys(outputMapping).forEach(key => addNodeOutput(key, `Dữ liệu đầu ra: ${key}`, 'string'));
       }
     });
 
@@ -234,8 +397,10 @@ export default function ConditionBuilderModal({ isOpen, onClose, expression, onS
       if (v.dataType === 'BOOLEAN') dt = 'boolean';
       if (v.dataType === 'NUMBER') dt = 'number';
       if (v.dataType === 'ARRAY') dt = 'array';
+      if (v.dataType === 'OBJECT') dt = 'object';
+      if (v.dataType === 'DATE') dt = 'date';
 
-      list.push({
+      addOption({
         group: 'variable',
         groupLabel: 'Biến quy trình',
         label: `${v.name || v.key} (${v.key})`,
@@ -246,14 +411,14 @@ export default function ConditionBuilderModal({ isOpen, onClose, expression, onS
     });
 
     // 3. Trigger context
-    list.push({
+    addOption({
       group: 'trigger',
       groupLabel: 'Dữ liệu kích hoạt (Trigger)',
       label: 'Người khởi tạo (trigger.initiator.id)',
       path: 'trigger.initiator.id',
       dataType: 'string'
     });
-    list.push({
+    addOption({
       group: 'trigger',
       groupLabel: 'Dữ liệu kích hoạt (Trigger)',
       label: 'Phòng ban người khởi tạo (trigger.initiator.departmentId)',
@@ -262,14 +427,14 @@ export default function ConditionBuilderModal({ isOpen, onClose, expression, onS
     });
 
     // 4. Participant Context
-    list.push({
+    addOption({
       group: 'context',
       groupLabel: 'Ngữ cảnh người tham gia',
       label: 'Mã người tham gia (participant.id)',
       path: 'participant.id',
       dataType: 'string'
     });
-    list.push({
+    addOption({
       group: 'context',
       groupLabel: 'Ngữ cảnh người tham gia',
       label: 'Phòng ban người tham gia (participant.departmentId)',
@@ -278,13 +443,23 @@ export default function ConditionBuilderModal({ isOpen, onClose, expression, onS
     });
 
     return list;
-  }, [nodes, variables, trigger]);
+  }, [nodes, variables]);
 
   useEffect(() => {
     if (isOpen) {
+      setMode('visual');
       if (expression && expression.trim() !== '') {
         try {
-          setRootGroup(parseExpressionToGroup(expression));
+          const hydrateTypes = (group: ConditionGroup): ConditionGroup => ({
+            ...group,
+            rules: group.rules.map(rule => {
+              if ('logicalOperator' in rule) return hydrateTypes(rule);
+              const canonicalField = canonicalNodeOutputPath(rule.field);
+              const option = contextOptions.find(item => item.path === canonicalField || item.path === rule.field);
+              return { ...rule, field: option?.path || rule.field, dataType: option?.dataType || rule.dataType };
+            }),
+          });
+          setRootGroup(hydrateTypes(parseExpressionToGroup(expression)));
         } catch {
           setMode('code');
         }
@@ -307,7 +482,7 @@ export default function ConditionBuilderModal({ isOpen, onClose, expression, onS
       }
       setRawExpression(expression || '');
     }
-  }, [isOpen, expression]);
+  }, [isOpen, expression, contextOptions]);
 
   const updateRawExpression = () => {
     if (mode === 'visual') {
@@ -378,7 +553,10 @@ export default function ConditionBuilderModal({ isOpen, onClose, expression, onS
     const matchedOpt = contextOptions.find(o => o.path === newField);
     const updates: Partial<ConditionRule> = {
       field: newField,
-      dataType: matchedOpt?.dataType || 'string'
+      dataType: matchedOpt?.dataType || 'string',
+      operator: operatorsFor(matchedOpt?.dataType)[0],
+      value: '',
+      type: 'literal',
     };
 
     if (matchedOpt?.dataType === 'boolean') {
@@ -407,17 +585,18 @@ export default function ConditionBuilderModal({ isOpen, onClose, expression, onS
   };
 
   const addGroup = (targetGroupId: string) => {
+    const defaultOption = contextOptions[0];
     const newGroup: ConditionGroup = {
       id: Date.now().toString(),
       logicalOperator: 'AND',
       rules: [
         {
           id: Date.now().toString() + '_r',
-          field: contextOptions[0]?.path || 'context.field',
-          operator: '==',
-          value: 'true',
+          field: defaultOption?.path || 'participant.id',
+          operator: operatorsFor(defaultOption?.dataType)[0],
+          value: defaultOption?.dataType === 'boolean' ? 'true' : defaultOption?.suggestedValues?.[0] || '',
           type: 'literal',
-          dataType: 'boolean'
+          dataType: defaultOption?.dataType || 'string'
         }
       ]
     };
@@ -476,7 +655,7 @@ export default function ConditionBuilderModal({ isOpen, onClose, expression, onS
     }
 
     // Suggested values for status / outcome
-    if (matchedOpt?.suggestedValues && matchedOpt.suggestedValues.length > 0) {
+    if ((rule.operator === '==' || rule.operator === '!=') && matchedOpt?.suggestedValues && matchedOpt.suggestedValues.length > 0) {
       return (
         <select
           value={rule.value}
@@ -504,8 +683,8 @@ export default function ConditionBuilderModal({ isOpen, onClose, expression, onS
           <option value="binding">Biến/Tham chiếu</option>
         </select>
         <input
-          type={rule.dataType === 'number' ? 'number' : 'text'}
-          placeholder={rule.type === 'binding' ? 'variables.threshold' : (rule.dataType === 'number' ? '0' : 'Giá trị')}
+          type={rule.dataType === 'number' && rule.operator !== 'in' ? 'number' : 'text'}
+          placeholder={rule.type === 'binding' ? 'variables.threshold' : (rule.operator === 'in' ? 'Giá trị 1, Giá trị 2' : rule.dataType === 'number' ? '0' : 'Giá trị')}
           value={rule.value}
           onChange={e => updateRule(rule.id, { value: e.target.value })}
           className={`block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 text-xs px-2.5 py-1.5 border ${
@@ -614,16 +793,9 @@ export default function ConditionBuilderModal({ isOpen, onClose, expression, onS
                       onChange={e => updateRule(rule.id, { operator: e.target.value as any })}
                       className="block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 text-xs px-2 py-1.5 border bg-white"
                     >
-                      <option value="==">bằng (==)</option>
-                      <option value="!=">khác (!=)</option>
-                      <option value=">">lớn hơn (&gt;)</option>
-                      <option value=">=">lớn hơn hoặc bằng (&gt;=)</option>
-                      <option value="<">nhỏ hơn (&lt;)</option>
-                      <option value="<=">nhỏ hơn hoặc bằng (&lt;=)</option>
-                      <option value="contains">chứa (contains)</option>
-                      <option value="in">nằm trong (in list)</option>
-                      <option value="isNull">là rỗng (is null)</option>
-                      <option value="isNotNull">không rỗng (not null)</option>
+                      {OPERATOR_OPTIONS.filter(option => operatorsFor(rule.dataType).includes(option.value)).map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
                     </select>
                   </div>
 
@@ -763,10 +935,10 @@ export default function ConditionBuilderModal({ isOpen, onClose, expression, onS
                         className="block w-full rounded-lg border-gray-300 shadow-inner focus:border-indigo-500 focus:ring-indigo-500 text-xs font-mono p-4 bg-gray-900 text-emerald-400 leading-relaxed"
                         value={rawExpression}
                         onChange={e => setRawExpression(e.target.value)}
-                        placeholder="${nodes.approval_1.approved} == true && ${variables.budget} > 1000"
+                        placeholder="${nodes.approval_1.output.approved} == true && ${variables.budget} > 1000"
                       />
                       <p className="text-xs text-gray-500">
-                        Cú pháp hỗ trợ: <code>{'${nodes.<nodeId>.<outputField>}'}</code>, <code>{'${variables.<varName>}'}</code>, <code>{'${trigger.<field>}'}</code>.
+                        Cú pháp hỗ trợ: <code>{'${nodes.<nodeId>.output.<outputField>}'}</code>, <code>{'${variables.<varName>}'}</code>, <code>{'${trigger.<field>}'}</code>.
                       </p>
                     </div>
                   )}
@@ -779,7 +951,7 @@ export default function ConditionBuilderModal({ isOpen, onClose, expression, onS
                       </code>
                     </div>
                     <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                      <span>Node đầu ra: <strong>{contextOptions.filter(o => o.group === 'node').length}</strong></span>
+                      <span>Node đầu ra: <strong>{new Set(contextOptions.filter(o => o.group === 'node').map(o => o.sourceNodeId)).size}</strong></span>
                       <span>•</span>
                       <span>Biến: <strong>{variables?.length || 0}</strong></span>
                     </div>

@@ -31,6 +31,15 @@ class WorkflowCompilerTest {
         assertThat(codes(unknownOutput)).contains("BINDING_OUTPUT_NOT_FOUND");
     }
 
+    @Test
+    void acceptsTypeAwareConditionOverCanonicalFormOutput() {
+        Map<String, Object> report = compiler.validate(conditionDefinition(
+                "${nodes.input.output.score} >= 8 && in(${nodes.input.output.department}, 'HR, IT')"));
+
+        assertThat(report.get("valid")).isEqualTo(true);
+        assertThat((List<?>) report.get("errors")).isEmpty();
+    }
+
     private ObjectNode definition(String binding) {
         ObjectNode workflow = mapper.createObjectNode().put("name", "Binding test");
         workflow.putObject("trigger").put("type", "manual");
@@ -50,6 +59,29 @@ class WorkflowCompilerTest {
         connections.addObject().put("id", "c1").put("sourceNodeId", "start").put("sourcePort", "SUCCESS").put("targetNodeId", "input");
         connections.addObject().put("id", "c2").put("sourceNodeId", "input").put("sourcePort", "SUCCESS").put("targetNodeId", "review");
         connections.addObject().put("id", "c3").put("sourceNodeId", "review").put("sourcePort", "APPROVED").put("targetNodeId", "end");
+        return workflow;
+    }
+
+    private ObjectNode conditionDefinition(String expression) {
+        ObjectNode workflow = mapper.createObjectNode().put("name", "Condition binding test");
+        workflow.putObject("trigger").put("type", "manual").putObject("config");
+        workflow.putArray("variables");
+        ArrayNode nodes = workflow.putArray("nodes");
+        nodes.addObject().put("id", "start").put("type", "START").put("name", "Start").putObject("config");
+        ObjectNode input = nodes.addObject().put("id", "input").put("type", "ASSIGNMENT").put("name", "Input");
+        input.putObject("config").putObject("assignee").put("type", "fixed").put("value", "U001");
+        input.path("config").withArrayProperty("formFields")
+                .addObject().put("id", "score").put("label", "Score").put("type", "number").put("outputMapping", "score");
+        input.path("config").withArrayProperty("formFields")
+                .addObject().put("id", "department").put("label", "Department").put("type", "text").put("outputMapping", "department");
+        ObjectNode condition = nodes.addObject().put("id", "condition").put("type", "CONDITION").put("name", "Condition");
+        condition.putObject("config").put("condition", expression);
+        nodes.addObject().put("id", "end").put("type", "END").put("name", "End").putObject("config");
+        ArrayNode connections = workflow.putArray("connections");
+        connections.addObject().put("id", "c1").put("sourceNodeId", "start").put("sourcePort", "SUCCESS").put("targetNodeId", "input");
+        connections.addObject().put("id", "c2").put("sourceNodeId", "input").put("sourcePort", "SUCCESS").put("targetNodeId", "condition");
+        connections.addObject().put("id", "c3").put("sourceNodeId", "condition").put("sourcePort", "TRUE").put("targetNodeId", "end");
+        connections.addObject().put("id", "c4").put("sourceNodeId", "condition").put("sourcePort", "FALSE").put("targetNodeId", "end");
         return workflow;
     }
 
