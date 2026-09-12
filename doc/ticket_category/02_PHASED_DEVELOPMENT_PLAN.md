@@ -151,44 +151,45 @@ Mở cổng giao diện cho Người dùng (User Portal): Chọn Category, đi�
 ### 4.2. Hạng mục Công việc Chi tiết
 
 #### A. Database & Ticket Lifecycle
-- [ ] Tạo bảng `ticket`:
+- [x] Tạo bảng `ticket`:
   - `id` (UUID, PK), `ticket_code` (VARCHAR UNIQUE), `category_id` (UUID, FK), `form_version_id` (UUID, FK), `workflow_instance_id` (UUID, FK).
   - `initiator_id` (VARCHAR), `initiator_name` (VARCHAR), `initiator_department_id` (VARCHAR).
-  - `form_data` (JSONB): Chứa dữ liệu nhập từ người dùng.
+  - `form_data` (LONGTEXT): Chứa dữ liệu nhập từ người dùng.
   - `status` (VARCHAR: `SUBMITTED`, `IN_REVIEW`, `APPROVED`, `REJECTED`, `CANCELLED`).
   - `current_step_name` (VARCHAR).
   - `created_at`, `updated_at`, `resolved_at`.
-- [ ] Cơ chế sinh mã vé tự động: `TCK-YYYYMMDD-XXXX`.
+- [x] Cơ chế sinh mã vé tự động: `TCK-YYYYMMDD-XXXX`.
 
 #### B. Runtime Bridge & Context Injection (Backend)
-- [ ] Service `TicketService`:
+- [x] Service `TicketService`:
   - `createTicket(categoryId, formData, initiator)`:
     1. Kiểm tra Category có active không.
     2. Nạp `FormVersion` từ Category -> Validate toàn bộ `formData` theo schema (bắt buộc, kiểu dữ liệu, min/max).
     3. Áp dụng `field_mapping` để chuẩn bị context cho Workflow.
     4. Lưu bản ghi `ticket` ở trạng thái `SUBMITTED`.
-    5. Gọi `RuntimeEngineService.startInstance()`:
+    5. Gọi `RuntimeEngineService.startWithExecutable()`:
        - Context: `{ ticketId, ticketCode, categoryId, initiator, formData }`.
     6. Liên kết `workflow_instance_id` ngược lại vào Ticket.
-- [ ] Đồng bộ trạng thái 2 chiều:
-  - Bổ sung Event Listener tại `RuntimeEngineService`:
-    - Khi Node Execution bắt đầu -> Cập nhật `ticket.current_step_name`.
+- [x] Đồng bộ trạng thái 2 chiều:
+  - Bổ sung Event Listener tại `RuntimeEngineService` và `TicketWorkflowEventListener`:
+    - Khi Node Execution bắt đầu -> Cập nhật `ticket.current_step_name` và `ticket.status` (`IN_REVIEW`).
     - Khi Workflow Instance hoàn tất (Node End) -> Cập nhật `ticket.status` (`APPROVED` hoặc `REJECTED`), set `resolved_at`.
 
-#### C. Frontend User Portal
-- [ ] Màn hình **Danh mục Yêu cầu (Service Catalog)** (`/catalog` hoặc `/tickets/new`):
-  - Hiển thị danh sách các thẻ Ticket Category theo dạng lưới (Grid/Cards).
-  - Người dùng bấm chọn 1 Category -> Mở form tạo yêu cầu.
-- [ ] Component **DynamicFormRenderer**:
-  - Nhận vào `FormVersion.schemaSnapshot` và tự động render các input control tương ứng.
-  - Validate trực tiếp tại client-side (Hiển thị lỗi dưới input khi để trống trường required hoặc nhập sai định dạng).
-  - Nút **"Gửi yêu cầu (Submit)"**.
-- [ ] Màn hình **Vé của tôi (My Tickets)** (`/my-tickets`):
-  - Bảng danh sách ticket người dùng đã tạo: Mã vé, Danh mục, Trạng thái (badge màu), Bước hiện tại, Ngày tạo.
-- [ ] Màn hình **Chi tiết Ticket** (`/tickets/:id`):
-  - Khung thông tin tổng quan (Trạng thái, Người tạo, Ngày nộp).
-  - Khung dữ liệu biểu mẫu đã nộp (Render dạng Read-only).
-  - Khung Tiến trình xử lý (Timeline Node Graph): Hiển thị luồng các bước và vị trí hiện tại.
+#### C. Frontend User Portal (Tab Ticket - Thay thế hoàn toàn Service Catalog)
+- [x] Gỡ bỏ hoàn toàn **Danh mục Yêu cầu (Service Catalog)** cũ và thay bằng **Tab Phiếu yêu cầu (Tickets)** (`/tickets`) trên Sidebar cho mọi người dùng.
+- [x] Màn hình **Trung tâm Ticket (Ticket Hub)** (`/tickets`):
+  - **Tab 1: "Tạo yêu cầu mới"**: Hiển thị danh sách các thẻ Ticket Category theo dạng lưới (Grid/Cards). Bấm chọn Category -> Mở màn hình tạo yêu cầu.
+  - **Tab 2: "Vé của tôi"**: Bảng danh sách ticket người dùng đã tạo: Mã vé, Danh mục, Trạng thái (badge màu), Bước hiện tại, Ngày tạo.
+  - **Tab 3: "Tất cả yêu cầu"**: Dành riêng cho Quản trị viên (`ROLE-ADMIN` / `TICKET_MANAGE`).
+- [x] Component **DynamicFormRenderer**:
+  - Hỗ trợ 2 chế độ `edit` và `readonly` cho đầy đủ 9 loại trường dữ liệu.
+  - Client-side validation trực quan thời gian thực.
+- [x] Màn hình **Tạo yêu cầu** (`/tickets/new/:categoryId`):
+  - Điền form động theo schema của Category và gửi yêu cầu.
+- [x] Màn hình **Chi tiết Ticket** (`/tickets/:id`):
+  - Khung thông tin tổng quan (Trạng thái, Người tạo, Ngày nộp, Ngày giải quyết).
+  - Khung dữ liệu biểu mẫu đã nộp (Render dạng Read-only qua DynamicFormRenderer).
+  - Khung Tiến trình xử lý (Timeline Node Graph): Hiển thị luồng các bước thực thi và vị trí hiện tại.
 
 ### 4.3. Tiêu chí Nghiệm thu
 - [x] Người dùng chọn Category -> Form render đúng các trường của FormVersion tương ứng.

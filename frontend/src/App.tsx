@@ -20,7 +20,9 @@ import { api } from './api/client';
 import { ApiError } from './api/client';
 import { replaceBackendData } from './data/mockData';
 import LoginPage from './pages/LoginPage';
-import ServiceCatalog from './pages/ServiceCatalog';
+import TicketHub from './pages/TicketHub';
+import CreateTicketPage from './pages/CreateTicketPage';
+import TicketDetailPage from './pages/TicketDetail';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import { useAuthStore } from './stores/authStore';
 import { useNotificationStore } from './stores/notificationStore';
@@ -43,8 +45,10 @@ const router = createBrowserRouter([
   {
     element: <AppLayout />,
     children: [
-      { path: '/', element: <Navigate to="/catalog" replace /> },
-      { path: '/catalog', element: <ServiceCatalog /> },
+      { path: '/', element: <Navigate to="/tickets" replace /> },
+      { path: '/tickets', element: <TicketHub /> },
+      { path: '/tickets/new/:categoryId', element: <CreateTicketPage /> },
+      { path: '/tickets/:id', element: <TicketDetailPage /> },
       {
         path: '/dashboard',
         element: (

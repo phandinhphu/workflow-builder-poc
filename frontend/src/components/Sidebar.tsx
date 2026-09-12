@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   Squares2X2Icon, UsersIcon, HomeIcon, DocumentTextIcon, DocumentDuplicateIcon,
   BuildingOffice2Icon, ShieldCheckIcon, ChevronDownIcon,
-  ClipboardDocumentCheckIcon, SparklesIcon, TagIcon,
+  ClipboardDocumentCheckIcon, TicketIcon, TagIcon,
   ArrowRightOnRectangleIcon, UserCircleIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
@@ -19,7 +19,7 @@ interface NavItem {
 }
 
 const navigation: NavItem[] = [
-  { name: 'Cổng Dịch vụ (Catalog)', href: '/catalog', icon: SparklesIcon },
+  { name: 'Phiếu yêu cầu (Tickets)', href: '/tickets', icon: TicketIcon },
   { name: 'Nhiệm vụ của tôi', href: '/my-tasks', icon: ClipboardDocumentCheckIcon },
   { name: 'Quản lý Biểu mẫu', href: '/forms', icon: DocumentDuplicateIcon, permissions: ['FORM_VIEW', 'FORM_EDIT', 'WORKFLOW_VIEW', 'WORKFLOW_EDIT'] },
   { name: 'Danh mục Ticket', href: '/categories', icon: TagIcon, permissions: ['CATEGORY_VIEW', 'CATEGORY_MANAGE', 'WORKFLOW_VIEW', 'FORM_VIEW'] },

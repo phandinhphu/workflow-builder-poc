@@ -8,6 +8,12 @@ import type {
   ValidateMappingDto,
   CompatibilityValidationResult,
 } from '../types/category';
+import type {
+  TicketSummary,
+  TicketDetail,
+  CreateTicketDto,
+  TicketFilterParams,
+} from '../types/ticket';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
@@ -146,6 +152,27 @@ export const api = {
     delete: (id: string) => request<void>(`/ticket-categories/${id}`, { method: 'DELETE' }),
     toggleActive: (id: string, active: boolean) => request<TicketCategoryDetail>(`/ticket-categories/${id}/active`, { method: 'PATCH', body: JSON.stringify({ active }) }),
     validateMapping: (body: ValidateMappingDto) => request<CompatibilityValidationResult>('/ticket-categories/validate-mapping', { method: 'POST', body: JSON.stringify(body) }),
+  },
+  tickets: {
+    create: (body: CreateTicketDto) => request<TicketDetail>('/tickets', { method: 'POST', body: JSON.stringify(body) }),
+    myTickets: (params?: TicketFilterParams) => {
+      const sp = new URLSearchParams();
+      if (params?.search) sp.set('search', params.search);
+      if (params?.status) sp.set('status', params.status);
+      if (params?.categoryId) sp.set('categoryId', params.categoryId);
+      const query = sp.toString() ? `?${sp.toString()}` : '';
+      return request<TicketSummary[]>(`/tickets/my${query}`);
+    },
+    allTickets: (params?: TicketFilterParams) => {
+      const sp = new URLSearchParams();
+      if (params?.search) sp.set('search', params.search);
+      if (params?.status) sp.set('status', params.status);
+      if (params?.categoryId) sp.set('categoryId', params.categoryId);
+      const query = sp.toString() ? `?${sp.toString()}` : '';
+      return request<TicketSummary[]>(`/tickets${query}`);
+    },
+    get: (id: string) => request<TicketDetail>(`/tickets/${id}`),
+    cancel: (id: string) => request<TicketDetail>(`/tickets/${id}/cancel`, { method: 'POST' }),
   },
   runtime: {
     instances: (workflowId?: string) => request<WorkflowInstanceSummary[]>(`/instances${workflowId ? `?workflowId=${encodeURIComponent(workflowId)}` : ''}`),

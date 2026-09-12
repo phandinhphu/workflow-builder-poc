@@ -20,8 +20,10 @@ import com.fasterxml.jackson.databind.node.*;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.acme.workflow.runtime.event.WorkflowRuntimeEvents;
 
 import java.math.BigDecimal;
 import java.time.*;
@@ -60,6 +62,7 @@ public class RuntimeEngineService {
     private final PermissionService permissions;
     private final AuditService audit;
     private final NodeExecutorFactory nodeExecutorFactory;
+    private final ApplicationEventPublisher eventPublisher;
     private final int maxSyncDepth;
 
     public RuntimeEngineService(WorkflowInstanceRepository instances, ParticipantExecutionRepository participants,
@@ -74,6 +77,7 @@ public class RuntimeEngineService {
             DirectoryService directory, DirectoryGroupService groups, RuntimeValueResolver resolver,
             IntegrationService integrations, CurrentUserService current, PermissionService permissions,
             AuditService audit, NodeExecutorFactory nodeExecutorFactory,
+            ApplicationEventPublisher eventPublisher,
             @Value("${app.runtime.max-sync-depth:200}") int maxSyncDepth) {
         this.instances = instances;
         this.participants = participants;
@@ -102,6 +106,7 @@ public class RuntimeEngineService {
         this.permissions = permissions;
         this.audit = audit;
         this.nodeExecutorFactory = nodeExecutorFactory;
+        this.eventPublisher = eventPublisher;
         this.maxSyncDepth = maxSyncDepth;
     }
 
@@ -125,9 +130,22 @@ public class RuntimeEngineService {
         return startWithActor(workflowId, request, actor, null, null);
     }
 
+    @Transactional
+    public Map<String, Object> startWithExecutable(String workflowExecutableId, ObjectNode request, String actor) {
+        WorkflowVersionEntity version = workflowVersions.findById(workflowExecutableId)
+                .orElseThrow(() -> ApiException.notFound("Không tìm thấy executable version: " + workflowExecutableId));
+        return startWithVersion(version, request, actor, null, null);
+    }
+
     private Map<String, Object> startWithActor(String workflowId, ObjectNode request, String actor,
             String parentInstanceId, String parentNodeExecutionId) {
         WorkflowVersionEntity version = workflows.activeVersion(workflowId);
+        return startWithVersion(version, request, actor, parentInstanceId, parentNodeExecutionId);
+    }
+
+    private Map<String, Object> startWithVersion(WorkflowVersionEntity version, ObjectNode request, String actor,
+            String parentInstanceId, String parentNodeExecutionId) {
+        String workflowId = version.workflowId;
         ObjectNode definition = jsons.object(version.definitionSnapshot);
         String idempotency = nullable(request.path("idempotencyKey").asText(null));
         if (idempotency != null) {
@@ -155,7 +173,7 @@ public class RuntimeEngineService {
         JsonNode trigger = request.has("triggerData") ? request.path("triggerData") : request.path("trigger");
         instance.triggerData = jsons.write(trigger);
         instance.variablesData = jsons.write(variables);
-        instance.contextData = "{}";
+        instance.contextData = request.has("contextData") ? jsons.write(request.get("contextData")) : "{}";
         instance.idempotencyKey = idempotency;
         instance.parentInstanceId = parentInstanceId;
         instance.parentNodeExecutionId = parentNodeExecutionId;
@@ -344,6 +362,10 @@ public class RuntimeEngineService {
         participants.save(participant);
         event(instanceId, peId, execution.id, "NODE_STARTED", node.path("name").asText(nodeId), "Bắt đầu node " + type,
                 "RUNNING", null, Map.of("nodeId", nodeId, "iteration", iteration));
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new WorkflowRuntimeEvents.NodeStartedEvent(
+                    instanceId, peId, execution.id, nodeId, node.path("name").asText(nodeId), type));
+        }
         if (HUMAN.contains(type)) {
             createTasks(instanceId, peId, execution, node, context);
             return;
@@ -1734,6 +1756,12 @@ public class RuntimeEngineService {
         ObjectNode context = jsons.object();
         context.set("trigger", jsons.read(instance.triggerData));
         context.set("variables", jsons.read(instance.variablesData));
+        if (instance.contextData != null && !instance.contextData.isBlank()) {
+            JsonNode ctxNode = jsons.read(instance.contextData);
+            if (ctxNode.isObject()) {
+                ctxNode.fields().forEachRemaining(entry -> context.set(entry.getKey(), entry.getValue()));
+            }
+        }
         JsonNode participantValue = jsons.read(pe.participantSnapshot);
         ObjectNode participant = participantValue.isObject() ? ((ObjectNode) participantValue).deepCopy()
                 : jsons.object();
@@ -1807,6 +1835,10 @@ public class RuntimeEngineService {
         instances.save(instance);
         event(instanceId, peId, null, "EXECUTION_FAILED", "Thực thi thất bại", message, "FAILED", null,
                 Map.of("code", code));
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new WorkflowRuntimeEvents.InstanceCompletedEvent(
+                    instanceId, "FAILED", Instant.now()));
+        }
     }
 
     private void finishInstanceIfDone(String instanceId) {
@@ -1820,6 +1852,10 @@ public class RuntimeEngineService {
             instances.save(instance);
             event(instanceId, null, null, "INSTANCE_COMPLETED", "Workflow đã kết thúc", instance.status, "SUCCESS",
                     null, Map.of());
+            if (eventPublisher != null) {
+                eventPublisher.publishEvent(new WorkflowRuntimeEvents.InstanceCompletedEvent(
+                        instanceId, instance.status, instance.completedAt));
+            }
         }
     }
 
@@ -1852,6 +1888,10 @@ public class RuntimeEngineService {
         instances.save(instance);
         event(instanceId, null, null, "INSTANCE_CANCELLED", "Workflow đã bị hủy", "Hủy bởi " + actor, "CANCELLED",
                 actor, Map.of());
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new WorkflowRuntimeEvents.InstanceCompletedEvent(
+                    instanceId, "CANCELLED", now));
+        }
         audit.append(actor, "CANCEL", "INSTANCE", instanceId, null, null, Map.of("status", "CANCELLED"), null);
         return Map.of("id", instanceId, "status", "CANCELLED");
     }
