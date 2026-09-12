@@ -14,6 +14,7 @@ import {
   RefreshCw,
   GitBranch,
   Check,
+  X,
 } from 'lucide-react';
 import { api } from '../api/client';
 import type { TicketDetail as TicketDetailType, TicketStatus } from '../types/ticket';
@@ -274,16 +275,39 @@ export default function TicketDetailPage() {
             ) : (
               <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-200">
                 {ticket.timeline.map((item, idx) => {
-                  const isCompleted = item.state === 'COMPLETED';
-                  const isRunning = item.state === 'RUNNING';
+                  const isRejected = item.action === 'REJECTED' || item.outcomePort === 'REJECTED';
                   const isFailed = item.state === 'FAILED';
+                  const isRunning = item.state === 'RUNNING';
+                  const isCompleted = item.state === 'COMPLETED' && !isRejected;
+
+                  let badgeText = item.state as string;
+                  let badgeClass = 'bg-gray-200 text-gray-700';
+
+                  if (isRejected) {
+                    badgeText = 'TỪ CHỐI';
+                    badgeClass = 'bg-rose-100 text-rose-800 border border-rose-200 font-bold';
+                  } else if (item.action === 'APPROVED') {
+                    badgeText = 'ĐÃ DUYỆT';
+                    badgeClass = 'bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold';
+                  } else if (isCompleted) {
+                    badgeText = 'HOÀN THÀNH';
+                    badgeClass = 'bg-emerald-50 text-emerald-700 border border-emerald-100';
+                  } else if (isRunning) {
+                    badgeText = 'ĐANG XỬ LÝ';
+                    badgeClass = 'bg-blue-100 text-blue-800 border border-blue-200';
+                  } else if (isFailed) {
+                    badgeText = 'THẤT BẠI';
+                    badgeClass = 'bg-rose-100 text-rose-800 border border-rose-200';
+                  }
 
                   return (
                     <div key={`${item.nodeId}-${idx}`} className="relative group">
                       {/* Node Icon Circle */}
                       <div
                         className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ring-4 ring-white ${
-                          isCompleted
+                          isRejected
+                            ? 'bg-rose-500 text-white'
+                            : isCompleted
                             ? 'bg-emerald-500 text-white'
                             : isRunning
                             ? 'bg-primary text-white animate-pulse'
@@ -292,28 +316,24 @@ export default function TicketDetailPage() {
                             : 'bg-gray-200 text-gray-600'
                         }`}
                       >
-                        {isCompleted && <Check className="w-3 h-3" />}
+                        {isRejected && <X className="w-3 h-3 stroke-[3]" />}
+                        {!isRejected && isCompleted && <Check className="w-3 h-3 stroke-[2.5]" />}
                         {isRunning && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
-                        {isFailed && <span className="text-xs">×</span>}
+                        {isFailed && !isRejected && <span className="text-xs">×</span>}
                       </div>
 
                       <div className="bg-gray-50/70 p-3.5 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors">
                         <div className="flex items-center justify-between gap-2">
-                          <h4 className="text-xs font-bold text-gray-900">
-                            {item.nodeName || item.nodeId}
+                          <h4 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                            <span className="text-[10px] text-gray-400 font-medium">
+                              #{item.executionOrder || (idx + 1)}
+                            </span>
+                            <span>{item.nodeName || item.nodeId}</span>
                           </h4>
                           <span
-                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
-                              isCompleted
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : isRunning
-                                ? 'bg-blue-100 text-blue-800'
-                                : isFailed
-                                ? 'bg-rose-100 text-rose-800'
-                                : 'bg-gray-200 text-gray-700'
-                            }`}
+                            className={`text-[10px] px-2 py-0.5 rounded-md ${badgeClass}`}
                           >
-                            {item.state}
+                            {badgeText}
                           </span>
                         </div>
 

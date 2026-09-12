@@ -5,7 +5,7 @@ import { api, type SystemRole } from '../api/client';
 import type { OrgUser } from '../types/workflow';
 
 export interface AssigneeResolverConfig {
-  type: 'fixed' | 'role' | 'group' | 'initiator' | 'creator' | 'current_participant' | 'participant_manager' | 'creator_manager' | 'department_head' | 'dynamic' | 'each_participant_manager' | 'each_participant';
+  type: 'fixed' | 'role' | 'group' | 'initiator' | 'creator' | 'manager_of' | 'current_participant' | 'participant_manager' | 'creator_manager' | 'department_head' | 'dynamic' | 'each_participant_manager' | 'each_participant';
   value?: string; // userId, roleId, groupId, expression
   label?: string; // display label
 }
@@ -19,6 +19,7 @@ interface AssigneeResolverProps {
 
 const RESOLVER_TYPES = [
   { value: 'initiator', label: 'Người tạo / Kích hoạt đơn (Initiator)', description: 'Người bắt đầu quy trình/sự kiện này', icon: UserIcon },
+  { value: 'manager_of', label: 'Quản lý trực tiếp của người tạo (Manager of Initiator)', description: 'Tự động xác định Quản lý trực tiếp của người nộp đơn (HrmUser.managerId)', icon: ArrowRightIcon },
   { value: 'fixed', label: 'Người dùng cụ thể', description: 'Chọn một người dùng cố định', icon: UserIcon },
   { value: 'each_participant_manager', label: 'Quản lý của từng nhân viên (Multi-Manager)', description: 'Tạo task phê duyệt riêng cho quản lý của từng người nộp form ở bước trước', icon: ArrowRightIcon },
   { value: 'each_participant', label: 'Từng nhân viên tham gia (Personalized)', description: 'Gửi riêng đến từng nhân viên được phê duyệt/từ chối', icon: UserIcon },
@@ -31,7 +32,7 @@ const RESOLVER_TYPES = [
   { value: 'department_head', label: 'Trưởng phòng ban', description: 'Resolve theo org metadata', icon: HomeIcon },
 ];
 
-const VALUE_LESS_TYPES: AssigneeResolverConfig['type'][] = ['initiator', 'creator', 'current_participant', 'participant_manager', 'creator_manager', 'department_head', 'each_participant_manager', 'each_participant'];
+const VALUE_LESS_TYPES: AssigneeResolverConfig['type'][] = ['initiator', 'creator', 'manager_of', 'current_participant', 'participant_manager', 'creator_manager', 'department_head', 'each_participant_manager', 'each_participant'];
 
 export default function AssigneeResolver({ config, onChange, participants }: AssigneeResolverProps) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -77,6 +78,8 @@ export default function AssigneeResolver({ config, onChange, participants }: Ass
         return 'Gửi thông báo cá nhân hóa riêng đến từng nhân viên';
       case 'creator_manager':
         return 'Resolve manager của người tạo';
+      case 'manager_of':
+        return 'Tự động xác định Quản lý trực tiếp của người gửi phiếu';
       case 'department_head':
         return 'Resolve theo org metadata';
       default:

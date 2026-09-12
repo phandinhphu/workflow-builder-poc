@@ -8,4 +8,5 @@ public interface TaskSubmissionRepository extends JpaRepository<TaskSubmissionEn
     long countByTaskId(String taskId);
     Optional<TaskSubmissionEntity> findTopByTaskIdOrderByRevisionNoDesc(String taskId);
     List<TaskSubmissionEntity> findByTaskIdOrderByRevisionNoDesc(String taskId);
+    List<TaskSubmissionEntity> findByTaskId(String taskId);
 }

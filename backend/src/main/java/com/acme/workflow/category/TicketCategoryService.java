@@ -280,6 +280,13 @@ public class TicketCategoryService {
                 res.formName = fd.name;
                 res.formCode = fd.code;
             });
+            formVersions.findTopByFormDefinitionIdOrderByVersionNumberDesc(fv.formDefinitionId).ifPresent(latestFv -> {
+                if (latestFv.versionNumber > fv.versionNumber) {
+                    res.hasNewerFormVersion = true;
+                    res.latestFormVersionNumber = latestFv.versionNumber;
+                    res.latestFormVersionId = latestFv.id;
+                }
+            });
         });
 
         // Workflow details
@@ -317,6 +324,13 @@ public class TicketCategoryService {
             res.formVersionNumber = fv.versionNumber;
             formDefinitions.findById(fv.formDefinitionId).ifPresent(fd -> {
                 res.formName = fd.name;
+            });
+            formVersions.findTopByFormDefinitionIdOrderByVersionNumberDesc(fv.formDefinitionId).ifPresent(latestFv -> {
+                if (latestFv.versionNumber > fv.versionNumber) {
+                    res.hasNewerFormVersion = true;
+                    res.latestFormVersionNumber = latestFv.versionNumber;
+                    res.latestFormVersionId = latestFv.id;
+                }
             });
         });
 

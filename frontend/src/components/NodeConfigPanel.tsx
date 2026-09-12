@@ -1004,16 +1004,20 @@ export default function NodeConfigPanel({
                       onChange={e => onUpdate({ reviewSourceNodeId: e.target.value })}
                       className="w-full border border-border rounded px-3 py-2 text-sm bg-white"
                     >
-                      <option value="">-- Toàn bộ quy trình / Biểu mẫu khởi tạo --</option>
+                      <option value="">Biểu mẫu phiếu yêu cầu (Ticket Form Data - Mặc định)</option>
                       {upstreamFormNodes.map(fn => (
                         <option key={fn.id} value={fn.id}>
-                          {(fn.data as any)?.formName || (fn.data as any)?.label || fn.id} ({fn.id})
+                          Bước nội bộ: {(fn.data as any)?.formName || (fn.data as any)?.label || fn.id} ({fn.id})
                         </option>
                       ))}
                     </select>
                   </div>
 
-                  {data.reviewSourceNodeId && (
+                  {!data.reviewSourceNodeId ? (
+                    <div className="p-2.5 bg-blue-50/60 border border-blue-100 rounded text-xs text-blue-800">
+                      ℹ️ <strong>Mặc định:</strong> Người duyệt sẽ xem toàn bộ biểu mẫu phiếu yêu cầu (Ticket Form Data) mà người tạo đơn đã nộp kèm thông tin người gửi.
+                    </div>
+                  ) : (
                     <div className="p-2.5 bg-blue-50/60 border border-blue-100 rounded text-xs text-blue-800">
                       Người duyệt sẽ xem các trường thông tin từ bước{' '}
                       <strong>{data.reviewSourceNodeId}</strong> trước khi quyết định.
@@ -1124,13 +1128,24 @@ export default function NodeConfigPanel({
                     onChange={e => onUpdate({ reviewSourceNodeId: e.target.value })}
                     className="w-full border border-border rounded px-3 py-2 text-sm bg-white"
                   >
-                    <option value="">-- Toàn bộ quy trình / Biểu mẫu khởi tạo --</option>
+                    <option value="">Biểu mẫu phiếu yêu cầu (Ticket Form Data - Mặc định)</option>
                     {upstreamFormNodes.map(fn => (
                       <option key={fn.id} value={fn.id}>
-                        {(fn.data as any)?.formName || (fn.data as any)?.label || fn.id} ({fn.id})
+                        Bước nội bộ: {(fn.data as any)?.formName || (fn.data as any)?.label || fn.id} ({fn.id})
                       </option>
                     ))}
                   </select>
+
+                  {!data.reviewSourceNodeId ? (
+                    <div className="p-2.5 bg-purple-50/60 border border-purple-100 rounded text-xs text-purple-800">
+                      ℹ️ <strong>Mặc định:</strong> Người kiểm duyệt sẽ xem toàn bộ biểu mẫu phiếu yêu cầu (Ticket Form Data) từ Ticket đã nộp.
+                    </div>
+                  ) : (
+                    <div className="p-2.5 bg-purple-50/60 border border-purple-100 rounded text-xs text-purple-800">
+                      Người kiểm duyệt sẽ xem các trường thông tin từ bước{' '}
+                      <strong>{data.reviewSourceNodeId}</strong>.
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-4 border-t border-border space-y-3">
@@ -1441,6 +1456,33 @@ export default function NodeConfigPanel({
                     label="Endpoint"
                   />
                 </div>
+              </div>
+            )}
+
+            {/* END NODE */}
+            {type === 'end' && (
+              <div className="pt-4 border-t border-border space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-navy uppercase mb-1.5">Loại kết thúc (End Outcome)</label>
+                  <select
+                    className="w-full border border-border rounded px-3 py-2 text-sm bg-white focus:outline-none focus:border-primary"
+                    value={String(data.endType || 'SUCCESS')}
+                    onChange={e => onUpdate({ endType: e.target.value })}
+                  >
+                    <option value="SUCCESS">Thành công / Phê duyệt hoàn tất (APPROVED)</option>
+                    <option value="REJECTED">Từ chối / Hủy bỏ đơn (REJECTED)</option>
+                  </select>
+                </div>
+
+                {data.endType === 'REJECTED' ? (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
+                    ⚠️ <strong>Kết thúc Từ chối:</strong> Khi luồng xử lý tới Node này, Ticket liên kết sẽ được tự động cập nhật trạng thái là <strong>REJECTED</strong>.
+                  </div>
+                ) : (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800">
+                    ✅ <strong>Kết thúc Thành công:</strong> Khi luồng xử lý tới Node này, Ticket liên kết sẽ được hoàn tất và cập nhật trạng thái là <strong>APPROVED</strong>.
+                  </div>
+                )}
               </div>
             )}
           </div>

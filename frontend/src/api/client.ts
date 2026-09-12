@@ -181,7 +181,7 @@ export const api = {
     start: (workflowId: string, body: Record<string, unknown>) => request<Record<string, any>>(`/workflows/${workflowId}/instances`, { method: 'POST', body: JSON.stringify(body) }),
     tasks: () => request<any[]>('/tasks'),
     claim: (id: string) => request<{ success: boolean; message: string }>(`/tasks/${id}/claim`, { method: 'POST' }),
-    complete: (id: string, data: Record<string, unknown>) => request<{ success: boolean; message: string }>(`/tasks/${id}/complete`, { method: 'POST', body: JSON.stringify({ data }) }),
+    complete: (id: string, data: Record<string, unknown> = {}, comment?: string) => request<{ success: boolean; message: string }>(`/tasks/${id}/complete`, { method: 'POST', body: JSON.stringify({ data, comment }) }),
     reject: (id: string, comment?: string) => request<{ success: boolean; message: string }>(`/tasks/${id}/reject`, { method: 'POST', body: JSON.stringify({ comment }) }),
     action: (id: string, action: string, data: Record<string, unknown>) => request<Record<string, unknown>>(`/tasks/${id}/actions/${action}`, { method: 'POST', body: JSON.stringify(data) }),
     signal: (eventName: string, correlationKey: string, payload: Record<string, unknown>) => request<Record<string, unknown>>(`/triggers/events/${encodeURIComponent(eventName)}/${encodeURIComponent(correlationKey)}`, { method: 'POST', body: JSON.stringify(payload) }),

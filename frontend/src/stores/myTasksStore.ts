@@ -20,7 +20,7 @@ interface MyTasksState {
   loadTasks: (filters?: MyTasksFilter) => Promise<void>;
   getTask: (taskId: string) => TaskDefinition | undefined;
   claimTask: (taskId: string) => Promise<{ success: boolean; message: string }>;
-  completeTask: (taskId: string, data: Record<string, unknown>) => Promise<{ success: boolean; message: string }>;
+  completeTask: (taskId: string, data?: Record<string, unknown>, comment?: string) => Promise<{ success: boolean; message: string }>;
   rejectTask: (taskId: string, comment?: string) => Promise<{ success: boolean; message: string }>;
 }
 
@@ -53,8 +53,8 @@ export const useMyTasksStore = create<MyTasksState>()(
         return api.runtime.claim(taskId);
       },
 
-      completeTask: async (taskId, data) => {
-        return api.runtime.complete(taskId, data);
+      completeTask: async (taskId, data = {}, comment) => {
+        return api.runtime.complete(taskId, data, comment);
       },
 
       rejectTask: async (taskId, comment) => {

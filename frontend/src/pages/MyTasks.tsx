@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useMyTasksStore } from '../stores/myTasksStore';
-import { Loader2, RefreshCw, Eye, Search } from 'lucide-react';
+import { Loader2, RefreshCw, Eye, Search, Tag } from 'lucide-react';
 import AssignmentTaskModal from '../components/node/AssignmentTaskModal';
+import TaskApprovalModal from '../components/tasks/TaskApprovalModal';
 
 const STATUS_BADGES: Record<string, { label: string; color: string }> = {
   PENDING: { label: 'Pending', color: 'bg-yellow-100 text-yellow-700' },
@@ -42,7 +43,11 @@ export default function MyTasksPage() {
     if (priorityFilter && task.priority !== priorityFilter) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      if (!task.title?.toLowerCase().includes(q)) return false;
+      const matchTitle = task.title?.toLowerCase().includes(q);
+      const matchCode = task.ticketCode?.toLowerCase().includes(q);
+      const matchCategory = task.categoryName?.toLowerCase().includes(q);
+      const matchInitiator = task.initiator?.displayName?.toLowerCase().includes(q) || task.initiator?.userId?.toLowerCase().includes(q);
+      if (!matchTitle && !matchCode && !matchCategory && !matchInitiator) return false;
     }
     return true;
   });
@@ -56,9 +61,9 @@ export default function MyTasksPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleComplete = async (taskId: string, data: Record<string, unknown> = {}) => {
+  const handleComplete = async (taskId: string, data: Record<string, unknown> = {}, comment?: string) => {
     try {
-      const result = await completeTask(taskId, data);
+      const result = await completeTask(taskId, data, comment);
       if (result.success) { setToast({ message: 'Task completed', type: 'success' }); setSelectedTask(null); await loadTasks(); }
     } catch (cause) { setToast({ message: cause instanceof Error ? cause.message : 'Không thể hoàn thành task', type: 'error' }); }
     setTimeout(() => setToast(null), 3000);
@@ -87,8 +92,6 @@ export default function MyTasksPage() {
   };
 
   const openTask = (task: any) => {
-    if (!hasTaskBeenClaimed(task)) return;
-
     const initial: Record<string, unknown> = {};
     (task.formFields ?? []).forEach((field: any) => {
       const key = field.outputMapping || field.id;
@@ -180,71 +183,109 @@ export default function MyTasksPage() {
 
       {error && <div className="p-4 bg-red-50 rounded-lg text-red-700 text-sm mb-4">{error}</div>}
 
-      <div className="bg-white border rounded-lg overflow-hidden">
+      <div className="bg-white border rounded-lg overflow-hidden shadow-2xs">
         <table className="w-full">
           <thead className="bg-gray-50 border-b">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">#</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Task</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Type</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Priority</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Due Date</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Actions</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Nhiệm vụ</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Phiếu yêu cầu</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Người nộp đơn</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Loại bước</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Mức ưu tiên</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Hạn xử lý</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Trạng thái</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Thao tác</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {filteredTasks.map((task: any, index: number) => {
               const isOverdue = task.dueAt && new Date(task.dueAt) < new Date() && task.status !== 'COMPLETED';
+              const isApproval = task.taskType === 'APPROVAL' || task.taskType === 'REVIEW';
               return (
-                <tr key={task.id} className="hover:bg-gray-50">
+                <tr key={task.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
                   <td className="px-4 py-3">
-                    <p className="text-sm font-medium text-gray-900">{task.title}</p>
+                    <p className="text-sm font-semibold text-gray-900">{task.title}</p>
                     {task.description && <p className="text-xs text-gray-500 truncate max-w-[200px]">{task.description}</p>}
                   </td>
                   <td className="px-4 py-3">
-                    <span className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-600">{task.taskType}</span>
+                    {task.ticketCode ? (
+                      <div>
+                        <span className="inline-flex items-center gap-1 font-mono font-bold text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                          <Tag className="w-3 h-3" />
+                          {task.ticketCode}
+                        </span>
+                        {task.categoryName && <p className="text-xs text-gray-500 mt-0.5">{task.categoryName}</p>}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${PRIORITY_BADGES[task.priority]?.color || 'bg-gray-100 text-gray-600'}`}>
+                    {task.initiator ? (
+                      <div>
+                        <p className="text-xs font-bold text-gray-900">{task.initiator.displayName || task.initiator.userId}</p>
+                        <p className="text-[11px] text-gray-500">{task.initiator.departmentName || task.initiator.email || task.initiator.userId}</p>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="px-2 py-0.5 bg-gray-100 rounded text-xs font-semibold text-gray-700">{task.taskType}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${PRIORITY_BADGES[task.priority]?.color || 'bg-gray-100 text-gray-600'}`}>
                       {PRIORITY_BADGES[task.priority]?.label || task.priority || 'Normal'}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     {task.dueAt ? (
-                      <span className={`text-sm ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-600'}`}>
+                      <span className={`text-xs ${isOverdue ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
                         {new Date(task.dueAt).toLocaleDateString()}
-                        {isOverdue && ' (Overdue)'}
+                        {isOverdue && ' (Quá hạn)'}
                       </span>
                     ) : (
-                      <span className="text-xs text-gray-400">No due date</span>
+                      <span className="text-xs text-gray-400">—</span>
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${STATUS_BADGES[task.status]?.color || 'bg-gray-100 text-gray-600'}`}>
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_BADGES[task.status]?.color || 'bg-gray-100 text-gray-600'}`}>
                       {STATUS_BADGES[task.status]?.label || task.status || 'Unknown'}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-1">
-                      {hasTaskBeenClaimed(task) && (
+                    <div className="flex gap-1.5 items-center">
+                      {isApproval ? (
                         <button
                           onClick={() => openTask(task)}
-                          className="p-1 hover:bg-gray-100 rounded"
-                          title="Mở task để xử lý"
-                          aria-label={`Mở task ${task.title} để xử lý`}
+                          className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-md text-xs font-bold inline-flex items-center gap-1 transition-colors"
+                          title="Mở form xem và duyệt"
                         >
-                          <Eye className="w-4 h-4 text-gray-500" />
+                          <Eye className="w-3.5 h-3.5" />
+                          {task.status === 'COMPLETED' || task.status === 'REJECTED' ? 'Xem lại' : 'Duyệt'}
                         </button>
-                      )}
-                      {task.status === 'PENDING' && (
-                        <button
-                          onClick={() => handleClaim(task.id)}
-                          className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
-                        >
-                          Claim
-                        </button>
+                      ) : (
+                        <>
+                          {(hasTaskBeenClaimed(task) || task.status === 'PENDING') && (
+                            <button
+                              onClick={() => openTask(task)}
+                              className="p-1 hover:bg-gray-100 rounded text-gray-600"
+                              title="Mở task để xử lý"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          )}
+                          {task.status === 'PENDING' && !hasTaskBeenClaimed(task) && (
+                            <button
+                              onClick={() => handleClaim(task.id)}
+                              className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-medium"
+                            >
+                              Claim
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </td>
@@ -255,21 +296,33 @@ export default function MyTasksPage() {
         </table>
         {filteredTasks.length === 0 && !loading && (
           <div className="p-8 text-center text-gray-500">
-            <p>No tasks found</p>
+            <p>Không có nhiệm vụ nào</p>
           </div>
         )}
       </div>
 
-      {selectedTask && (selectedTask.taskType === 'ASSIGNMENT' && selectedTask.status === 'CLAIMED' ? (
-        <AssignmentTaskModal
-          taskId={selectedTask.id}
-          taskTitle={selectedTask.title}
-          onComplete={async (data) => {
-            await handleComplete(selectedTask.id, data);
-          }}
-          onClose={() => setSelectedTask(null)}
-        />
-      ) : (
+      {selectedTask && (
+        selectedTask.taskType === 'APPROVAL' || selectedTask.taskType === 'REVIEW' ? (
+          <TaskApprovalModal
+            task={selectedTask}
+            onClose={() => setSelectedTask(null)}
+            onApprove={async (comment) => {
+              await handleComplete(selectedTask.id, {}, comment);
+            }}
+            onReject={async (comment) => {
+              await handleReject(selectedTask.id, comment, true);
+            }}
+          />
+        ) : selectedTask.taskType === 'ASSIGNMENT' && selectedTask.status === 'CLAIMED' ? (
+          <AssignmentTaskModal
+            taskId={selectedTask.id}
+            taskTitle={selectedTask.title}
+            onComplete={async (data) => {
+              await handleComplete(selectedTask.id, data);
+            }}
+            onClose={() => setSelectedTask(null)}
+          />
+        ) : (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setSelectedTask(null)}>
           <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold mb-4">{selectedTask.title}</h2>

@@ -19,4 +19,5 @@ public class NodeExecutionEntity {
     @Lob @Column(name="error_data",columnDefinition="LONGTEXT") public String errorData;
     @Column(name="started_at",nullable=false) public Instant startedAt;
     @Column(name="completed_at") public Instant completedAt;
+    @Column(name="execution_order",nullable=false) public int executionOrder;
 }

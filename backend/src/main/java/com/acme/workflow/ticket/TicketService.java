@@ -19,7 +19,9 @@ import com.acme.workflow.runtime.RuntimeEngineService;
 import com.acme.workflow.runtime.domain.NodeExecutionEntity;
 import com.acme.workflow.runtime.domain.WorkflowTaskEntity;
 import com.acme.workflow.runtime.repository.NodeExecutionRepository;
+import com.acme.workflow.runtime.repository.WorkflowInstanceRepository;
 import com.acme.workflow.runtime.repository.WorkflowTaskRepository;
+import com.acme.workflow.workflow.repository.WorkflowVersionRepository;
 import com.acme.workflow.ticket.domain.TicketEntity;
 import com.acme.workflow.ticket.dto.*;
 import com.acme.workflow.ticket.repository.TicketRepository;
@@ -45,6 +47,8 @@ public class TicketService {
     private final RuntimeEngineService runtimeEngineService;
     private final NodeExecutionRepository nodeExecutionRepository;
     private final WorkflowTaskRepository workflowTaskRepository;
+    private final WorkflowInstanceRepository workflowInstanceRepository;
+    private final WorkflowVersionRepository workflowVersionRepository;
     private final HrmUserRepository userRepository;
     private final OrganizationUnitRepository orgRepository;
     private final CurrentUserService currentUserService;
@@ -60,6 +64,8 @@ public class TicketService {
                          RuntimeEngineService runtimeEngineService,
                          NodeExecutionRepository nodeExecutionRepository,
                          WorkflowTaskRepository workflowTaskRepository,
+                         WorkflowInstanceRepository workflowInstanceRepository,
+                         WorkflowVersionRepository workflowVersionRepository,
                          HrmUserRepository userRepository,
                          OrganizationUnitRepository orgRepository,
                          CurrentUserService currentUserService,
@@ -74,6 +80,8 @@ public class TicketService {
         this.runtimeEngineService = runtimeEngineService;
         this.nodeExecutionRepository = nodeExecutionRepository;
         this.workflowTaskRepository = workflowTaskRepository;
+        this.workflowInstanceRepository = workflowInstanceRepository;
+        this.workflowVersionRepository = workflowVersionRepository;
         this.userRepository = userRepository;
         this.orgRepository = orgRepository;
         this.currentUserService = currentUserService;
@@ -387,7 +395,12 @@ public class TicketService {
 
     private List<TicketTimelineNodeDto> buildTimeline(String instanceId) {
         List<TicketTimelineNodeDto> list = new ArrayList<>();
-        List<NodeExecutionEntity> nodeExecs = nodeExecutionRepository.findByInstanceIdOrderByStartedAtAsc(instanceId);
+        List<NodeExecutionEntity> nodeExecs = nodeExecutionRepository.findByInstanceIdOrderByExecutionOrderAsc(instanceId);
+        if (nodeExecs.isEmpty() || (nodeExecs.size() > 1 && nodeExecs.get(0).executionOrder == 0 && nodeExecs.get(1).executionOrder == 0)) {
+            // Fallback for legacy records without execution_order
+            nodeExecs = nodeExecutionRepository.findByInstanceIdOrderByStartedAtAsc(instanceId);
+        }
+
         List<WorkflowTaskEntity> tasks = workflowTaskRepository.findByInstanceIdOrderByCreatedAtAsc(instanceId);
 
         Map<String, WorkflowTaskEntity> taskByNodeExec = new HashMap<>();
@@ -397,8 +410,38 @@ public class TicketService {
             }
         }
 
+        // Preload node definitions snapshot for friendly node names
+        Map<String, String> nodeNamesFromDef = new HashMap<>();
+        try {
+            workflowInstanceRepository.findById(instanceId).ifPresent(wi -> {
+                if (wi.workflowVersionId != null) {
+                    workflowVersionRepository.findById(wi.workflowVersionId).ifPresent(wv -> {
+                        if (wv.definitionSnapshot != null && !wv.definitionSnapshot.isBlank()) {
+                            JsonNode def = jsons.read(wv.definitionSnapshot);
+                            JsonNode nodesNode = def.path("nodes");
+                            if (nodesNode.isArray()) {
+                                for (JsonNode n : nodesNode) {
+                                    String id = n.path("id").asText();
+                                    String name = n.path("name").asText(null);
+                                    if (name == null || name.isBlank()) {
+                                        name = n.path("data").path("label").asText(null);
+                                    }
+                                    if (id != null && !id.isBlank() && name != null && !name.isBlank()) {
+                                        nodeNamesFromDef.put(id, name);
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        } catch (Exception e) {
+            log.warn("Could not parse workflow version snapshot for instance {}: {}", instanceId, e.getMessage());
+        }
+
         for (NodeExecutionEntity ne : nodeExecs) {
             TicketTimelineNodeDto item = new TicketTimelineNodeDto();
+            item.executionOrder = ne.executionOrder;
             item.nodeId = ne.nodeId;
             item.nodeType = ne.nodeType;
             item.state = ne.state;
@@ -408,7 +451,7 @@ public class TicketService {
 
             WorkflowTaskEntity task = taskByNodeExec.get(ne.id);
             if (task != null) {
-                item.nodeName = task.title != null ? task.title : ne.nodeId;
+                item.nodeName = (task.title != null && !task.title.isBlank()) ? task.title : resolveFriendlyNodeName(ne.nodeId, ne.nodeType, nodeNamesFromDef);
                 item.assigneeId = task.assigneeId;
                 if (task.assigneeId != null) {
                     item.assigneeName = userRepository.findById(task.assigneeId)
@@ -422,12 +465,51 @@ public class TicketService {
                     }
                 }
             } else {
-                item.nodeName = ne.nodeId;
+                item.nodeName = resolveFriendlyNodeName(ne.nodeId, ne.nodeType, nodeNamesFromDef);
+                if ("REJECTED".equalsIgnoreCase(ne.outcomePort)) {
+                    item.action = "REJECTED";
+                } else if ("COMPLETED".equalsIgnoreCase(ne.state)) {
+                    item.action = "COMPLETED";
+                } else {
+                    item.action = ne.state;
+                }
             }
 
             list.add(item);
         }
 
         return list;
+    }
+
+    private String resolveFriendlyNodeName(String nodeId, String nodeType, Map<String, String> nodeNamesFromDef) {
+        if (nodeNamesFromDef != null && nodeNamesFromDef.containsKey(nodeId)) {
+            String name = nodeNamesFromDef.get(nodeId);
+            if (name != null && !name.isBlank() && !name.equalsIgnoreCase(nodeId)) {
+                return name;
+            }
+        }
+        if (nodeType != null) {
+            switch (nodeType.toUpperCase(Locale.ROOT)) {
+                case "START":
+                    return "Bắt đầu";
+                case "END":
+                    return "Kết thúc";
+                case "CONDITION":
+                    return "Điều kiện rẽ nhánh";
+                case "APPROVAL":
+                    return "Phê duyệt";
+                case "REVIEW":
+                    return "Xem xét";
+                case "TASK":
+                    return "Công việc";
+                case "NOTIFICATION":
+                    return "Gửi thông báo";
+                case "WAIT":
+                    return "Chờ đợi";
+                default:
+                    break;
+            }
+        }
+        return nodeId;
     }
 }

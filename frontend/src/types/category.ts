@@ -51,6 +51,9 @@ export interface TicketCategorySummary {
   formVersionId: string;
   formName?: string;
   formVersionNumber?: number;
+  hasNewerFormVersion?: boolean;
+  latestFormVersionNumber?: number;
+  latestFormVersionId?: string;
   workflowExecutableId: string;
   workflowName?: string;
   workflowVersionNo?: string;
@@ -74,6 +77,9 @@ export interface TicketCategoryDetail {
   formName?: string;
   formCode?: string;
   formVersionNumber?: number;
+  hasNewerFormVersion?: boolean;
+  latestFormVersionNumber?: number;
+  latestFormVersionId?: string;
   formSchemaSnapshot?: FormSchema;
   workflowExecutableId: string;
   workflowId?: string;

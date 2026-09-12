@@ -15,7 +15,9 @@ import com.acme.workflow.identity.repository.HrmUserRepository;
 import com.acme.workflow.identity.repository.OrganizationUnitRepository;
 import com.acme.workflow.runtime.RuntimeEngineService;
 import com.acme.workflow.runtime.repository.NodeExecutionRepository;
+import com.acme.workflow.runtime.repository.WorkflowInstanceRepository;
 import com.acme.workflow.runtime.repository.WorkflowTaskRepository;
+import com.acme.workflow.workflow.repository.WorkflowVersionRepository;
 import com.acme.workflow.ticket.domain.TicketEntity;
 import com.acme.workflow.ticket.dto.CreateTicketRequest;
 import com.acme.workflow.ticket.dto.TicketDetailResponse;
@@ -44,6 +46,8 @@ class TicketServiceTest {
     private RuntimeEngineService runtimeEngineService;
     private NodeExecutionRepository nodeExecutionRepository;
     private WorkflowTaskRepository workflowTaskRepository;
+    private WorkflowInstanceRepository workflowInstanceRepository;
+    private WorkflowVersionRepository workflowVersionRepository;
     private HrmUserRepository userRepository;
     private OrganizationUnitRepository orgRepository;
     private CurrentUserService currentUserService;
@@ -62,6 +66,8 @@ class TicketServiceTest {
         runtimeEngineService = mock(RuntimeEngineService.class);
         nodeExecutionRepository = mock(NodeExecutionRepository.class);
         workflowTaskRepository = mock(WorkflowTaskRepository.class);
+        workflowInstanceRepository = mock(WorkflowInstanceRepository.class);
+        workflowVersionRepository = mock(WorkflowVersionRepository.class);
         userRepository = mock(HrmUserRepository.class);
         orgRepository = mock(OrganizationUnitRepository.class);
         currentUserService = mock(CurrentUserService.class);
@@ -72,7 +78,8 @@ class TicketServiceTest {
 
         ticketService = new TicketService(
                 ticketRepository, categoryRepository, formVersionRepository, formDefinitionRepository,
-                runtimeEngineService, nodeExecutionRepository, workflowTaskRepository, userRepository,
+                runtimeEngineService, nodeExecutionRepository, workflowTaskRepository,
+                workflowInstanceRepository, workflowVersionRepository, userRepository,
                 orgRepository, currentUserService, permissionService, auditService, formValidator, jsons
         );
 

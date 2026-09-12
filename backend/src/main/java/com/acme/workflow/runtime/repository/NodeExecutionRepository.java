@@ -8,4 +8,6 @@ public interface NodeExecutionRepository extends JpaRepository<NodeExecutionEnti
     List<NodeExecutionEntity> findByParticipantExecutionIdAndNodeIdOrderByStartedAtAsc(String peId,String nodeId);
     List<NodeExecutionEntity> findByParticipantExecutionIdAndStateOrderByStartedAtAsc(String peId,String state);
     List<NodeExecutionEntity> findByInstanceIdOrderByStartedAtAsc(String instanceId);
+    List<NodeExecutionEntity> findByInstanceIdOrderByExecutionOrderAsc(String instanceId);
+    long countByInstanceId(String instanceId);
 }

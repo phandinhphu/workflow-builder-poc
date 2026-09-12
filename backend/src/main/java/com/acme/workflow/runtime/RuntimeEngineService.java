@@ -356,6 +356,7 @@ public class RuntimeEngineService {
         execution.inputSnapshot = jsons.write(context);
         execution.outputData = "{}";
         execution.startedAt = Instant.now();
+        execution.executionOrder = (int) executions.countByInstanceId(instanceId) + 1;
         executions.saveAndFlush(execution);
         participant.currentNodeId = nodeId;
         participant.iterationNo = iteration;
@@ -598,6 +599,24 @@ public class RuntimeEngineService {
         if (context.has("reviewedSubmission")) {
             snapshot.set("reviewedSubmission", context.get("reviewedSubmission"));
         }
+        if (context.has("ticketId")) {
+            snapshot.set("ticketId", context.get("ticketId"));
+        }
+        if (context.has("ticketCode")) {
+            snapshot.set("ticketCode", context.get("ticketCode"));
+        }
+        if (context.has("categoryId")) {
+            snapshot.set("categoryId", context.get("categoryId"));
+        }
+        if (context.has("formVersionId")) {
+            snapshot.set("formVersionId", context.get("formVersionId"));
+        }
+        if (context.has("formData")) {
+            snapshot.set("formData", context.get("formData"));
+        }
+        if (context.has("initiator")) {
+            snapshot.set("initiator", context.get("initiator"));
+        }
         task.resolutionSnapshot = jsons.write(snapshot);
         task.createdAt = Instant.now();
         tasks.saveAndFlush(task);
@@ -629,7 +648,29 @@ public class RuntimeEngineService {
         LinkedHashSet<String> result = new LinkedHashSet<>();
         switch (type) {
             case "fixed", "fixed_user" -> result.add(value);
-            case "initiator", "creator" -> instances.findById(instanceId).ifPresent(i -> result.add(i.creatorId));
+            case "initiator", "creator" -> {
+                String initId = context.path("initiator").path("userId").asText(null);
+                if (initId != null && !initId.isBlank()) {
+                    result.add(initId);
+                } else {
+                    instances.findById(instanceId).ifPresent(i -> result.add(i.creatorId));
+                }
+            }
+            case "manager_of", "creator_manager" -> {
+                String initiatorId = context.path("initiator").path("userId").asText(null);
+                if (initiatorId == null || initiatorId.isBlank()) {
+                    initiatorId = instances.findById(instanceId).map(i -> i.creatorId).orElse(null);
+                }
+                if (initiatorId != null && !initiatorId.isBlank()) {
+                    String managerId = context.path("initiator").path("managerId").asText(null);
+                    if (managerId == null || managerId.isBlank()) {
+                        managerId = users.findById(initiatorId).map(u -> u.managerId).orElse(null);
+                    }
+                    if (managerId != null && !managerId.isBlank()) {
+                        result.add(managerId);
+                    }
+                }
+            }
             case "current_participant" -> {
                 String pId = context.path("participant").path("id").asText(null);
                 String creatorId = instances.findById(instanceId).map(i -> i.creatorId).orElse(null);
@@ -641,8 +682,6 @@ public class RuntimeEngineService {
                 }
             }
             case "participant_manager" -> result.add(context.path("participant").path("managerId").asText(null));
-            case "creator_manager" -> result.add(instances.findById(instanceId)
-                    .flatMap(i -> users.findById(i.creatorId)).map(u -> u.managerId).orElse(null));
             case "department_head" ->
                 result.add(organizations.findById(context.path("participant").path("organizationUnitId").asText())
                         .map(o -> o.headUserId).orElse(null));
@@ -678,6 +717,16 @@ public class RuntimeEngineService {
         result.removeIf(id -> users.findById(id).map(u -> !"ACTIVE".equals(u.status)).orElse(true));
         if (result.isEmpty() && config.path("fallback").isObject())
             return resolveAssignees(config.path("fallback"), context, instanceId);
+        // Fallback for manager_of if user has no direct manager: fallback to an active ADMIN to prevent stranded ticket
+        if (result.isEmpty() && ("manager_of".equals(type) || "creator_manager".equals(type))) {
+            log.warn("[resolveAssignees] Could not resolve active manager for instance {}. Falling back to admin.", instanceId);
+            roles.findByCode("ADMIN").or(() -> roles.findByCode("ROLE-ADMIN"))
+                    .ifPresent(role -> roleAssignments.findByRoleIdIn(List.of(role.id)).stream()
+                            .findFirst().ifPresent(a -> result.add(a.userId)));
+            if (result.isEmpty()) {
+                users.findAll().stream().filter(u -> "ACTIVE".equals(u.status)).findFirst().ifPresent(u -> result.add(u.id));
+            }
+        }
         return result.stream().sorted().toList();
     }
 
@@ -1548,6 +1597,8 @@ public class RuntimeEngineService {
         if (routes.isEmpty()) {
             if ("END".equalsIgnoreCase(node.path("type").asText()))
                 completeParticipant(instanceId, peId);
+            else if ("REJECTED".equalsIgnoreCase(port) || "REJECT".equalsIgnoreCase(port))
+                rejectParticipant(instanceId, peId, "Yêu cầu bị từ chối phê duyệt");
             else
                 failParticipant(instanceId, peId, "DEAD_END", "Node không có route cho outcome " + port);
             return;
@@ -1821,6 +1872,32 @@ public class RuntimeEngineService {
         participants.saveAndFlush(pe);
         event(instanceId, peId, null, "PARTICIPANT_COMPLETED", "Hoàn thành workflow", "Participant đã đi tới END",
                 "SUCCESS", null, Map.of());
+        finishInstanceIfDone(instanceId);
+    }
+
+    public boolean hasRejectedApproval(String instanceId, String peId) {
+        boolean taskRejected = tasks.findByInstanceIdOrderByCreatedAtAsc(instanceId).stream()
+                .anyMatch(t -> ("APPROVAL".equalsIgnoreCase(t.taskType) || "REVIEW".equalsIgnoreCase(t.taskType))
+                        && "REJECTED".equals(t.status)
+                        && (peId == null || peId.equals(t.participantExecutionId)));
+        if (taskRejected) return true;
+
+        return executions.findByInstanceIdOrderByExecutionOrderAsc(instanceId).stream()
+                .anyMatch(ne -> ("APPROVAL".equalsIgnoreCase(ne.nodeType) || "REVIEW".equalsIgnoreCase(ne.nodeType))
+                        && "REJECTED".equalsIgnoreCase(ne.outcomePort)
+                        && (peId == null || peId.equals(ne.participantExecutionId)));
+    }
+
+    public void rejectParticipant(String instanceId, String peId, String message) {
+        ParticipantExecutionEntity pe = participants.findById(peId).orElseThrow();
+        if (!"IN_PROGRESS".equals(pe.status))
+            return;
+        pe.status = "REJECTED";
+        pe.currentNodeId = null;
+        pe.completedAt = Instant.now();
+        participants.saveAndFlush(pe);
+        event(instanceId, peId, null, "PARTICIPANT_REJECTED", "Yêu cầu bị từ chối", message,
+                "FAILED", null, Map.of());
         finishInstanceIfDone(instanceId);
     }
 

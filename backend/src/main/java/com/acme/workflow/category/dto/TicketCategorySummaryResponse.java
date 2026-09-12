@@ -17,6 +17,9 @@ public class TicketCategorySummaryResponse {
     public String workflowVersionNo;
     public int mappedFieldsCount;
     public boolean isActive;
+    public boolean hasNewerFormVersion;
+    public Integer latestFormVersionNumber;
+    public String latestFormVersionId;
     public String createdBy;
     public String createdByName;
     public Instant createdAt;

@@ -26,6 +26,7 @@ export interface TicketSummary {
 }
 
 export interface TicketTimelineNode {
+  executionOrder?: number;
   nodeId: string;
   nodeName: string;
   nodeType: string;

@@ -233,7 +233,7 @@ Hoàn thiện quy trình phê duyệt cho người duyệt (Approver), tích h�
   - UI Category hiển thị nhãn cảnh báo: *"Có Form version mới"* kèm nút *"Cập nhật và kiểm tra tương thích"*.
 
 #### D. Dọn dẹp & Tối ưu Codebase (Clean-up)
-- [ ] Rà soát và gỡ bỏ các đoạn code liên quan đến mô hình Batch Campaign cũ (như flow import danh sách participant excel hàng loạt trong ServiceCatalog cũ nếu không còn dùng).
+- [ ] Rà soát và gỡ bỏ các đoạn code liên quan đến mô hình Single/On-Demand vs Batch/Campaign Workflow cũ (như flow import danh sách participant excel hàng loạt trong ServiceCatalog cũ nếu không còn dùng).
 - [ ] Đảm bảo toàn bộ test case hiện có của core engine chạy xanh.
 - [ ] Cập nhật tài liệu README và API Docs của dự án.
 

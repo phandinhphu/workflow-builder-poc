@@ -12,6 +12,24 @@ export type TaskStatus = 'PENDING' | 'CLAIMED' | 'IN_PROGRESS' | 'COMPLETED' | '
 
 export type TaskPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 
+export interface TaskInitiator {
+  userId: string;
+  displayName?: string;
+  email?: string;
+  departmentId?: string;
+  departmentName?: string;
+}
+
+export interface TaskApprovalHistoryItem {
+  taskId: string;
+  nodeName?: string;
+  approverId?: string;
+  approverName?: string;
+  action: string;
+  comment?: string;
+  completedAt: string;
+}
+
 export interface TaskDefinition {
   id: string;
   workflowInstanceId: string;
@@ -38,6 +56,18 @@ export interface TaskDefinition {
   createdAt: string;
   createdBy: string;
   metadata?: Record<string, unknown>;
+
+  // Phase 5: Ticket & Decoupled Form Context
+  ticketId?: string;
+  ticketCode?: string;
+  categoryId?: string;
+  categoryName?: string;
+  initiator?: TaskInitiator;
+  formSchemaSnapshot?: any;
+  formVersionNumber?: number;
+  formName?: string;
+  formData?: Record<string, unknown>;
+  approvalHistory?: TaskApprovalHistoryItem[];
 }
 
 export interface TaskExecutionState {

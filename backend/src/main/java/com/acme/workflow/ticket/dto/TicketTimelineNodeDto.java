@@ -14,4 +14,5 @@ public class TicketTimelineNodeDto {
     public String assigneeName;
     public String action;
     public String comment;
+    public int executionOrder;
 }

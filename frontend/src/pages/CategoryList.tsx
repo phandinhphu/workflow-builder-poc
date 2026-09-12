@@ -11,6 +11,7 @@ import {
   DocumentTextIcon,
   TagIcon,
   SparklesIcon,
+  ArrowUpCircleIcon,
 } from '@heroicons/react/24/outline';
 import { api } from '../api/client';
 import type { TicketCategorySummary, TicketCategoryDetail } from '../types/category';
@@ -22,6 +23,7 @@ export default function CategoryList() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [upgradingId, setUpgradingId] = useState<string | null>(null);
 
   // Modal states
   const [modalOpen, setModalOpen] = useState(false);
@@ -88,6 +90,31 @@ export default function CategoryList() {
       console.error('Lỗi khi xóa danh mục', err);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleUpgradeFormVersion = async (cat: TicketCategorySummary) => {
+    if (!cat.latestFormVersionId) return;
+    try {
+      setUpgradingId(cat.id);
+      const detail = await api.ticketCategories.get(cat.id);
+      await api.ticketCategories.update(cat.id, {
+        name: detail.name,
+        code: detail.code,
+        description: detail.description,
+        icon: detail.icon,
+        color: detail.color,
+        formVersionId: cat.latestFormVersionId,
+        workflowExecutableId: detail.workflowExecutableId,
+        fieldMapping: detail.fieldMapping || {},
+        isActive: detail.isActive,
+      });
+      await loadCategories();
+    } catch (err) {
+      console.error('Lỗi khi nâng cấp form version', err);
+      alert('Không thể nâng cấp Form version: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setUpgradingId(null);
     }
   };
 
@@ -279,9 +306,16 @@ export default function CategoryList() {
                         <DocumentDuplicateIcon className="w-4 h-4 text-indigo-500 shrink-0" />
                         <div>
                           <p className="font-semibold text-gray-800 text-xs">{cat.formName || 'Form'}</p>
-                          <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-mono font-medium">
-                            v{cat.formVersionNumber || 1}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                            <span className="inline-block px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-mono font-medium">
+                              v{cat.formVersionNumber || 1}
+                            </span>
+                            {cat.hasNewerFormVersion && (
+                              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold animate-pulse">
+                                ⚡ Có v{cat.latestFormVersionNumber} mới
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -329,6 +363,18 @@ export default function CategoryList() {
                     {/* Actions */}
                     <td className="py-3.5 px-6 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {cat.hasNewerFormVersion && cat.latestFormVersionId && (
+                          <button
+                            onClick={() => void handleUpgradeFormVersion(cat)}
+                            disabled={upgradingId === cat.id}
+                            title={`Cập nhật lên Form version v${cat.latestFormVersionNumber} mới nhất`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-linear-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-[11px] font-bold shadow-xs hover:shadow-sm transition-all disabled:opacity-50"
+                          >
+                            <ArrowUpCircleIcon className={`w-3.5 h-3.5 ${upgradingId === cat.id ? 'animate-spin' : ''}`} />
+                            <span>{upgradingId === cat.id ? 'Đang nâng cấp...' : `Lên v${cat.latestFormVersionNumber}`}</span>
+                          </button>
+                        )}
+
                         <button
                           onClick={() => void handleOpenEdit(cat)}
                           disabled={loadingEditId === cat.id}

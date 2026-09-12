@@ -22,6 +22,9 @@ public class TicketCategoryResponse {
     public String workflowVersionNo;
     public JsonNode fieldMapping;
     public boolean isActive;
+    public boolean hasNewerFormVersion;
+    public Integer latestFormVersionNumber;
+    public String latestFormVersionId;
     public String createdBy;
     public String createdByName;
     public Instant createdAt;
