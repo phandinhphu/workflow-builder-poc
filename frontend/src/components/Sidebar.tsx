@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  Squares2X2Icon, UsersIcon, HomeIcon, DocumentTextIcon,
+  Squares2X2Icon, UsersIcon, HomeIcon, DocumentTextIcon, DocumentDuplicateIcon,
   BuildingOffice2Icon, ShieldCheckIcon, ChevronDownIcon,
   ClipboardDocumentCheckIcon, SparklesIcon,
   ArrowRightOnRectangleIcon, UserCircleIcon,
@@ -21,6 +21,7 @@ interface NavItem {
 const navigation: NavItem[] = [
   { name: 'Cổng Dịch vụ (Catalog)', href: '/catalog', icon: SparklesIcon },
   { name: 'Nhiệm vụ của tôi', href: '/my-tasks', icon: ClipboardDocumentCheckIcon },
+  { name: 'Quản lý Biểu mẫu', href: '/forms', icon: DocumentDuplicateIcon, permissions: ['FORM_VIEW', 'FORM_EDIT', 'WORKFLOW_VIEW', 'WORKFLOW_EDIT'] },
   { name: 'Danh sách Workflow', href: '/workflows', icon: DocumentTextIcon, permissions: ['WORKFLOW_VIEW', 'WORKFLOW_EDIT'] },
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, permissions: ['INSTANCE_VIEW'] },
   { name: 'Người dùng', href: '/users', icon: UsersIcon, permissions: ['USER_VIEW', 'USER_MANAGE'] },

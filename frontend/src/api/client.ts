@@ -1,4 +1,5 @@
 import type { OrgUser, WorkflowDefinition, WorkflowInstanceSummary } from '../types/workflow';
+import type { FormDetail, FormSummary, FormVersion, CreateFormDto, UpdateDraftDto } from '../types/form';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
@@ -106,6 +107,22 @@ export const api = {
     members: (id: string) => request<Record<string, unknown>[]>(`/workflows/${id}/members`),
     updateMembers: (id: string, members: Record<string, unknown>[]) => request<Record<string, unknown>[]>(`/workflows/${id}/members`, { method: 'PUT', body: JSON.stringify(members) }),
     changeStatus: (id: string, status: string) => request(`/workflows/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  },
+  forms: {
+    list: (status?: string, search?: string) => {
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      if (search) params.set('search', search);
+      const query = params.toString() ? `?${params.toString()}` : '';
+      return request<FormSummary[]>(`/forms${query}`);
+    },
+    get: (id: string) => request<FormDetail>(`/forms/${id}`),
+    create: (body: CreateFormDto) => request<FormDetail>('/forms', { method: 'POST', body: JSON.stringify(body) }),
+    updateDraft: (id: string, body: UpdateDraftDto) => request<FormDetail>(`/forms/${id}/draft`, { method: 'PUT', body: JSON.stringify(body) }),
+    publish: (id: string) => request<FormVersion>(`/forms/${id}/publish`, { method: 'POST' }),
+    versions: (id: string) => request<FormVersion[]>(`/forms/${id}/versions`),
+    version: (id: string, versionId: string) => request<FormVersion>(`/forms/${id}/versions/${versionId}`),
+    changeStatus: (id: string, status: string) => request<FormDetail>(`/forms/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   },
   runtime: {
     instances: (workflowId?: string) => request<WorkflowInstanceSummary[]>(`/instances${workflowId ? `?workflowId=${encodeURIComponent(workflowId)}` : ''}`),

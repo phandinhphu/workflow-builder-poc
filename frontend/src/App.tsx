@@ -3,6 +3,8 @@ import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-rou
 import WorkflowList from './pages/WorkflowList';
 import WorkflowBuilder from './pages/WorkflowBuilder';
 import WorkflowDetail from './pages/WorkflowDetail';
+import FormList from './pages/FormList';
+import FormBuilder from './pages/FormBuilder';
 import InstancesList from './pages/InstancesList';
 import InstanceDetail from './pages/InstanceDetail';
 import UsersList from './pages/UsersList';
@@ -55,6 +57,22 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute permissions={['WORKFLOW_VIEW', 'WORKFLOW_EDIT']}>
             <WorkflowList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/forms',
+        element: (
+          <ProtectedRoute permissions={['FORM_VIEW', 'FORM_EDIT', 'WORKFLOW_VIEW', 'WORKFLOW_EDIT']}>
+            <FormList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/forms/:id/builder',
+        element: (
+          <ProtectedRoute permissions={['FORM_EDIT', 'WORKFLOW_EDIT']}>
+            <FormBuilder />
           </ProtectedRoute>
         ),
       },
