@@ -135,6 +135,51 @@ export interface ConditionExpression {
   logicalOperator?: 'AND' | 'OR';
 }
 
+export type ConditionFieldType =
+  | 'number'
+  | 'string'
+  | 'textarea'
+  | 'boolean'
+  | 'date'
+  | 'datetime'
+  | 'select'
+  | 'multiselect';
+
+export type ConditionOperator =
+  | 'EQUALS'
+  | 'NOT_EQUALS'
+  | 'GREATER_THAN'
+  | 'LESS_THAN'
+  | 'GREATER_THAN_OR_EQUAL'
+  | 'LESS_THAN_OR_EQUAL'
+  | 'BETWEEN'
+  | 'CONTAINS'
+  | 'STARTS_WITH'
+  | 'IS_EMPTY'
+  | 'IS_NOT_EMPTY'
+  | 'IS_TRUE'
+  | 'IS_FALSE'
+  | 'BEFORE'
+  | 'AFTER'
+  | 'IN'
+  | 'NOT_IN'
+  | 'CONTAINS_ANY'
+  | 'CONTAINS_ALL';
+
+export interface StructuredConditionRule {
+  id?: string;
+  field: string;
+  fieldType: ConditionFieldType;
+  operator: ConditionOperator;
+  value?: any;
+  secondValue?: any;
+}
+
+export interface StructuredConditionConfig {
+  logic: 'AND' | 'OR';
+  rules: StructuredConditionRule[];
+}
+
 export interface ConnectionDefinition {
   id: string;
   sourceNodeId: string;

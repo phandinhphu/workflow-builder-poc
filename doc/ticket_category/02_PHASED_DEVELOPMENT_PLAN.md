@@ -60,7 +60,7 @@ Chuẩn hóa Condition Node sang cấu trúc AST Rules JSON, loại bỏ script 
 ### 2.2. Hạng mục Công việc Chi tiết
 
 #### A. Backend & Core Engine
-- [ ] Cập nhật schema của `ConditionNodeConfig`:
+- [x] Cập nhật schema của `ConditionNodeConfig`:
   - Chuyển đổi từ raw expression sang dạng Structured Rules:
     ```json
     {
@@ -70,14 +70,14 @@ Chuẩn hóa Condition Node sang cấu trúc AST Rules JSON, loại bỏ script 
       ]
     }
     ```
-- [ ] Nâng cấp `ExpressionEngine.java`:
+- [x] Nâng cấp `ExpressionEngine.java`:
   - Xây dựng module `StructuredConditionEvaluator`:
     - Đánh giá giá trị trường từ `context.formData.<field>`.
     - Hỗ trợ đầy đủ bộ toán tử theo kiểu dữ liệu (`EQUALS`, `NOT_EQUALS`, `GREATER_THAN`, `LESS_THAN`, `BETWEEN`, `CONTAINS`, `IS_EMPTY`...).
     - Xử lý Type Casting an toàn (tránh lỗi ClassCastException giữa Integer, Double, String).
 
 #### B. Frontend Workflow Designer
-- [ ] Nâng cấp **Condition Node Modal**:
+- [x] Nâng cấp **Condition Node Modal**:
   - Tính năng **"Preview với Form (Design Hint)"**:
     - Dropdown chọn tạm 1 Form đã có.
     - Khi chọn form: Hệ thống đọc schema của form đó và hiển thị danh sách field vào dropdown gợi ý khi thêm rule.

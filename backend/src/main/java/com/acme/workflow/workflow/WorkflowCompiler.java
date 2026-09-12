@@ -156,8 +156,23 @@ public class WorkflowCompiler {
             if (!Set.of("DIRECT_ONE", "DIRECT_ALL", "CLAIMABLE_POOL", "SINGLE", "ALL", "FOREACHPARTICIPANT", "FOR_EACH_PARTICIPANT", "DYNAMIC_BATCH").contains(mode)) error(errors, "ASSIGNMENT_MODE_INVALID", "assignmentMode không hợp lệ", id, null);
             validateDuration(id, config.path("slaConfig").path("dueIn").asText(config.path("slaDue").asText()), false, errors);
         }
-        if ("CONDITION".equals(type) && config.path("condition").asText(config.path("expression").asText()).isBlank()) error(errors, "CONDITION_REQUIRED", "Condition node cần biểu thức", id, null);
-        if (Set.of("SYSTEM", "HTTP").contains(type) && config.path("action").asText().isBlank() && config.path("connectorId").asText().isBlank()) error(errors, "SYSTEM_ACTION_REQUIRED", "System/HTTP node cần action hoặc connectorId", id, null);
+        if ("CONDITION".equals(type)) {
+            boolean hasStructuredRules = (config.has("rules") && config.path("rules").isArray() && !config.path("rules").isEmpty())
+                    || (config.path("condition").isObject() && config.path("condition").has("rules") && !config.path("condition").path("rules").isEmpty());
+            if (hasStructuredRules) {
+                JsonNode rules = config.has("rules") ? config.path("rules") : config.path("condition").path("rules");
+                for (JsonNode rule : rules) {
+                    if (rule.path("field").asText("").isBlank()) {
+                        error(errors, "CONDITION_FIELD_REQUIRED", "Mỗi rule trong Condition node cần có field", id, null);
+                    }
+                    if (rule.path("operator").asText("").isBlank()) {
+                        error(errors, "CONDITION_OPERATOR_REQUIRED", "Mỗi rule trong Condition node cần có operator", id, null);
+                    }
+                }
+            } else if (config.path("condition").asText(config.path("expression").asText()).isBlank()) {
+                error(errors, "CONDITION_REQUIRED", "Condition node cần biểu thức hoặc danh sách rules", id, null);
+            }
+        }
         if ("NOTIFICATION".equals(type)) { validateAssignee(id, config.path("assignee"), errors); if (!config.path("channels").isArray() || config.path("channels").isEmpty()) error(errors, "NOTIFICATION_CHANNEL_REQUIRED", "Notification cần ít nhất một channel", id, null); }
         if ("TIMER".equals(type)) validateDuration(id, config.path("duration").asText(config.path("waitFor").asText()), true, errors);
         if ("WAIT_EVENT".equals(type)) {
@@ -222,8 +237,12 @@ public class WorkflowCompiler {
         JsonNode config = node.path("config");
         Set<String> checked = new HashSet<>();
         if ("CONDITION".equalsIgnoreCase(node.path("type").asText())) {
-            String condition = config.path("condition").asText(config.path("expression").asText());
-            validateExpression(definition, nodes, nodeId, condition, ExpressionEngine.ValueType.BOOLEAN, "condition", checked, errors);
+            boolean hasStructuredRules = (config.has("rules") && config.path("rules").isArray())
+                    || (config.path("condition").isObject() && config.path("condition").has("rules"));
+            if (!hasStructuredRules) {
+                String condition = config.path("condition").asText(config.path("expression").asText());
+                validateExpression(definition, nodes, nodeId, condition, ExpressionEngine.ValueType.BOOLEAN, "condition", checked, errors);
+            }
         }
         config.path("formFields").forEach(field -> {
             ExpressionEngine.ValueType fieldType = formType(field.path("type").asText());

@@ -4,7 +4,8 @@ import { useState, useMemo } from 'react';
 import DynamicValueField from './DynamicValueField';
 import AssigneeResolver, { type AssigneeResolverConfig } from './AssigneeResolver';
 import FormBuilderModal, { type FormField } from './FormBuilderModal';
-import ConditionBuilderModal from './ConditionBuilderModal';
+import StructuredConditionModal from './StructuredConditionModal';
+import type { StructuredConditionConfig, StructuredConditionRule } from '../types/workflow';
 import {
   CheckCircle2,
   UserPlus,
@@ -380,19 +381,44 @@ function PreviewTab({ type, data, formFields }: { type: string; data: AnyRecord;
   }
 
   if (type === 'condition') {
+    const rules = Array.isArray(data.rules) ? (data.rules as StructuredConditionRule[]) : [];
+    const logic = (data.logic as string) || 'AND';
     const condition = String(data.condition || '');
     return (
       <div className="p-4">
         <h4 className="text-xs font-bold text-navy uppercase mb-3">Condition preview</h4>
         <div className="max-w-md mx-auto">
           <div className="border border-border rounded-lg p-4 bg-white">
-            <div className="flex items-center gap-3 mb-2">
-              <GitBranch className="w-5 h-5 text-emerald-500" />
-              <span className="text-sm font-medium text-navy">Điều kiện nhánh</span>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <GitBranch className="w-5 h-5 text-emerald-500" />
+                <span className="text-sm font-medium text-navy">Điều kiện nhánh</span>
+              </div>
+              {rules.length > 0 && (
+                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                  logic === 'AND' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {logic} ({rules.length} rules)
+                </span>
+              )}
             </div>
-            <code className="text-sm font-mono text-navy block bg-gray-50 border border-border rounded p-2 break-all whitespace-pre-wrap">
-              {condition || 'Chưa có điều kiện'}
-            </code>
+
+            {rules.length > 0 ? (
+              <div className="space-y-1.5 my-2">
+                {rules.map((r, i) => (
+                  <div key={i} className="text-xs font-mono bg-gray-50 border border-border rounded p-2 text-navy">
+                    <span className="font-bold text-blue-700">{r.field}</span>{' '}
+                    <span className="text-emerald-600 font-semibold">{r.operator}</span>{' '}
+                    <span className="text-purple-700">{r.value !== undefined ? String(r.value) : ''}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <code className="text-sm font-mono text-navy block bg-gray-50 border border-border rounded p-2 break-all whitespace-pre-wrap">
+                {condition || 'Chưa có điều kiện'}
+              </code>
+            )}
+
             <div className="mt-3 flex gap-4">
               <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded p-2 text-center">
                 <span className="text-xs font-bold text-emerald-700">TRUE</span>
@@ -502,8 +528,23 @@ export default function NodeConfigPanel({
     });
   };
 
-  const conditionExpression: string = data.condition || '';
-  const setConditionExpression = (expr: string) => onUpdate({ condition: expr });
+  const conditionConfig: StructuredConditionConfig = useMemo(() => ({
+    logic: (data.logic as 'AND' | 'OR') || 'AND',
+    rules: Array.isArray(data.rules) ? (data.rules as StructuredConditionRule[]) : [],
+  }), [data.logic, data.rules]);
+
+  const handleSaveStructuredCondition = (cfg: StructuredConditionConfig) => {
+    const summaryStr = cfg.rules
+      .map(r => `${r.field} ${r.operator}${r.value !== undefined && r.value !== '' ? ` ${r.value}` : ''}`)
+      .join(` ${cfg.logic} `);
+
+    onUpdate({
+      logic: cfg.logic,
+      rules: cfg.rules,
+      condition: summaryStr,
+      subLabel: `${cfg.rules.length} quy tắc (${cfg.logic})`,
+    });
+  };
 
   const channels: string[] = data.channels || ['email', 'inapp'];
 
@@ -1211,22 +1252,62 @@ export default function NodeConfigPanel({
             {/* CONDITION (IF/ELSE) NODE */}
             {type === 'condition' && (
               <div className="pt-4 border-t border-border space-y-3">
-                <label className="block text-xs font-bold text-navy uppercase mb-1.5">Biểu thức điều kiện</label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-navy uppercase">Cấu trúc điều kiện (AST)</label>
+                  {conditionConfig.rules.length > 0 && (
+                    <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                      conditionConfig.logic === 'AND' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {conditionConfig.logic} ({conditionConfig.rules.length} quy tắc)
+                    </span>
+                  )}
+                </div>
+
                 <button
                   type="button"
                   onClick={() => setConditionModalOpen(true)}
                   className="w-full border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 rounded-lg px-3 py-2.5 text-sm font-semibold text-emerald-800 flex items-center justify-center gap-2 transition-colors"
                 >
                   <GitBranch size={16} />
-                  {conditionExpression ? 'Chỉnh sửa điều kiện' : 'Thiết lập điều kiện rẽ nhánh'}
+                  {conditionConfig.rules.length > 0 ? 'Chỉnh sửa điều kiện (Rules)' : 'Thiết lập điều kiện rẽ nhánh'}
                 </button>
-                {conditionExpression && (
+
+                {conditionConfig.rules.length > 0 ? (
+                  <div className="space-y-1.5 mt-2">
+                    {conditionConfig.rules.map((rule, idx) => (
+                      <div key={idx} className="p-2 bg-gray-50 border border-border rounded-lg text-xs flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-mono font-bold text-navy bg-white border border-gray-200 px-1.5 py-0.5 rounded text-[11px]">
+                            {rule.field}
+                          </span>
+                          <span className="text-[10px] text-gray-500 bg-gray-200/60 px-1 rounded">
+                            {rule.fieldType}
+                          </span>
+                          <span className="text-emerald-700 font-semibold text-[11px]">
+                            {rule.operator}
+                          </span>
+                          {rule.value !== undefined && rule.value !== '' && (
+                            <span className="font-mono text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded text-[11px]">
+                              {String(rule.value)}
+                            </span>
+                          )}
+                        </div>
+                        {idx < conditionConfig.rules.length - 1 && (
+                          <span className="text-[10px] font-bold text-muted ml-2">
+                            {conditionConfig.logic}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : data.condition ? (
                   <code className="mt-2 block bg-gray-900 text-emerald-400 border border-gray-800 rounded p-2.5 text-xs font-mono whitespace-pre-wrap break-all">
-                    {conditionExpression}
+                    {data.condition}
                   </code>
-                )}
+                ) : null}
+
                 <p className="mt-1 text-xs text-gray-500">
-                  Nhánh TRUE sẽ được kích hoạt khi biểu thức đúng, ngược lại rẽ nhánh FALSE.
+                  Nhánh TRUE sẽ được kích hoạt khi các điều kiện thỏa mãn, ngược lại rẽ nhánh FALSE.
                 </p>
               </div>
             )}
@@ -1377,12 +1458,12 @@ export default function NodeConfigPanel({
         trigger={trigger}
         variables={variables}
       />
-      <ConditionBuilderModal
+      <StructuredConditionModal
         isOpen={conditionModalOpen}
         onClose={() => setConditionModalOpen(false)}
-        expression={conditionExpression}
-        onSave={setConditionExpression}
-        nodes={upstreamNodes}
+        config={conditionConfig}
+        onSave={handleSaveStructuredCondition}
+        nodeName={data.label as string}
       />
     </div>
   );

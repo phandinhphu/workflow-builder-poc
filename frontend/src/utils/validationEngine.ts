@@ -232,10 +232,26 @@ function validateNodeConfigs(input: WorkflowValidationInput): ValidationIssue[] 
       }
       case 'CONDITION': {
         const cfg = config as Record<string, unknown>;
-        if (!cfg.condition && !cfg.conditionExpression) {
+        const hasStructuredRules = Array.isArray(cfg.rules) && cfg.rules.length > 0;
+        if (!cfg.condition && !cfg.conditionExpression && !hasStructuredRules) {
           issues.push(createIssue('ERROR', 'NODE_CONFIG', VALIDATION_CODES.CONDITION_PATH_EXISTS,
-            'Condition node has no condition expression', node.id, undefined, 'condition',
-            'Add a condition expression'));
+            'Condition node has no condition expression or structured rules', node.id, undefined, 'condition',
+            'Add condition rules or an expression'));
+        }
+        if (hasStructuredRules) {
+          const rules = cfg.rules as Array<{ field?: string; operator?: string }>;
+          rules.forEach((r, idx) => {
+            if (!r.field || !r.field.trim()) {
+              issues.push(createIssue('ERROR', 'NODE_CONFIG', VALIDATION_CODES.CONDITION_PATH_EXISTS,
+                `Rule ${idx + 1} trong bước điều kiện chưa có tên trường`, node.id, undefined, `rules[${idx}].field`,
+                'Nhập hoặc chọn tên trường cho điều kiện'));
+            }
+            if (!r.operator) {
+              issues.push(createIssue('ERROR', 'NODE_CONFIG', VALIDATION_CODES.CONDITION_OPERATOR_VALID,
+                `Rule ${idx + 1} trong bước điều kiện chưa có phép toán`, node.id, undefined, `rules[${idx}].operator`,
+                'Chọn phép toán cho điều kiện'));
+            }
+          });
         }
         break;
       }
