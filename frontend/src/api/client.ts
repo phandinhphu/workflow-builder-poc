@@ -1,5 +1,13 @@
 import type { OrgUser, WorkflowDefinition, WorkflowInstanceSummary } from '../types/workflow';
 import type { FormDetail, FormSummary, FormVersion, CreateFormDto, UpdateDraftDto } from '../types/form';
+import type {
+  TicketCategorySummary,
+  TicketCategoryDetail,
+  CreateTicketCategoryDto,
+  UpdateTicketCategoryDto,
+  ValidateMappingDto,
+  CompatibilityValidationResult,
+} from '../types/category';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
@@ -123,6 +131,21 @@ export const api = {
     versions: (id: string) => request<FormVersion[]>(`/forms/${id}/versions`),
     version: (id: string, versionId: string) => request<FormVersion>(`/forms/${id}/versions/${versionId}`),
     changeStatus: (id: string, status: string) => request<FormDetail>(`/forms/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  },
+  ticketCategories: {
+    list: (search?: string, activeOnly?: boolean) => {
+      const params = new URLSearchParams();
+      if (search) params.set('search', search);
+      if (activeOnly !== undefined) params.set('activeOnly', String(activeOnly));
+      const query = params.toString() ? `?${params.toString()}` : '';
+      return request<TicketCategorySummary[]>(`/ticket-categories${query}`);
+    },
+    get: (id: string) => request<TicketCategoryDetail>(`/ticket-categories/${id}`),
+    create: (body: CreateTicketCategoryDto) => request<TicketCategoryDetail>('/ticket-categories', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, body: UpdateTicketCategoryDto) => request<TicketCategoryDetail>(`/ticket-categories/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+    delete: (id: string) => request<void>(`/ticket-categories/${id}`, { method: 'DELETE' }),
+    toggleActive: (id: string, active: boolean) => request<TicketCategoryDetail>(`/ticket-categories/${id}/active`, { method: 'PATCH', body: JSON.stringify({ active }) }),
+    validateMapping: (body: ValidateMappingDto) => request<CompatibilityValidationResult>('/ticket-categories/validate-mapping', { method: 'POST', body: JSON.stringify(body) }),
   },
   runtime: {
     instances: (workflowId?: string) => request<WorkflowInstanceSummary[]>(`/instances${workflowId ? `?workflowId=${encodeURIComponent(workflowId)}` : ''}`),

@@ -101,21 +101,21 @@ Xây dựng thực thể trung gian `TicketCategory` kết nối 1 `FormVersion`
 ### 3.2. Hạng mục Công việc Chi tiết
 
 #### A. Database & Entities
-- [ ] Tạo bảng `ticket_category`:
+- [x] Tạo bảng `ticket_category`:
   - `id` (UUID, PK), `name` (VARCHAR), `code` (VARCHAR UNIQUE), `description` (TEXT), `icon` (VARCHAR), `color` (VARCHAR).
   - `form_version_id` (UUID, FK -> `form_version.id`).
-  - `workflow_executable_id` (UUID, FK -> `workflow_executable.id`).
+  - `workflow_executable_id` (UUID, FK -> `workflow_executable.id` / `workflow_versions.id`).
   - `field_mapping` (JSONB) - ví dụ: `{ "trip_cost": "price" }`.
   - `is_active` (BOOLEAN, DEFAULT true), audit columns.
 
 #### B. Compatibility Validation Engine (Backend)
-- [ ] Xây dựng service `CompatibilityValidationService`:
+- [x] Xây dựng service `CompatibilityValidationService`:
   - Trích xuất toàn bộ field được sử dụng trong các nodes của `WorkflowExecutable` (Condition Nodes, Assignment/Task rules).
   - Đối chiếu với `FormVersion.schemaSnapshot`:
     - Kiểm tra sự tồn tại của field (hoặc field sau khi qua `field_mapping`).
     - Kiểm tra tính tương thích của `fieldType` (ví dụ: `number` không thể match với `boolean`).
   - Trả về danh sách chi tiết các lỗi: `MISSING_FIELD`, `TYPE_MISMATCH` kèm `nodeId`, `nodeName`.
-- [ ] API endpoints:
+- [x] API endpoints:
   - `POST /api/ticket-categories/validate-mapping`: Kiểm tra tính tương thích trước khi lưu.
   - `POST /api/ticket-categories`: Tạo mới Category (bắt buộc chạy qua validate, nếu có lỗi thì từ chối HTTP 422).
   - `GET /api/ticket-categories`: Danh sách Category.
@@ -123,11 +123,11 @@ Xây dựng thực thể trung gian `TicketCategory` kết nối 1 `FormVersion`
   - `PUT /api/ticket-categories/{id}`: Cập nhật thông tin / cấu hình.
 
 #### C. Frontend UI Quản lý Ticket Category
-- [ ] Màn hình **Ticket Categories** (`/admin/categories`):
+- [x] Màn hình **Ticket Categories** (`/categories`):
   - Bảng danh sách: Tên danh mục, Form áp dụng (kèm version), Workflow áp dụng (kèm version), Trạng thái active, Nút Sửa/Xóa.
   - Nút *"Thêm Danh mục Mới"*.
-- [ ] Modal **Tạo/Chỉnh sửa Ticket Category**:
-  - Thông tin cơ bản: Tên danh mục, mã, mô tả, icon.
+- [x] Modal **Tạo/Chỉnh sửa Ticket Category**:
+  - Thông tin cơ bản: Tên danh mục, mã, mô tả, icon, màu nhận diện.
   - **Cột 1**: Chọn Form -> Chọn phiên bản Form (`FormVersion`).
   - **Cột 2**: Chọn Workflow -> Chọn phiên bản Workflow (`WorkflowExecutable`).
   - Khu vực **Field Mapping & Tương thích**:

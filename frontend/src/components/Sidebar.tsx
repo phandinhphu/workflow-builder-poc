@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   Squares2X2Icon, UsersIcon, HomeIcon, DocumentTextIcon, DocumentDuplicateIcon,
   BuildingOffice2Icon, ShieldCheckIcon, ChevronDownIcon,
-  ClipboardDocumentCheckIcon, SparklesIcon,
+  ClipboardDocumentCheckIcon, SparklesIcon, TagIcon,
   ArrowRightOnRectangleIcon, UserCircleIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
@@ -22,6 +22,7 @@ const navigation: NavItem[] = [
   { name: 'Cổng Dịch vụ (Catalog)', href: '/catalog', icon: SparklesIcon },
   { name: 'Nhiệm vụ của tôi', href: '/my-tasks', icon: ClipboardDocumentCheckIcon },
   { name: 'Quản lý Biểu mẫu', href: '/forms', icon: DocumentDuplicateIcon, permissions: ['FORM_VIEW', 'FORM_EDIT', 'WORKFLOW_VIEW', 'WORKFLOW_EDIT'] },
+  { name: 'Danh mục Ticket', href: '/categories', icon: TagIcon, permissions: ['CATEGORY_VIEW', 'CATEGORY_MANAGE', 'WORKFLOW_VIEW', 'FORM_VIEW'] },
   { name: 'Danh sách Workflow', href: '/workflows', icon: DocumentTextIcon, permissions: ['WORKFLOW_VIEW', 'WORKFLOW_EDIT'] },
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, permissions: ['INSTANCE_VIEW'] },
   { name: 'Người dùng', href: '/users', icon: UsersIcon, permissions: ['USER_VIEW', 'USER_MANAGE'] },

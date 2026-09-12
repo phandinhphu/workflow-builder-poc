@@ -5,6 +5,7 @@ import WorkflowBuilder from './pages/WorkflowBuilder';
 import WorkflowDetail from './pages/WorkflowDetail';
 import FormList from './pages/FormList';
 import FormBuilder from './pages/FormBuilder';
+import CategoryList from './pages/CategoryList';
 import InstancesList from './pages/InstancesList';
 import InstanceDetail from './pages/InstanceDetail';
 import UsersList from './pages/UsersList';
@@ -73,6 +74,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute permissions={['FORM_EDIT', 'WORKFLOW_EDIT']}>
             <FormBuilder />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/categories',
+        element: (
+          <ProtectedRoute permissions={['CATEGORY_VIEW', 'CATEGORY_MANAGE', 'WORKFLOW_VIEW', 'FORM_VIEW']}>
+            <CategoryList />
           </ProtectedRoute>
         ),
       },
