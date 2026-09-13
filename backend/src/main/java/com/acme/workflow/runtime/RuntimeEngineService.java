@@ -1939,9 +1939,11 @@ public class RuntimeEngineService {
     @Transactional
     public Map<String, Object> cancel(String instanceId) {
         String actor = current.id();
-        permissions.require(actor, "INSTANCE_START", null);
         WorkflowInstanceEntity instance = instances.findById(instanceId)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy instance " + instanceId));
+        if (!actor.equals(instance.creatorId) && !permissions.has(actor, "INSTANCE_START", null)) {
+            throw ApiException.forbidden("Thiếu quyền INSTANCE_START để hủy instance");
+        }
         if (!Set.of("RUNNING", "PENDING").contains(instance.status))
             throw ApiException.badRequest("INSTANCE_NOT_CANCELLABLE", "Chỉ instance đang chạy mới có thể hủy");
         Instant now = Instant.now();

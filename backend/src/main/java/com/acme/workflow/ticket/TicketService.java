@@ -93,7 +93,7 @@ public class TicketService {
 
     private void requireCreate(String actor) {
         if (!permissionService.has(actor, "TICKET_CREATE", null)
-                && !permissionService.has(actor, "ROLE_USER", null)
+                && !canManageAll(actor)
                 && !permissionService.has(actor, "WORKFLOW_EDIT", null)) {
             throw ApiException.forbidden("Thiếu quyền TICKET_CREATE để tạo yêu cầu");
         }
@@ -101,8 +101,7 @@ public class TicketService {
 
     private void requireView(String actor) {
         if (!permissionService.has(actor, "TICKET_VIEW", null)
-                && !permissionService.has(actor, "TICKET_MANAGE", null)
-                && !permissionService.has(actor, "ROLE_USER", null)) {
+                && !canManageAll(actor)) {
             throw ApiException.forbidden("Thiếu quyền TICKET_VIEW để xem danh sách vé");
         }
     }
