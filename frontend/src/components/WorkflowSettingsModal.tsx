@@ -212,10 +212,10 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
                                 onChange={() => setWorkflowData({ executionPattern: 'ON_DEMAND' })}
                                 className="text-indigo-600 focus:ring-indigo-500"
                               />
-                              <span className="text-xs font-bold text-gray-900">On-Demand (Service Catalog)</span>
+                              <span className="text-xs font-bold text-gray-900">Theo yêu cầu (Ticket Flow)</span>
                             </div>
                             <p className="mt-1 text-[11px] text-gray-500 pl-5">
-                              Từng nhân viên gửi đơn độc lập.
+                              Từng nhân viên gửi phiếu yêu cầu độc lập qua Danh mục Ticket.
                             </p>
                           </div>
 
@@ -238,7 +238,7 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
                               <span className="text-xs font-bold text-gray-900">Batch Campaign (Định kỳ)</span>
                             </div>
                             <p className="mt-1 text-[11px] text-gray-500 pl-5">
-                              Đợt đánh giá nhân sự, khảo sát đồng thời.
+                              Đợt đánh giá nhân sự, khảo sát đồng thời cho nhiều người.
                             </p>
                           </div>
                         </div>
@@ -251,8 +251,8 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
                       <div className="bg-white p-5 rounded-lg border border-border shadow-sm space-y-5">
                         <div className="flex items-center justify-between border-b border-border pb-4">
                           <div>
-                            <h3 className="text-sm font-bold text-navy">ĐỐI TƯỢNG THAM GIA</h3>
-                            <p className="text-xs text-muted mt-0.5">Xác định tập hợp người tham gia vào luồng quy trình này (khác với Assignee của từng bước)</p>
+                            <h3 className="text-sm font-bold text-navy">ĐỐI TƯỢNG THAM GIA (BATCH CAMPAIGN)</h3>
+                            <p className="text-xs text-muted mt-0.5">Cấu hình nâng cao dành cho chiến dịch định kỳ. Với quy trình Ticket thông thường, người tham gia được xác định tự động theo từng bước.</p>
                           </div>
                           <label className="relative inline-flex items-center cursor-pointer">
                             <input

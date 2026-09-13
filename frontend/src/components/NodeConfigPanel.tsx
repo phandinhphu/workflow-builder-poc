@@ -652,7 +652,7 @@ export default function NodeConfigPanel({
                     </span>
                     <p className="mt-0.5 text-indigo-700 text-[11px]">
                       {executionPattern === 'ON_DEMAND'
-                        ? 'Phù hợp: Kích hoạt thủ công hoặc khi người dùng nộp Form trên Service Catalog.'
+                        ? 'Phù hợp: Kích hoạt thủ công hoặc khi người dùng nộp yêu cầu qua Danh mục Ticket (Ticket Category).'
                         : 'Phù hợp: Chạy tự động theo lịch (Schedule) hoặc đợt khởi chạy hàng loạt.'}
                     </p>
                   </div>
