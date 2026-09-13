@@ -239,6 +239,86 @@ class ApprovalTaskIntegrationTest {
         assertThat(updatedTicket.resolvedAt).isNotNull();
     }
 
+    @Test
+    void testAutoApprovalWorkflowResolution() {
+        when(currentUserService.id()).thenReturn("U000"); // Admin
+
+        CreateFormRequest formReq = new CreateFormRequest();
+        formReq.name = "Đơn đăng ký log trip";
+        formReq.code = "FORM_TRIP_" + System.currentTimeMillis();
+        FormDetailResponse form = formService.create(formReq);
+
+        UpdateDraftRequest schemaReq = new UpdateDraftRequest();
+        schemaReq.draftSchema = jsons.read("""
+            {
+              "fields": [
+                { "key": "cost", "label": "Kinh phí", "type": "number", "required": true }
+              ]
+            }
+            """);
+        formService.updateDraft(form.id, schemaReq);
+        FormVersionResponse formVersion = formService.publish(form.id);
+
+        String workflowId = "WF-AUTO-" + System.currentTimeMillis();
+        ObjectNode definition = jsons.object();
+        definition.put("id", workflowId).put("name", "Quy trình auto duyệt").put("type", "Standard")
+                .put("ownerId", "U000").put("draftVersion", "1.0");
+        definition.putObject("trigger").put("type", "manual").putObject("config");
+        definition.putArray("variables");
+
+        var nodes = definition.putArray("nodes");
+        node(nodes.addObject(), "start", "START", jsons.object());
+
+        ObjectNode notifyConfig = jsons.object().put("title", "Thông báo");
+        notifyConfig.put("message", "Đơn đã được tự động duyệt");
+        notifyConfig.putArray("channels").add("inapp");
+        notifyConfig.putObject("assignee").put("type", "initiator");
+        node(nodes.addObject(), "notify", "NOTIFICATION", notifyConfig);
+
+        ObjectNode successEnd = jsons.object();
+        node(nodes.addObject(), "end", "END", successEnd);
+
+        var edges = definition.putArray("connections");
+        edge(edges.addObject(), "c1", "start", "SUCCESS", "notify");
+        edge(edges.addObject(), "c2", "notify", "SUCCESS", "end");
+
+        definition.putObject("settings").put("maxIterations", 10);
+        workflows.create(definition);
+        var pubResult = workflows.publish(workflowId);
+        String workflowExecutableId = (String) pubResult.get("versionId");
+
+        CreateTicketCategoryRequest catReq = new CreateTicketCategoryRequest();
+        catReq.name = "Log Trip";
+        catReq.code = "CAT_TRIP_" + System.currentTimeMillis();
+        catReq.formVersionId = formVersion.id;
+        catReq.workflowExecutableId = workflowExecutableId;
+        catReq.fieldMapping = jsons.object();
+        TicketCategoryResponse category = categoryService.create(catReq);
+
+        // Employee submits Ticket
+        when(currentUserService.id()).thenReturn("U002");
+        CreateTicketRequest ticketReq = new CreateTicketRequest();
+        ticketReq.categoryId = category.id;
+        ticketReq.formData = jsons.read("""
+            {
+              "cost": 5000000
+            }
+            """);
+
+        TicketDetailResponse ticketResp = ticketService.createTicket(ticketReq);
+
+        // Verify ticket response is immediately APPROVED and currentStepName is "Hoàn tất"
+        assertThat(ticketResp.status).isEqualTo("APPROVED");
+        assertThat(ticketResp.currentStepName).isEqualTo("Hoàn tất");
+        assertThat(ticketResp.resolvedAt).isNotNull();
+
+        // Verify in DB
+        TicketEntity updatedTicket = ticketRepository.findById(ticketResp.id).orElseThrow();
+        assertThat(updatedTicket.status).isEqualTo("APPROVED");
+        assertThat(updatedTicket.currentStepName).isEqualTo("Hoàn tất");
+        assertThat(updatedTicket.resolvedAt).isNotNull();
+    }
+
     private void node(ObjectNode target, String id, String type, ObjectNode config) {
         target.put("id", id).put("name", id).put("type", type).set("config", config);
     }

@@ -164,7 +164,8 @@ public class RuntimeEngineService {
                     "Participant resolver không trả về người dùng nào. Kiểm tra lại executionPattern hoặc participantScope của workflow.");
         ObjectNode variables = resolveVariables(definition, request.path("variables"));
         WorkflowInstanceEntity instance = new WorkflowInstanceEntity();
-        instance.id = Ids.uuid();
+        String customInstanceId = request.path("instanceId").asText(null);
+        instance.id = (customInstanceId != null && !customInstanceId.isBlank()) ? customInstanceId : Ids.uuid();
         instance.requestCode = request.path("requestCode").asText(generateRequestCode(workflowId));
         instance.workflowId = workflowId;
         instance.workflowVersionId = version.id;
