@@ -14,10 +14,19 @@ import java.util.regex.Pattern;
 public class WorkflowCompiler {
     private static final Pattern TEMPLATE_REFERENCE = Pattern.compile("\\$\\{([^}]+)}");
     private final ExpressionEngine expressions = new ExpressionEngine();
+    private final com.acme.workflow.workflowtype.validator.WorkflowTypeRuleEngine typeRuleEngine;
     public static final Set<String> SUPPORTED_TYPES = Set.of(
             "START", "END", "ASSIGNMENT", "APPROVAL", "REVIEW", "CONDITION",
             "NOTIFICATION", "SYSTEM", "HTTP", "DATA", "DATA_TRANSFORM", "TIMER",
             "WAIT_EVENT", "PARALLEL_SPLIT", "JOIN", "SUBWORKFLOW");
+
+    public WorkflowCompiler(com.acme.workflow.workflowtype.validator.WorkflowTypeRuleEngine typeRuleEngine) {
+        this.typeRuleEngine = typeRuleEngine;
+    }
+
+    public WorkflowCompiler() {
+        this.typeRuleEngine = null;
+    }
     private static final Set<String> HUMAN_TYPES = Set.of("ASSIGNMENT", "APPROVAL", "REVIEW");
     private static final Set<String> TRIGGERS = Set.of("manual", "schedule", "form", "webhook");
     private static final Set<String> RESOLVERS = Set.of("fixed", "fixed_user", "role", "group", "current_participant",
@@ -54,11 +63,13 @@ public class WorkflowCompiler {
 
         Map<String, JsonNode> byId = new LinkedHashMap<>();
         Map<String, String> typeById = new HashMap<>();
+        Map<String, String> nameById = new HashMap<>();
         if (nodes.isArray()) for (JsonNode node : nodes) {
             String id = node.path("id").asText();
             if (id.isBlank()) { error(errors, "NODE_ID_REQUIRED", "Node thiếu id", null, null); continue; }
             if (byId.put(id, node) != null) error(errors, "DUPLICATE_NODE_ID", "Trùng node id " + id, id, null);
             String type = node.path("type").asText().toUpperCase(Locale.ROOT); typeById.put(id, type);
+            String name = node.path("name").asText(id); nameById.put(id, name);
             validateNode(node, type, errors, warnings);
         }
 
@@ -107,6 +118,16 @@ public class WorkflowCompiler {
             error(errors, "CYCLE_POLICY_REQUIRED", "Workflow có loop nên phải cấu hình settings.maxIterations > 0", null, null);
         if (definition.path("settings").path("maxIterations").asInt(100) > 1000)
             error(errors, "MAX_ITERATIONS_TOO_HIGH", "maxIterations không được vượt 1000", null, null);
+
+        if (typeRuleEngine != null) {
+            String workflowType = definition.hasNonNull("type")
+                    ? definition.path("type").asText()
+                    : (definition.hasNonNull("workflowType") ? definition.path("workflowType").asText() : null);
+            com.acme.workflow.workflowtype.validator.WorkflowValidationContext context =
+                    new com.acme.workflow.workflowtype.validator.WorkflowValidationContext(
+                            definition, workflowType, byId, typeById, nameById);
+            typeRuleEngine.validate(context, errors, warnings);
+        }
 
         Map<String, Object> stats = new LinkedHashMap<>();
         stats.put("nodeCount", byId.size()); stats.put("connectionCount", connections.isArray() ? connections.size() : 0);

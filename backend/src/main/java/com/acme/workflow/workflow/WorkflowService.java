@@ -85,6 +85,7 @@ public class WorkflowService {
         else
             definition.put("description", workflow.description);
         definition.put("type", workflow.workflowType);
+        definition.put("workflowType", workflow.workflowType);
         if (workflow.moduleName == null)
             definition.remove("module");
         else
@@ -161,7 +162,12 @@ public class WorkflowService {
     private void copy(WorkflowDefinitionEntity workflow, JsonNode body) {
         workflow.name = body.path("name").asText();
         workflow.description = nullable(body, "description");
-        workflow.workflowType = body.path("type").asText("Approval");
+        String rawType = body.hasNonNull("type")
+                ? body.path("type").asText()
+                : (body.hasNonNull("workflowType") ? body.path("workflowType").asText() : "APPROVAL");
+        workflow.workflowType = rawType != null && !rawType.isBlank()
+                ? rawType.trim().toUpperCase(Locale.ROOT)
+                : "APPROVAL";
         workflow.moduleName = nullable(body, "module");
         workflow.ownerId = body.path("ownerId").asText();
         workflow.draftVersion = body.path("draftVersion").asText("1.0");

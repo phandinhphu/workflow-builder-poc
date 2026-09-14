@@ -261,7 +261,7 @@ class ApprovalTaskIntegrationTest {
 
         String workflowId = "WF-AUTO-" + System.currentTimeMillis();
         ObjectNode definition = jsons.object();
-        definition.put("id", workflowId).put("name", "Quy trình auto duyệt").put("type", "Standard")
+        definition.put("id", workflowId).put("name", "Quy trình auto duyệt").put("type", "CUSTOM")
                 .put("ownerId", "U000").put("draftVersion", "1.0");
         definition.putObject("trigger").put("type", "manual").putObject("config");
         definition.putArray("variables");

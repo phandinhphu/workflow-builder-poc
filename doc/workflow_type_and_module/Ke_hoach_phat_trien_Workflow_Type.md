@@ -63,9 +63,9 @@ graph TD
    - `GET /api/workflow-types/{typeId}/rules`: Lấy danh sách rule phục vụ validation.
 
 #### 1.3. Tiêu chí hoàn thành (DoD)
-- [ ] Script migration database tạo đủ 3 bảng và seed data thành công.
-- [ ] API trả về đúng dữ liệu mapping theo từng loại workflow.
-- [ ] Dữ liệu có thể mở rộng loại mới thông qua DB mà không cần sửa code backend/frontend.
+- [x] Script migration database tạo đủ 3 bảng và seed data thành công.
+- [x] API trả về đúng dữ liệu mapping theo từng loại workflow.
+- [x] Dữ liệu có thể mở rộng loại mới thông qua DB mà không cần sửa code backend/frontend.
 
 ---
 
@@ -91,9 +91,9 @@ graph TD
    - Ví dụ: *"Publish thất bại: Workflow loại NOTIFICATION không được chứa Approval Step (Node: 'Phê duyệt cấp 1' [node-123])."*
 
 #### 2.3. Tiêu chí hoàn thành (DoD)
-- [ ] Unit test bao phủ 100% các kịch bản vi phạm và hợp lệ cho từng loại workflow.
-- [ ] Luồng Publish bị chặn chính xác khi vi phạm và trả về thông báo lỗi trực quan, rõ ràng.
-- [ ] Loại `CUSTOM` publish thành công khi thoả mãn rule chung.
+- [x] Unit test bao phủ 100% các kịch bản vi phạm và hợp lệ cho từng loại workflow.
+- [x] Luồng Publish bị chặn chính xác khi vi phạm và trả về thông báo lỗi trực quan, rõ ràng.
+- [x] Loại `CUSTOM` publish thành công khi thoả mãn rule chung.
 
 ---
 
