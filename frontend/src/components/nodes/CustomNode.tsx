@@ -7,7 +7,6 @@ import {
   Code2,
   Database,
   Globe2,
-  FormInput,
   MousePointer2,
   Play,
   Sparkles,
@@ -26,7 +25,6 @@ const nodeConfig: Record<string, { icon: React.ElementType; bg: string; text: st
   system: { icon: Code2, bg: 'bg-gray-500', text: 'text-white' },
   data: { icon: Database, bg: 'bg-teal-500', text: 'text-white' },
   http: { icon: Globe2, bg: 'bg-cyan-500', text: 'text-white' },
-  form: { icon: FormInput, bg: 'bg-pink-500', text: 'text-white' },
   end: { icon: Play, bg: 'bg-red-500', text: 'text-white' },
 };
 
@@ -40,7 +38,6 @@ const nodeTypeLabels: Record<string, string> = {
   system: 'SYSTEM ACTION',
   data: 'BẢNG DỮ LIỆU',
   http: 'HTTP REQUEST',
-  form: 'BIỂU MẪU',
   end: 'KẾT THÚC',
 };
 

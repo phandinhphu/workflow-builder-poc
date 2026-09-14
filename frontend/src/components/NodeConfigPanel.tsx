@@ -3,9 +3,28 @@ import type { Node, Edge } from '@xyflow/react';
 import { useState, useMemo } from 'react';
 import DynamicValueField from './DynamicValueField';
 import AssigneeResolver, { type AssigneeResolverConfig } from './AssigneeResolver';
-import FormBuilderModal, { type FormField } from './FormBuilderModal';
 import StructuredConditionModal from './StructuredConditionModal';
 import type { StructuredConditionConfig, StructuredConditionRule } from '../types/workflow';
+
+export interface FormField {
+  id: string;
+  label?: string;
+  type?: string;
+  required?: boolean;
+  placeholder?: string;
+  defaultValue?: string;
+  options?: { value: string; label: string }[];
+  validation?: {
+    min?: number;
+    max?: number;
+    pattern?: string;
+    minLength?: number;
+    maxLength?: number;
+  };
+  readOnly?: boolean;
+  visibleWhen?: string;
+  outputMapping?: string;
+}
 import {
   CheckCircle2,
   UserPlus,
@@ -287,14 +306,6 @@ function InputDataTab({
                           <ContextRefBadge path={`nodes.${node.id}.output.totalParticipants`} />
                         </>
                       )}
-                      {nodeType === 'FORM' && (
-                        <>
-                          <ContextRefBadge path={`nodes.${node.id}.output.totalSubmissions`} />
-                          {(nodeData?.formFields || []).map((f: FormField) => (
-                            <ContextRefBadge key={f.id} path={`nodes.${node.id}.output.${f.outputMapping || f.id}`} />
-                          ))}
-                        </>
-                      )}
                       {nodeType === 'CONDITION' && (
                         <ContextRefBadge path={`nodes.${node.id}.output.result`} />
                       )}
@@ -314,7 +325,7 @@ function InputDataTab({
 }
 
 function PreviewTab({ type, data, formFields }: { type: string; data: AnyRecord; formFields: FormField[] }) {
-  const isHumanTask = ['assignment', 'approval', 'review', 'form'].includes(type);
+  const isHumanTask = ['assignment', 'approval', 'review'].includes(type);
 
   if (isHumanTask && formFields.length > 0) {
     return (
@@ -465,7 +476,6 @@ export default function NodeConfigPanel({
   const Icon = config.icon;
 
   const [activeTab, setActiveTab] = useState<'input' | 'config' | 'preview'>('config');
-  const [formModalOpen, setFormModalOpen] = useState(false);
   const [conditionModalOpen, setConditionModalOpen] = useState(false);
 
   const setStoreTrigger = useDesignerStore(s => s.setTrigger);
@@ -479,25 +489,6 @@ export default function NodeConfigPanel({
   const executionPattern = workflowData.executionPattern || 'ON_DEMAND';
 
   const upstreamNodes = useMemo(() => findUpstreamNodes(node.id, nodes, edges), [node.id, nodes, edges]);
-
-  // Upstream Assignment and Form nodes for dynamic binding
-  const upstreamAssignmentNodes = useMemo(() => {
-    return upstreamNodes.filter(
-      n =>
-        ((n.data as any)?.nodeType === 'assignment' ||
-          n.type === 'assignment' ||
-          (n.data as any)?.type === 'ASSIGNMENT')
-    );
-  }, [upstreamNodes]);
-
-  const upstreamFormNodes = useMemo(() => {
-    return upstreamNodes.filter(
-      n =>
-        ((n.data as any)?.nodeType === 'form' ||
-          n.type === 'form' ||
-          (n.data as any)?.type === 'FORM')
-    );
-  }, [upstreamNodes]);
 
   const openTriggerLibrary = () => {
     setPanel('trigger-library');
@@ -521,12 +512,6 @@ export default function NodeConfigPanel({
   const setAssignee = (a: AssigneeResolverConfig) => onUpdate({ assignee: a });
 
   const formFields: FormField[] = data.formFields || [];
-  const setFormFields = (fields: FormField[]) => {
-    onUpdate({
-      formFields: fields,
-      subLabel: `${fields.length} trường`,
-    });
-  };
 
   const conditionConfig: StructuredConditionConfig = useMemo(() => ({
     logic: (data.logic as 'AND' | 'OR') || 'AND',
@@ -781,210 +766,6 @@ export default function NodeConfigPanel({
               </div>
             )}
 
-            {/* DEDICATED FORM NODE CONFIGURATION (4 SECTIONS) */}
-            {type === 'form' && (
-              <div className="space-y-6">
-                {/* SECTION 1: Người thực hiện điền form */}
-                <div className="pt-4 border-t border-border space-y-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-5 h-5 rounded-full bg-pink-100 text-pink-700 text-xs font-bold flex items-center justify-center">
-                      1
-                    </span>
-                    <label className="text-xs font-bold text-navy uppercase">Người thực hiện điền form</label>
-                  </div>
-
-                  {/* Dynamic List from upstream Assignment node */}
-                  {upstreamAssignmentNodes.length > 0 && (
-                    <div className="p-3 bg-pink-50/50 border border-pink-100 rounded-lg space-y-2">
-                      <span className="text-xs font-semibold text-pink-900 flex items-center gap-1.5">
-                        <Users className="w-3.5 h-3.5 text-pink-600" />
-                        Lấy danh sách động từ Node Assignment:
-                      </span>
-                      <select
-                        value={data.dynamicAssigneeSource || ''}
-                        onChange={e => {
-                          const src = e.target.value;
-                          onUpdate({
-                            dynamicAssigneeSource: src,
-                            assignee: src
-                              ? {
-                                  type: 'dynamic',
-                                  value: `\${nodes.${src}.participantIds}`,
-                                  label: `Danh sách từ node ${src}`,
-                                }
-                              : assignee,
-                            executionMode: src ? 'forEachParticipant' : data.executionMode,
-                          });
-                        }}
-                        className="w-full border border-pink-200 rounded px-2.5 py-1.5 text-xs bg-white text-navy focus:outline-none focus:ring-1 focus:ring-pink-500"
-                      >
-                        <option value="">-- Chọn Node Assignment --</option>
-                        {upstreamAssignmentNodes.map(an => (
-                          <option key={an.id} value={an.id}>
-                            {(an.data as any)?.label || an.id} ({an.id})
-                          </option>
-                        ))}
-                      </select>
-                      {data.dynamicAssigneeSource && (
-                        <p className="text-[11px] text-pink-700">
-                          Gán form cho từng nhân sự: <code>{'${nodes.' + data.dynamicAssigneeSource + '.participantIds}'}</code>
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {!data.dynamicAssigneeSource && (
-                    <div>
-                      <span className="text-xs text-muted block mb-1">Gán người thực hiện cố định / vai trò:</span>
-                      <AssigneeResolver config={assignee} onChange={setAssignee} />
-                    </div>
-                  )}
-
-                  <div>
-                    <span className="text-xs text-muted block mb-1">Chế độ thực thi:</span>
-                    <div className="flex gap-4">
-                      <label className="flex items-center gap-2 text-xs">
-                        <input
-                          type="radio"
-                          name="formExecutionMode"
-                          checked={data.executionMode !== 'forEachParticipant'}
-                          onChange={() => onUpdate({ executionMode: 'single', assignmentMode: 'DIRECT_ONE' })}
-                          className="text-pink-600 focus:ring-pink-500"
-                        />
-                        <span>1 form đại diện (Single)</span>
-                      </label>
-                      <label className="flex items-center gap-2 text-xs">
-                        <input
-                          type="radio"
-                          name="formExecutionMode"
-                          checked={data.executionMode === 'forEachParticipant'}
-                          onChange={() => onUpdate({ executionMode: 'forEachParticipant', assignmentMode: 'DIRECT_ALL' })}
-                          className="text-pink-600 focus:ring-pink-500"
-                        />
-                        <span>Mỗi người 1 form (For Each)</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                {/* SECTION 2: Thiết lập Biểu mẫu */}
-                <div className="pt-4 border-t border-border space-y-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-5 h-5 rounded-full bg-pink-100 text-pink-700 text-xs font-bold flex items-center justify-center">
-                      2
-                    </span>
-                    <label className="text-xs font-bold text-navy uppercase">Thiết lập Biểu mẫu (Form Builder)</label>
-                  </div>
-
-                  <div>
-                    <input
-                      type="text"
-                      placeholder="Tiêu đề biểu mẫu (vd: Phiếu đăng ký đánh giá)"
-                      className="w-full border border-border rounded px-3 py-2 text-sm focus:outline-none focus:border-primary"
-                      value={String(data.formName || '')}
-                      onChange={e => onUpdate({ formName: e.target.value })}
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setFormModalOpen(true)}
-                    className="w-full border border-pink-300 bg-pink-50/70 hover:bg-pink-100 rounded-lg px-3 py-2.5 text-sm font-semibold text-pink-700 flex items-center justify-center gap-2 transition-colors"
-                  >
-                    <FormInput size={16} />
-                    {formFields.length > 0 ? `Chỉnh sửa Form (${formFields.length} trường)` : 'Thiết kế biểu mẫu mới'}
-                  </button>
-
-                  {formFields.length > 0 && (
-                    <div className="border border-border rounded-lg divide-y divide-gray-100 bg-gray-50/50 max-h-48 overflow-y-auto">
-                      {formFields.map(f => (
-                        <div key={f.id} className="flex items-center justify-between px-3 py-1.5 text-xs">
-                          <span className="font-semibold text-navy">{f.label || f.id}</span>
-                          <span className="text-muted font-mono">
-                            {f.type}
-                            {f.required ? ' *' : ''}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* SECTION 3: Chính sách hoàn thành */}
-                <div className="pt-4 border-t border-border space-y-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-5 h-5 rounded-full bg-pink-100 text-pink-700 text-xs font-bold flex items-center justify-center">
-                      3
-                    </span>
-                    <label className="text-xs font-bold text-navy uppercase">Chính sách hoàn thành (Completion Policy)</label>
-                  </div>
-
-                  <select
-                    value={data.completionPolicy || 'ALL'}
-                    onChange={e => onUpdate({ completionPolicy: e.target.value })}
-                    className="w-full border border-border rounded px-3 py-2 text-sm bg-white"
-                  >
-                    <option value="ALL">ALL — Chờ tất cả người tham gia nộp form</option>
-                    <option value="ANY">ANY — Chỉ cần 1 người nộp là hoàn thành bước</option>
-                    <option value="THRESHOLD">THRESHOLD — Hoàn thành theo tỷ lệ % người nộp</option>
-                  </select>
-
-                  {data.completionPolicy === 'THRESHOLD' && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted">Ngưỡng tối thiểu:</span>
-                      <input
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={data.completionThreshold || 80}
-                        onChange={e => onUpdate({ completionThreshold: Number(e.target.value) })}
-                        className="w-20 border border-border rounded px-2 py-1 text-sm text-center"
-                      />
-                      <span className="text-xs font-semibold">% người nộp</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* SECTION 4: Cấu hình SLA & Quá hạn */}
-                <div className="pt-4 border-t border-border space-y-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-5 h-5 rounded-full bg-pink-100 text-pink-700 text-xs font-bold flex items-center justify-center">
-                      4
-                    </span>
-                    <label className="text-xs font-bold text-navy uppercase">Cấu hình SLA & Xử lý quá hạn</label>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <span className="text-xs text-muted block mb-1">Thời hạn điền form</span>
-                      <select
-                        className="w-full border border-border rounded px-2.5 py-1.5 text-xs bg-white"
-                        value={toIsoDuration(data.slaDue) || 'PT24H'}
-                        onChange={e => onUpdate({ slaDue: e.target.value })}
-                      >
-                        <option value="PT5H">5 giờ</option>
-                        <option value="PT24H">24 giờ (1 ngày)</option>
-                        <option value="PT48H">48 giờ (2 ngày)</option>
-                        <option value="P7D">7 ngày (1 tuần)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <span className="text-xs text-muted block mb-1">Khi hết hạn</span>
-                      <select
-                        className="w-full border border-border rounded px-2.5 py-1.5 text-xs bg-white"
-                        value={data.slaAction || 'Nhắc nhở'}
-                        onChange={e => onUpdate({ slaAction: e.target.value })}
-                      >
-                        <option value="Nhắc nhở">Gửi thông báo nhắc nhở</option>
-                        <option value="Chuyển cấp">Chuyển cấp quản lý</option>
-                        <option value="Tự động kết thúc">Tự động đóng & Đi tiếp</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* DEDICATED APPROVAL NODE CONFIGURATION */}
             {type === 'approval' && (
               <div className="space-y-6">
@@ -997,32 +778,9 @@ export default function NodeConfigPanel({
                     <label className="text-xs font-bold text-navy uppercase">Nội dung cần phê duyệt (Review Source)</label>
                   </div>
 
-                  <div>
-                    <span className="text-xs text-muted block mb-1">Chọn Biểu mẫu / Bước cần duyệt dữ liệu:</span>
-                    <select
-                      value={data.reviewSourceNodeId || ''}
-                      onChange={e => onUpdate({ reviewSourceNodeId: e.target.value })}
-                      className="w-full border border-border rounded px-3 py-2 text-sm bg-white"
-                    >
-                      <option value="">Biểu mẫu phiếu yêu cầu (Ticket Form Data - Mặc định)</option>
-                      {upstreamFormNodes.map(fn => (
-                        <option key={fn.id} value={fn.id}>
-                          Bước nội bộ: {(fn.data as any)?.formName || (fn.data as any)?.label || fn.id} ({fn.id})
-                        </option>
-                      ))}
-                    </select>
+                  <div className="p-2.5 bg-blue-50/60 border border-blue-100 rounded text-xs text-blue-800">
+                    ℹ️ <strong>Biểu mẫu Ticket (Ticket Form Data):</strong> Người duyệt sẽ xem toàn bộ biểu mẫu phiếu yêu cầu mà người tạo đơn đã nộp kèm thông tin người gửi theo Danh mục Ticket (Ticket Category).
                   </div>
-
-                  {!data.reviewSourceNodeId ? (
-                    <div className="p-2.5 bg-blue-50/60 border border-blue-100 rounded text-xs text-blue-800">
-                      ℹ️ <strong>Mặc định:</strong> Người duyệt sẽ xem toàn bộ biểu mẫu phiếu yêu cầu (Ticket Form Data) mà người tạo đơn đã nộp kèm thông tin người gửi.
-                    </div>
-                  ) : (
-                    <div className="p-2.5 bg-blue-50/60 border border-blue-100 rounded text-xs text-blue-800">
-                      Người duyệt sẽ xem các trường thông tin từ bước{' '}
-                      <strong>{data.reviewSourceNodeId}</strong> trước khi quyết định.
-                    </div>
-                  )}
                 </div>
 
                 {/* SECTION 2: Người phê duyệt */}
@@ -1123,29 +881,9 @@ export default function NodeConfigPanel({
                     <label className="text-xs font-bold text-navy uppercase">Nội dung cần kiểm duyệt (Review Source)</label>
                   </div>
 
-                  <select
-                    value={data.reviewSourceNodeId || ''}
-                    onChange={e => onUpdate({ reviewSourceNodeId: e.target.value })}
-                    className="w-full border border-border rounded px-3 py-2 text-sm bg-white"
-                  >
-                    <option value="">Biểu mẫu phiếu yêu cầu (Ticket Form Data - Mặc định)</option>
-                    {upstreamFormNodes.map(fn => (
-                      <option key={fn.id} value={fn.id}>
-                        Bước nội bộ: {(fn.data as any)?.formName || (fn.data as any)?.label || fn.id} ({fn.id})
-                      </option>
-                    ))}
-                  </select>
-
-                  {!data.reviewSourceNodeId ? (
-                    <div className="p-2.5 bg-purple-50/60 border border-purple-100 rounded text-xs text-purple-800">
-                      ℹ️ <strong>Mặc định:</strong> Người kiểm duyệt sẽ xem toàn bộ biểu mẫu phiếu yêu cầu (Ticket Form Data) từ Ticket đã nộp.
-                    </div>
-                  ) : (
-                    <div className="p-2.5 bg-purple-50/60 border border-purple-100 rounded text-xs text-purple-800">
-                      Người kiểm duyệt sẽ xem các trường thông tin từ bước{' '}
-                      <strong>{data.reviewSourceNodeId}</strong>.
-                    </div>
-                  )}
+                  <div className="p-2.5 bg-purple-50/60 border border-purple-100 rounded text-xs text-purple-800">
+                    ℹ️ <strong>Biểu mẫu Ticket (Ticket Form Data):</strong> Người kiểm duyệt sẽ xem toàn bộ biểu mẫu phiếu yêu cầu từ Ticket đã nộp.
+                  </div>
                 </div>
 
                 <div className="pt-4 border-t border-border space-y-3">
@@ -1491,15 +1229,6 @@ export default function NodeConfigPanel({
         {activeTab === 'preview' && <PreviewTab type={type} data={data} formFields={formFields} />}
       </div>
 
-      <FormBuilderModal
-        isOpen={formModalOpen}
-        onClose={() => setFormModalOpen(false)}
-        onSave={setFormFields}
-        initialFields={formFields}
-        nodes={upstreamNodes}
-        trigger={trigger}
-        variables={variables}
-      />
       <StructuredConditionModal
         isOpen={conditionModalOpen}
         onClose={() => setConditionModalOpen(false)}

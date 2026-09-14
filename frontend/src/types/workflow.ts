@@ -41,7 +41,6 @@ export type NodeType =
   | 'ASSIGNMENT'
   | 'NOTIFICATION'
   | 'CONDITION'
-  | 'FORM'
   | 'HTTP'
   | 'DATA'
   | 'SYSTEM'
@@ -84,7 +83,7 @@ export interface NodeTypeDescriptor {
   outputPorts: PortDefinition[];
   supportedScopes: ExecutionScope[];
   supportsSla: boolean;
-  supportsForm: boolean;
+  supportsForm?: boolean;
   supportsAssignee: boolean;
   handlerKey: string;
 }

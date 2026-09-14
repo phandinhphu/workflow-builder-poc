@@ -33,7 +33,7 @@ export function toIsoDuration(value: unknown, unit?: unknown): string | undefine
 
 export function normalizeNodeDurations(type: string, rawConfig: Record<string, unknown>): Record<string, unknown> {
   const config = { ...rawConfig };
-  if (['APPROVAL', 'REVIEW', 'ASSIGNMENT', 'FORM'].includes(type)) {
+  if (['APPROVAL', 'REVIEW', 'ASSIGNMENT'].includes(type)) {
     const due = toIsoDuration(config.slaDue);
     if (due) config.slaDue = due;
     if (config.slaConfig && typeof config.slaConfig === 'object') {

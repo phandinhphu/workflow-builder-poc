@@ -116,7 +116,6 @@ export const NODE_TYPES = {
   SYSTEM: 'SYSTEM' as const,
   DATA: 'DATA' as const,
   HTTP: 'HTTP' as const,
-  FORM: 'FORM' as const,
   DATA_TRANSFORM: 'DATA_TRANSFORM' as const,
   TIMER: 'TIMER' as const,
   WAIT_EVENT: 'WAIT_EVENT' as const,
@@ -161,7 +160,6 @@ export const NODE_COLORS = {
   SYSTEM: '#6B7280',     // Gray
   DATA: '#06B6D4',       // Teal
   HTTP: '#EC4899',       // Cyan
-  FORM: '#F472B6',       // Pink
   DATA_TRANSFORM: '#84CC16', // Lime
   TIMER: '#EF4444',      // Red
   WAIT_EVENT: '#8B5CF6', // Purple
@@ -183,7 +181,6 @@ export const NODE_ICONS = {
   SYSTEM: 'Database',
   DATA: 'Collection',
   HTTP: 'Link',
-  FORM: 'Form',
   DATA_TRANSFORM: 'TrendingUp',
   TIMER: 'Clock',
   WAIT_EVENT: 'RefreshCw',

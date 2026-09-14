@@ -15,10 +15,10 @@ public class WorkflowCompiler {
     private static final Pattern TEMPLATE_REFERENCE = Pattern.compile("\\$\\{([^}]+)}");
     private final ExpressionEngine expressions = new ExpressionEngine();
     public static final Set<String> SUPPORTED_TYPES = Set.of(
-            "START", "END", "ASSIGNMENT", "APPROVAL", "REVIEW", "FORM", "CONDITION",
+            "START", "END", "ASSIGNMENT", "APPROVAL", "REVIEW", "CONDITION",
             "NOTIFICATION", "SYSTEM", "HTTP", "DATA", "DATA_TRANSFORM", "TIMER",
             "WAIT_EVENT", "PARALLEL_SPLIT", "JOIN", "SUBWORKFLOW");
-    private static final Set<String> HUMAN_TYPES = Set.of("ASSIGNMENT", "APPROVAL", "REVIEW", "FORM");
+    private static final Set<String> HUMAN_TYPES = Set.of("ASSIGNMENT", "APPROVAL", "REVIEW");
     private static final Set<String> TRIGGERS = Set.of("manual", "schedule", "form", "webhook");
     private static final Set<String> RESOLVERS = Set.of("fixed", "fixed_user", "role", "group", "current_participant",
             "participant_manager", "creator_manager", "manager_of", "department_head", "dynamic", "initiator", "creator",
@@ -29,7 +29,6 @@ public class WorkflowCompiler {
             Map.entry("ASSIGNMENT", Set.of("SUCCESS", "REJECTED", "REQUEST_CHANGE", "TIMEOUT", "ERROR")),
             Map.entry("APPROVAL", Set.of("APPROVED", "REJECTED", "REQUEST_CHANGE", "TIMEOUT", "ERROR")),
             Map.entry("REVIEW", Set.of("REVIEW_COMPLETED", "REJECTED", "REQUEST_CHANGE", "TIMEOUT", "ERROR")),
-            Map.entry("FORM", Set.of("SUBMITTED", "SUCCESS", "REJECTED", "TIMEOUT", "ERROR")),
             Map.entry("CONDITION", Set.of("TRUE", "FALSE")),
             Map.entry("NOTIFICATION", Set.of("SUCCESS", "ERROR")),
             Map.entry("SYSTEM", Set.of("SUCCESS", "ERROR")),
@@ -351,7 +350,6 @@ public class WorkflowCompiler {
             case "ASSIGNMENT" -> Set.of("participantIds", "participants", "totalParticipants", "output");
             case "APPROVAL" -> Set.of("approved", "outcome", "comment", "approverId", "action", "output");
             case "REVIEW" -> Set.of("reviewed", "outcome", "comment", "reviewerId", "action", "output");
-            case "FORM" -> Set.of("submissions", "submissionList", "totalSubmissions", "output");
             case "CONDITION" -> Set.of("result", "output");
             default -> Set.of("output");
         };

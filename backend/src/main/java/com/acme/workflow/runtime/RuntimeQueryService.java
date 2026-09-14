@@ -225,7 +225,6 @@ public class RuntimeQueryService {
             String stepName = switch (ne.nodeType) {
                 case "START" -> "Bắt đầu";
                 case "END" -> "Kết thúc";
-                case "FORM" -> "Biểu mẫu / Khảo sát";
                 case "APPROVAL" -> "Phê duyệt";
                 case "REVIEW" -> "Xem xét / Đánh giá";
                 case "ASSIGNMENT" -> "Phân công / Thêm người";

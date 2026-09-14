@@ -80,7 +80,6 @@ function designerNodeType(t: string): string {
     case 'ASSIGNMENT': return 'assignment';
     case 'NOTIFICATION': return 'notification';
     case 'CONDITION': return 'condition';
-    case 'FORM': return 'form';
     case 'HTTP': return 'http';
     case 'DATA': return 'data';
     case 'CODE': return 'code';
@@ -98,7 +97,7 @@ function runtimeNodeType(t: unknown): NodeType {
   const value = String(t ?? '').toUpperCase();
   const mapping: Record<string, NodeType> = {
     START: 'START', END: 'END', APPROVAL: 'APPROVAL', REVIEW: 'REVIEW', ASSIGNMENT: 'ASSIGNMENT',
-    NOTIFICATION: 'NOTIFICATION', CONDITION: 'CONDITION', FORM: 'FORM', HTTP: 'HTTP', DATA: 'DATA',
+    NOTIFICATION: 'NOTIFICATION', CONDITION: 'CONDITION', HTTP: 'HTTP', DATA: 'DATA',
     SYSTEM: 'SYSTEM', CODE: 'CODE', DATA_TRANSFORM: 'DATA_TRANSFORM', TIMER: 'TIMER', WAIT_EVENT: 'WAIT_EVENT',
     PARALLEL_SPLIT: 'PARALLEL_SPLIT', JOIN: 'JOIN', SUBWORKFLOW: 'SUBWORKFLOW',
   };
@@ -316,7 +315,7 @@ export default function WorkflowBuilder() {
       connections: edges.filter(edge => persistedIds.has(edge.source) && persistedIds.has(edge.target)).map(edge => {
         const source = persistedNodes.find(node => node.id === edge.source);
         const sourceType = runtimeNodeType(source?.data.nodeType);
-        const defaultPort = sourceType === 'APPROVAL' ? 'APPROVED' : sourceType === 'REVIEW' ? 'REVIEW_COMPLETED' : sourceType === 'FORM' ? 'SUBMITTED' : 'SUCCESS';
+        const defaultPort = sourceType === 'APPROVAL' ? 'APPROVED' : sourceType === 'REVIEW' ? 'REVIEW_COMPLETED' : 'SUCCESS';
         return { id: edge.id, sourceNodeId: edge.source, sourcePort: edge.sourceHandle ?? (sourceType === 'CONDITION' ? String(edge.data?.label ?? 'true').toLowerCase() : defaultPort), targetNodeId: edge.target, label: String(edge.data?.label ?? ''), isDefault: Boolean(edge.data?.isDefault) };
       }),
       settings: { maxIterations: 10 },

@@ -33,7 +33,7 @@ import java.util.*;
 @Slf4j
 @Service
 public class RuntimeEngineService {
-    private static final Set<String> HUMAN = Set.of("ASSIGNMENT", "APPROVAL", "REVIEW", "FORM");
+    private static final Set<String> HUMAN = Set.of("ASSIGNMENT", "APPROVAL", "REVIEW");
     private static final Set<String> OPEN_TASK = Set.of("PENDING", "CLAIMED", "IN_PROGRESS");
     private final WorkflowInstanceRepository instances;
     private final ParticipantExecutionRepository participants;
@@ -1189,7 +1189,6 @@ public class RuntimeEngineService {
         return switch (type) {
             case "APPROVAL" -> "APPROVED";
             case "REVIEW" -> "REVIEW_COMPLETED";
-            case "FORM" -> "SUBMITTED";
             default -> "SUCCESS";
         };
     }

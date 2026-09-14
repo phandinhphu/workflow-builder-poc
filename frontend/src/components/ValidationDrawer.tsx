@@ -126,10 +126,6 @@ export function validateWorkflow(
       }
     }
 
-    if (node.data.nodeType === 'form' && (!(node.data.formFields as any[]) || (node.data.formFields as any[]).length === 0)) {
-      issues.push({ type: 'error', nodeId: node.id, message: `Bước biểu mẫu "${node.data.label}" chưa thiết lập biểu mẫu nhập liệu.` });
-    }
-
     if (node.data.nodeType === 'http' && (!node.data.url || (node.data.url as string).trim() === '')) {
       issues.push({ type: 'error', nodeId: node.id, message: `HTTP Request "${node.data.label}" chưa có URL.` });
     }
