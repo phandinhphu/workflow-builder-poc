@@ -19,14 +19,14 @@ interface NavItem {
 }
 
 const navigation: NavItem[] = [
+  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, permissions: ['INSTANCE_VIEW'] },
+  { name: 'Quản lý Biểu mẫu', href: '/forms', icon: DocumentDuplicateIcon, permissions: ['FORM_VIEW', 'FORM_EDIT'] },
+  { name: 'Quản lý Workflow', href: '/workflows', icon: DocumentTextIcon, permissions: ['WORKFLOW_VIEW', 'WORKFLOW_EDIT'] },
+  { name: 'Danh mục Ticket', href: '/categories', icon: TagIcon, permissions: ['CATEGORY_MANAGE'] },
   { name: 'Phiếu yêu cầu (Tickets)', href: '/tickets', icon: TicketIcon },
   { name: 'Nhiệm vụ của tôi', href: '/my-tasks', icon: ClipboardDocumentCheckIcon },
-  { name: 'Quản lý Biểu mẫu', href: '/forms', icon: DocumentDuplicateIcon, permissions: ['FORM_VIEW', 'FORM_EDIT'] },
-  { name: 'Danh mục Ticket', href: '/categories', icon: TagIcon, permissions: ['CATEGORY_MANAGE'] },
-  { name: 'Danh sách Workflow', href: '/workflows', icon: DocumentTextIcon, permissions: ['WORKFLOW_VIEW', 'WORKFLOW_EDIT'] },
-  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, permissions: ['INSTANCE_VIEW'] },
   { name: 'Người dùng', href: '/users', icon: UsersIcon, permissions: ['USER_VIEW', 'USER_MANAGE'] },
-//   { name: 'Kết nối & API', href: '/connectors', icon: LinkIcon, permissions: ['CONNECTOR_MANAGE'] },
+  //   { name: 'Kết nối & API', href: '/connectors', icon: LinkIcon, permissions: ['CONNECTOR_MANAGE'] },
 ];
 
 const bottomItems: NavItem[] = [
