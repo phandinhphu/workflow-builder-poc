@@ -1,7 +1,7 @@
 import { useCallback, useRef, useEffect, useState } from 'react';
 import { ReactFlow, MiniMap, Controls, Background, type Edge, type ReactFlowInstance, BackgroundVariant, type Node } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Link, useParams, useSearchParams, useLocation, useBlocker, useNavigate } from 'react-router-dom';
+import { Link, useParams, useLocation, useBlocker, useNavigate } from 'react-router-dom';
 import { ChevronLeftIcon, Cog8ToothIcon, ClockIcon, CheckCircleIcon, PlayIcon, ShieldCheckIcon, BeakerIcon } from '@heroicons/react/24/outline';
 import CustomNode from '../components/nodes/CustomNode';
 import DataTransformNode from '../components/nodes/DataTransformNode';
@@ -22,7 +22,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import TestRunnerDrawer from '../components/TestRunnerDrawer';
 import Toast, { useToasts } from '../components/Toast';
 import { useDesignerStore } from '../stores/designerStore';
-import { getWorkflow, workflows, workflowTemplates, addVersionEntry } from '../data/mockData';
+import { getWorkflow, workflows, addVersionEntry } from '../data/mockData';
 import type { NodeType, TriggerType, WorkflowDefinition } from '../types/workflow';
 import { api, ApiError } from '../api/client';
 import { normalizeNodeDurations } from '../utils/duration';
@@ -169,10 +169,8 @@ function buildWorkflowNodes(wf?: ReturnType<typeof getWorkflow>): { nodes: Node[
 
 export default function WorkflowBuilder() {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const templateId = searchParams.get('template');
   const createState = (location.state ?? {}) as Record<string, string>;
 
   const store = useDesignerStore();
@@ -215,7 +213,7 @@ export default function WorkflowBuilder() {
     const wf = id ? getWorkflow(id) : undefined;
     const { nodes: n, edges: e } = buildWorkflowNodes(wf);
     const owner = wf?.ownerId ?? createState.owner ?? 'U000';
-    const name = wf?.name ?? createState.name ?? (templateId ? workflowTemplates.find(t => t.id === templateId)?.name ?? 'Workflow mới' : 'Workflow mới');
+    const name = wf?.name ?? createState.name ?? 'Workflow mới';
     const triggerDef = wf?.trigger ?? { type: (createState as any).triggerType ?? 'manual', config: {} };
     reset();
     setPersistedId(id ?? null);
@@ -236,7 +234,7 @@ export default function WorkflowBuilder() {
       edges: e,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, templateId, location.state]);
+  }, [id, location.state]);
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedElement(node, 'node');

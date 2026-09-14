@@ -1,18 +1,14 @@
 import { useState } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { workflowTemplates, orgUsers } from '../data/mockData';
+import { useNavigate } from 'react-router-dom';
+import { orgUsers } from '../data/mockData';
 import { useAuthStore } from '../stores/authStore';
 
 export default function CreateWorkflowModal({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const templateFromUrl = searchParams.get('template');
-  const [createType, setCreateType] = useState<'blank' | 'template'>(templateFromUrl ? 'template' : 'blank');
   const currentUser = useAuthStore((s) => s.currentUser);
 
   const [formData, setFormData] = useState({
-    templateId: templateFromUrl || '',
     name: '',
     description: '',
     type: 'Approval',
@@ -47,11 +43,7 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
         bodyTemplate: '',
       },
     };
-    if (createType === 'template' && formData.templateId) {
-      navigate(`/workflows/new/designer?template=${formData.templateId}`, { state });
-    } else {
-      navigate('/workflows/new/designer', { state });
-    }
+    navigate('/workflows/new/designer', { state });
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -79,58 +71,6 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
           <form id="create-workflow-form" onSubmit={handleCreate} className="space-y-4">
-            {/* Template or Blank Choice */}
-            <div className="flex gap-4 p-3 bg-gray-50/80 rounded-xl border border-gray-200/70">
-              <label className="flex items-center gap-2.5 cursor-pointer flex-1">
-                <input
-                  type="radio"
-                  name="createType"
-                  checked={createType === 'blank'}
-                  onChange={() => setCreateType('blank')}
-                  className="w-4 h-4 text-primary focus:ring-primary border-gray-300"
-                />
-                <div>
-                  <span className="text-xs font-bold text-gray-900 block">Quy trình trống</span>
-                  <span className="text-[11px] text-gray-500">Bắt đầu từ node Start & End cơ bản</span>
-                </div>
-              </label>
-              <label className="flex items-center gap-2.5 cursor-pointer flex-1 border-l border-gray-200 pl-4">
-                <input
-                  type="radio"
-                  name="createType"
-                  checked={createType === 'template'}
-                  onChange={() => setCreateType('template')}
-                  className="w-4 h-4 text-primary focus:ring-primary border-gray-300"
-                />
-                <div>
-                  <span className="text-xs font-bold text-gray-900 block">Dùng Template mẫu</span>
-                  <span className="text-[11px] text-gray-500">Quy trình phê duyệt dựng sẵn</span>
-                </div>
-              </label>
-            </div>
-
-            {createType === 'template' && (
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">
-                  Chọn Template mẫu <span className="text-danger">*</span>
-                </label>
-                <select
-                  name="templateId"
-                  required={createType === 'template'}
-                  value={formData.templateId}
-                  onChange={handleChange}
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-                >
-                  <option value="">Chọn template mẫu...</option>
-                  {workflowTemplates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 Tên workflow <span className="text-danger">*</span>
@@ -226,12 +166,8 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
             {/* Banner Kiến trúc Gắn kết Độc lập */}
             <div className="pt-2">
               <div className="bg-indigo-50/80 border border-indigo-100/90 rounded-xl p-3.5 text-indigo-950">
-                <div className="flex items-center gap-2 font-bold text-indigo-900 text-xs mb-1">
-                  <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
-                  Kiến trúc Phân rã Độc lập (Decoupled Binding Architecture)
-                </div>
                 <p className="text-[11px] text-indigo-800/90 leading-relaxed">
-                  Quy trình được thiết kế độc lập với Biểu mẫu. Sau khi <strong>Xuất bản (Publish)</strong>, bạn có thể ghép nối quy trình này với bất kỳ <strong>Biểu mẫu (Form Version)</strong> nào thông qua <strong>Danh mục Ticket (Ticket Category)</strong> để nhân viên gửi yêu cầu.
+                  Sau khi <strong>Publish</strong>, bạn có thể ghép nối quy trình này với bất kỳ <strong>Biểu mẫu (Form Version)</strong> nào thông qua <strong>Danh mục Ticket (Ticket Category)</strong> để nhân viên gửi yêu cầu.
                 </p>
               </div>
             </div>

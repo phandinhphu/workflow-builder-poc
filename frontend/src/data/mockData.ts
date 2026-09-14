@@ -76,12 +76,6 @@ export function scopeDescription(scope?: ParticipantScope | null): string {
   }
 }
 
-export const workflowTemplates = [
-  { id: 'T001', name: 'Standard IT Request', description: 'Template cho yêu cầu trang thiết bị/phần mềm IT.', category: 'IT' },
-  { id: 'T002', name: 'Leave Application', description: 'Luồng phê duyệt nghỉ phép chuẩn với quản lý và HR.', category: 'HR' },
-  { id: 'T003', name: 'Expense Claim', description: 'Luồng hoàn ứng đa cấp phê duyệt theo số tiền.', category: 'Finance' },
-];
-
 export let workflows: WorkflowDefinition[] = [
   {
     id: '1',
