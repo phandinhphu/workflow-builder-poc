@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PlusIcon, MagnifyingGlassIcon, DocumentDuplicateIcon, PlayIcon, EllipsisVerticalIcon, PencilSquareIcon, EyeIcon, TrashIcon } from '@heroicons/react/24/outline';
-import clsx from 'clsx';
+import { PlusIcon, MagnifyingGlassIcon, DocumentDuplicateIcon, EllipsisVerticalIcon, PencilSquareIcon, EyeIcon, TrashIcon } from '@heroicons/react/24/outline';
 import CreateWorkflowModal from '../components/CreateWorkflowModal';
 import Pagination from '../components/Pagination';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Toast, { useToasts } from '../components/Toast';
-import { workflows, workflowTemplates, userDisplayName, hasRunningInstances } from '../data/mockData';
+import { workflows, userDisplayName, hasRunningInstances } from '../data/mockData';
 import { api } from '../api/client';
 import { useAuthStore } from '../stores/authStore';
 import Can from '../components/auth/Can';
@@ -28,7 +27,6 @@ function getStatusBadge(status: string) {
 const PAGE_SIZE = 5;
 
 export default function WorkflowList() {
-  const [activeTab, setActiveTab] = useState<'workflows' | 'templates'>('workflows');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -49,14 +47,9 @@ export default function WorkflowList() {
     return matchesSearch && matchesStatus && matchesOwner;
   });
 
-  const filteredTemplates = workflowTemplates.filter(t => {
-    return t.name.toLowerCase().includes(searchTerm.toLowerCase());
-  });
-
-  const shown = activeTab === 'workflows' ? filteredWorkflows : filteredTemplates;
-  const totalPages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filteredWorkflows.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
-  const paged = shown.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const paged = filteredWorkflows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const confirmDelete = (id: string) => {
     const running = hasRunningInstances(id);
@@ -74,8 +67,11 @@ export default function WorkflowList() {
       const index = workflows.findIndex(workflow => workflow.id === deleteTarget);
       if (index >= 0) workflows.splice(index, 1);
       toasts.pushToast('success', 'Workflow đã được xóa mềm.');
-      setDeleteTarget(null); setOpenMenuId(null);
-    } catch (cause) { toasts.pushToast('error', cause instanceof Error ? cause.message : 'Không xóa được workflow'); }
+      setDeleteTarget(null);
+      setOpenMenuId(null);
+    } catch (cause) {
+      toasts.pushToast('error', cause instanceof Error ? cause.message : 'Không xóa được workflow');
+    }
   };
 
   return (
@@ -85,24 +81,6 @@ export default function WorkflowList() {
       </div>
 
       <div className="bg-surface rounded-xl border border-border shadow-sm flex flex-col h-full overflow-hidden">
-
-        <div className="flex border-b border-border">
-          <button
-            className={clsx("flex items-center gap-2 px-6 py-4 font-medium text-sm transition-colors relative", activeTab === 'workflows' ? 'text-primary' : 'text-gray-500 hover:text-navy')}
-            onClick={() => { setActiveTab('workflows'); setPage(1); }}
-          >
-            <PlayIcon className="w-5 h-5" /> Workflows
-            {activeTab === 'workflows' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary"></div>}
-          </button>
-          <button
-            className={clsx("flex items-center gap-2 px-6 py-4 font-medium text-sm transition-colors relative", activeTab === 'templates' ? 'text-primary' : 'text-gray-500 hover:text-navy')}
-            onClick={() => { setActiveTab('templates'); setPage(1); }}
-          >
-            <DocumentDuplicateIcon className="w-5 h-5" /> Danh sách Template
-            {activeTab === 'templates' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary"></div>}
-          </button>
-        </div>
-
         <div className="p-4 border-b border-border flex justify-between items-center bg-gray-50/50 flex-wrap gap-4">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="relative">
@@ -132,17 +110,15 @@ export default function WorkflowList() {
           </div>
 
           <div className="flex items-center gap-3">
-            {activeTab === 'workflows' && (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={myWorkflowsOnly}
-                  onChange={(e) => { setMyWorkflowsOnly(e.target.checked); setPage(1); }}
-                  className="rounded border-gray-300 text-primary focus:ring-primary"
-                />
-                Workflow của tôi
-              </label>
-            )}
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={myWorkflowsOnly}
+                onChange={(e) => { setMyWorkflowsOnly(e.target.checked); setPage(1); }}
+                className="rounded border-gray-300 text-primary focus:ring-primary"
+              />
+              Workflow của tôi
+            </label>
             <Can permissions={['WORKFLOW_CREATE', 'WORKFLOW_EDIT']}>
               <button
                 onClick={() => setIsCreateModalOpen(true)}
@@ -159,7 +135,7 @@ export default function WorkflowList() {
             <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
                 <th className="py-3 px-4 text-xs font-semibold text-muted uppercase tracking-wider border-b border-border w-10"></th>
-                <th className="py-3 px-4 text-xs font-semibold text-muted uppercase tracking-wider border-b border-border">Tên {activeTab === 'workflows' ? 'Workflow' : 'Template'}</th>
+                <th className="py-3 px-4 text-xs font-semibold text-muted uppercase tracking-wider border-b border-border">Tên Workflow</th>
                 <th className="py-3 px-4 text-xs font-semibold text-muted uppercase tracking-wider border-b border-border">Loại</th>
                 <th className="py-3 px-4 text-xs font-semibold text-muted uppercase tracking-wider border-b border-border">Trạng thái</th>
                 <th className="py-3 px-4 text-xs font-semibold text-muted uppercase tracking-wider border-b border-border">Người tạo</th>
@@ -170,14 +146,11 @@ export default function WorkflowList() {
             </thead>
             <tbody>
               {paged.map(item => {
-                const isWorkflow = activeTab === 'workflows';
-                const status = isWorkflow ? (item as any).status : 'PUBLISHED';
-                const creator = isWorkflow ? userDisplayName((item as any).ownerId) : 'Admin';
-                const version = isWorkflow ? `v${(item as any).draftVersion}` : 'v1.0';
-                const createdAt = isWorkflow ? (item as any).createdAt : '2024-11-01';
-                const linkTo = isWorkflow
-                  ? `/workflows/${(item as any).id}/designer`
-                  : `/workflows/new/designer?template=${item.id}`;
+                const status = item.status || 'DRAFT';
+                const creator = userDisplayName(item.ownerId);
+                const version = `v${item.draftVersion || '1.0'}`;
+                const createdAt = item.createdAt || '-';
+                const linkTo = `/workflows/${item.id}/designer`;
 
                 return (
                   <tr key={item.id} className="border-b border-border hover:bg-gray-50 bg-white group">
@@ -191,7 +164,7 @@ export default function WorkflowList() {
                         {item.name}
                       </Link>
                     </td>
-                    <td className="py-3 px-4 text-sm text-gray-600">{(item as any).type || 'Approval'}</td>
+                    <td className="py-3 px-4 text-sm text-gray-600">{item.type || 'Approval'}</td>
                     <td className="py-3 px-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(status)}`}>
                         {STATUS_LABELS[status] || 'Published'}
@@ -227,25 +200,21 @@ export default function WorkflowList() {
                                 <PencilSquareIcon className="w-4 h-4 text-gray-400" /> Chỉnh sửa thiết kế
                               </Link>
                             </Can>
-                            {isWorkflow && (
-                              <Link
-                                to={`/workflows/${(item as any).id}`}
-                                onClick={() => setOpenMenuId(null)}
-                                className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            <Link
+                              to={`/workflows/${item.id}`}
+                              onClick={() => setOpenMenuId(null)}
+                              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            >
+                              <EyeIcon className="w-4 h-4 text-gray-400" /> Xem chi tiết
+                            </Link>
+                            <Can permissions={['WORKFLOW_DELETE', 'WORKFLOW_EDIT']}>
+                              <button
+                                onClick={() => confirmDelete(item.id)}
+                                className="flex items-center gap-2 px-3 py-2 text-sm text-danger hover:bg-red-50 w-full text-left"
                               >
-                                <EyeIcon className="w-4 h-4 text-gray-400" /> Xem chi tiết
-                              </Link>
-                            )}
-                            {isWorkflow && (
-                              <Can permissions={['WORKFLOW_DELETE', 'WORKFLOW_EDIT']}>
-                                <button
-                                  onClick={() => confirmDelete((item as any).id)}
-                                  className="flex items-center gap-2 px-3 py-2 text-sm text-danger hover:bg-red-50 w-full text-left"
-                                >
-                                  <TrashIcon className="w-4 h-4" /> Xóa
-                                </button>
-                              </Can>
-                            )}
+                                <TrashIcon className="w-4 h-4" /> Xóa
+                              </button>
+                            </Can>
                           </div>
                         )}
                       </div>
@@ -256,18 +225,16 @@ export default function WorkflowList() {
             </tbody>
           </table>
 
-          {shown.length === 0 && (
+          {filteredWorkflows.length === 0 && (
             <div className="flex flex-col items-center justify-center h-64 text-gray-500">
               <DocumentDuplicateIcon className="w-8 h-8 mb-2 opacity-30" />
-              <p>Không tìm thấy {activeTab === 'workflows' ? 'workflow' : 'template'} nào</p>
-              {activeTab === 'workflows' && (
-                <button
-                  onClick={() => setIsCreateModalOpen(true)}
-                  className="mt-3 text-sm text-primary hover:text-primary-dark font-medium"
-                >
-                  + Tạo workflow mới
-                </button>
-              )}
+              <p>Không tìm thấy workflow nào</p>
+              <button
+                onClick={() => setIsCreateModalOpen(true)}
+                className="mt-3 text-sm text-primary hover:text-primary-dark font-medium"
+              >
+                + Tạo workflow mới
+              </button>
             </div>
           )}
         </div>
@@ -275,9 +242,9 @@ export default function WorkflowList() {
         <Pagination
           page={safePage}
           pageSize={PAGE_SIZE}
-          total={shown.length}
+          total={filteredWorkflows.length}
           onChange={setPage}
-          label={activeTab === 'workflows' ? 'workflow' : 'template'}
+          label="workflow"
         />
       </div>
 

@@ -67,24 +67,34 @@ public class TicketCategoryService {
         this.jsons = jsons;
     }
 
+    private boolean canManageCategories(String actor) {
+        return permissions.has(actor, "CATEGORY_MANAGE", null)
+                || permissions.has(actor, "WORKFLOW_EDIT", null);
+    }
+
+    private boolean canViewConfig(String actor) {
+        return canManageCategories(actor)
+                || permissions.has(actor, "CATEGORY_VIEW", null)
+                || permissions.has(actor, "WORKFLOW_VIEW", null);
+    }
+
     private void requireView(String actor) {
-        if (!permissions.has(actor, "CATEGORY_VIEW", null)
-                && !permissions.has(actor, "CATEGORY_MANAGE", null)
-                && !permissions.has(actor, "WORKFLOW_VIEW", null)) {
-            throw ApiException.forbidden("Thiếu quyền CATEGORY_VIEW để xem danh mục ticket");
+        if (!canViewConfig(actor) && !permissions.has(actor, "TICKET_CREATE", null)) {
+            throw ApiException.forbidden("Thiếu quyền CATEGORY_VIEW hoặc TICKET_CREATE để xem danh mục ticket");
         }
     }
 
     private void requireManage(String actor) {
-        if (!permissions.has(actor, "CATEGORY_MANAGE", null)
-                && !permissions.has(actor, "WORKFLOW_EDIT", null)) {
+        if (!canManageCategories(actor)) {
             throw ApiException.forbidden("Thiếu quyền CATEGORY_MANAGE để tạo hoặc chỉnh sửa danh mục ticket");
         }
     }
 
     public CompatibilityValidationResult validateMapping(ValidateMappingRequest request) {
         String actor = current.id();
-        requireView(actor);
+        if (!canViewConfig(actor)) {
+            throw ApiException.forbidden("Thiếu quyền xem cấu hình liên kết biểu mẫu và workflow");
+        }
         return validator.validate(request.formVersionId, request.workflowExecutableId, request.fieldMapping);
     }
 
@@ -188,7 +198,9 @@ public class TicketCategoryService {
         String actor = current.id();
         requireView(actor);
 
-        List<TicketCategoryEntity> list = Boolean.TRUE.equals(activeOnly)
+        boolean effectiveActiveOnly = Boolean.TRUE.equals(activeOnly) || !canViewConfig(actor);
+
+        List<TicketCategoryEntity> list = effectiveActiveOnly
                 ? categories.findByIsActiveTrueAndDeletedAtIsNullOrderByCreatedAtDesc()
                 : categories.findByDeletedAtIsNullOrderByCreatedAtDesc();
 
@@ -208,6 +220,10 @@ public class TicketCategoryService {
 
         TicketCategoryEntity entity = categories.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy danh mục ticket: " + id));
+
+        if (!canViewConfig(actor) && !entity.isActive) {
+            throw ApiException.forbidden("Danh mục này hiện không khả dụng để tạo vé");
+        }
 
         return toDetailResponse(entity);
     }

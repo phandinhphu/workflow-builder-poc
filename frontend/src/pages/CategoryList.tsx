@@ -10,7 +10,6 @@ import {
   DocumentDuplicateIcon,
   DocumentTextIcon,
   TagIcon,
-  SparklesIcon,
   ArrowUpCircleIcon,
 } from '@heroicons/react/24/outline';
 import { api } from '../api/client';
@@ -153,7 +152,7 @@ export default function CategoryList() {
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="p-4 rounded-xl border border-gray-100 bg-white shadow-xs flex items-center gap-4">
           <div className="w-11 h-11 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
             <FolderIcon className="w-5 h-5" />
@@ -171,16 +170,6 @@ export default function CategoryList() {
           <div>
             <p className="text-xs text-gray-500 font-medium">Đang hoạt động</p>
             <p className="text-xl font-bold text-emerald-600">{activeCount}</p>
-          </div>
-        </div>
-
-        <div className="p-4 rounded-xl border border-gray-100 bg-white shadow-xs flex items-center gap-4">
-          <div className="w-11 h-11 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-            <SparklesIcon className="w-5 h-5" />
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 font-medium">Đã gắn kết động</p>
-            <p className="text-xl font-bold text-purple-600">100% Type-Safe</p>
           </div>
         </div>
       </div>
@@ -202,25 +191,22 @@ export default function CategoryList() {
           <div className="flex items-center rounded-lg border border-gray-200 p-1 bg-gray-50/50 text-xs font-medium">
             <button
               onClick={() => setStatusFilter('ALL')}
-              className={`px-3 py-1 rounded-md transition-all ${
-                statusFilter === 'ALL' ? 'bg-white text-gray-900 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-900'
-              }`}
+              className={`px-3 py-1 rounded-md transition-all ${statusFilter === 'ALL' ? 'bg-white text-gray-900 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-900'
+                }`}
             >
               Tất cả
             </button>
             <button
               onClick={() => setStatusFilter('ACTIVE')}
-              className={`px-3 py-1 rounded-md transition-all ${
-                statusFilter === 'ACTIVE' ? 'bg-white text-emerald-700 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-900'
-              }`}
+              className={`px-3 py-1 rounded-md transition-all ${statusFilter === 'ACTIVE' ? 'bg-white text-emerald-700 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-900'
+                }`}
             >
               Hoạt động
             </button>
             <button
               onClick={() => setStatusFilter('INACTIVE')}
-              className={`px-3 py-1 rounded-md transition-all ${
-                statusFilter === 'INACTIVE' ? 'bg-white text-gray-700 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-900'
-              }`}
+              className={`px-3 py-1 rounded-md transition-all ${statusFilter === 'INACTIVE' ? 'bg-white text-gray-700 shadow-xs font-semibold' : 'text-gray-500 hover:text-gray-900'
+                }`}
             >
               Tạm dừng
             </button>
@@ -345,16 +331,14 @@ export default function CategoryList() {
                       <button
                         onClick={() => void handleToggleActive(cat)}
                         title={cat.isActive ? 'Bấm để tạm dừng' : 'Bấm để kích hoạt'}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${
-                          cat.isActive
-                            ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                        }`}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors ${cat.isActive
+                          ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
                       >
                         <span
-                          className={`w-1.5 h-1.5 rounded-full ${
-                            cat.isActive ? 'bg-emerald-500' : 'bg-gray-400'
-                          }`}
+                          className={`w-1.5 h-1.5 rounded-full ${cat.isActive ? 'bg-emerald-500' : 'bg-gray-400'
+                            }`}
                         />
                         {cat.isActive ? 'Khả dụng' : 'Tạm dừng'}
                       </button>

@@ -33,7 +33,7 @@ import java.util.*;
 @Slf4j
 @Service
 public class RuntimeEngineService {
-    private static final Set<String> HUMAN = Set.of("ASSIGNMENT", "APPROVAL", "REVIEW", "FORM");
+    private static final Set<String> HUMAN = Set.of("ASSIGNMENT", "APPROVAL", "REVIEW");
     private static final Set<String> OPEN_TASK = Set.of("PENDING", "CLAIMED", "IN_PROGRESS");
     private final WorkflowInstanceRepository instances;
     private final ParticipantExecutionRepository participants;
@@ -164,7 +164,8 @@ public class RuntimeEngineService {
                     "Participant resolver không trả về người dùng nào. Kiểm tra lại executionPattern hoặc participantScope của workflow.");
         ObjectNode variables = resolveVariables(definition, request.path("variables"));
         WorkflowInstanceEntity instance = new WorkflowInstanceEntity();
-        instance.id = Ids.uuid();
+        String customInstanceId = request.path("instanceId").asText(null);
+        instance.id = (customInstanceId != null && !customInstanceId.isBlank()) ? customInstanceId : Ids.uuid();
         instance.requestCode = request.path("requestCode").asText(generateRequestCode(workflowId));
         instance.workflowId = workflowId;
         instance.workflowVersionId = version.id;
@@ -1188,7 +1189,6 @@ public class RuntimeEngineService {
         return switch (type) {
             case "APPROVAL" -> "APPROVED";
             case "REVIEW" -> "REVIEW_COMPLETED";
-            case "FORM" -> "SUBMITTED";
             default -> "SUCCESS";
         };
     }
@@ -1939,9 +1939,11 @@ public class RuntimeEngineService {
     @Transactional
     public Map<String, Object> cancel(String instanceId) {
         String actor = current.id();
-        permissions.require(actor, "INSTANCE_START", null);
         WorkflowInstanceEntity instance = instances.findById(instanceId)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy instance " + instanceId));
+        if (!actor.equals(instance.creatorId) && !permissions.has(actor, "INSTANCE_START", null)) {
+            throw ApiException.forbidden("Thiếu quyền INSTANCE_START để hủy instance");
+        }
         if (!Set.of("RUNNING", "PENDING").contains(instance.status))
             throw ApiException.badRequest("INSTANCE_NOT_CANCELLABLE", "Chỉ instance đang chạy mới có thể hủy");
         Instant now = Instant.now();

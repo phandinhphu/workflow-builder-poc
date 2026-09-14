@@ -61,10 +61,7 @@ export function validateWorkflow(input: WorkflowValidationInput): ValidationIssu
   // 5. Schema/binding validation
   issues.push(...validateBindings(input));
 
-  // 6. Form validation
-  issues.push(...validateForms(input));
-
-  // 7. Condition validation
+  // 6. Condition validation
   issues.push(...validateConditions(input));
 
   return issues;
@@ -411,33 +408,6 @@ function validateBindings(input: WorkflowValidationInput): ValidationIssue[] {
   return issues;
 }
 
-function validateForms(input: WorkflowValidationInput): ValidationIssue[] {
-  const issues: ValidationIssue[] = [];
-  const { nodes } = input;
-
-  for (const node of nodes) {
-    const config = node.config as Record<string, unknown>;
-    if (config.form && typeof config.form === 'object') {
-      const form = config.form as Record<string, unknown>;
-      if (form.fields && Array.isArray(form.fields)) {
-        const fields = form.fields as Array<Record<string, unknown>>;
-        const fieldIds = fields.map(f => f.id).filter(Boolean);
-
-        // FORM_FIELD_ID_UNIQUE
-        const seenIds = new Set<string>();
-        for (const id of fieldIds) {
-          if (seenIds.has(id as string)) {
-            issues.push(createIssue('ERROR', 'FORM', VALIDATION_CODES.FORM_FIELD_ID_UNIQUE,
-              `Duplicate form field ID: ${id}`, node.id, undefined, `form.fields.${id}`));
-          }
-          seenIds.add(id as string);
-        }
-      }
-    }
-  }
-
-  return issues;
-}
 
 function validateConditions(input: WorkflowValidationInput): ValidationIssue[] {
   const issues: ValidationIssue[] = [];

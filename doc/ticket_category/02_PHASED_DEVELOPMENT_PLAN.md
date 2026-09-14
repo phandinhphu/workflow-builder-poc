@@ -207,20 +207,20 @@ Hoàn thiện quy trình phê duyệt cho người duyệt (Approver), tích h�
 ### 5.2. Hạng mục Công việc Chi tiết
 
 #### A. Resolver Node & Phân bổ Người duyệt (Backend)
-- [ ] Hoàn thiện các loại Resolver trong `AssigneeResolver`:
+- [x] Hoàn thiện các loại Resolver trong `AssigneeResolver`:
   - `MANAGER_OF`: Đọc `initiator.userId` từ context -> Tra cứu qua `DirectoryService` để tìm Trưởng bộ phận trực tiếp -> Gán `TaskExecution`.
   - `FIXED_USER`: Gán cố định theo ID.
   - `ROLE`: Gán cho nhóm quyền (VD: `HR_MANAGER`, `FINANCE_DIRECTOR`).
   - `INITIATOR`: Gán ngược lại cho người tạo.
-- [ ] Xử lý hoàn tất Task:
+- [x] Xử lý hoàn tất Task:
   - Khi người duyệt bấm Approve / Reject:
     - Cập nhật `TaskExecution` (status, comment, action).
     - Kích hoạt Engine chuyển sang Node tiếp theo hoặc chuyển sang Node Kết thúc (End Node).
 
 #### B. Frontend Task Approval Center
-- [ ] Màn hình **Nhiệm vụ của tôi (My Tasks)** (`/my-tasks`):
+- [x] Màn hình **Nhiệm vụ của tôi (My Tasks)** (`/my-tasks`):
   - Cập nhật giao diện danh sách task chờ duyệt: Tiêu đề task, Mã ticket liên quan, Người gửi, Ngày gửi.
-- [ ] Modal / Trang **Chi tiết Phê duyệt Task**:
+- [x] Modal / Trang **Chi tiết Phê duyệt Task**:
   - Hiển thị thông tin người nộp.
   - Nhúng **DynamicFormRenderer** ở chế độ **Read-only**: Người duyệt nhìn thấy toàn bộ thông tin đơn yêu cầu.
   - Lịch sử phê duyệt trước đó (Audit Trail / Approval Timeline).
@@ -228,14 +228,14 @@ Hoàn thiện quy trình phê duyệt cho người duyệt (Approver), tích h�
   - Nút **"Phê duyệt (Approve)"** (Xanh) và **"Từ chối (Reject)"** (Đỏ).
 
 #### C. Quản trị Phiên bản & Cảnh báo Nâng cấp (Impact Alerts)
-- [ ] Thêm logic phát hiện version mới:
+- [x] Thêm logic phát hiện version mới:
   - API kiểm tra xem `form_definition` có version mới hơn version đang gắn vào Category hay không.
   - UI Category hiển thị nhãn cảnh báo: *"Có Form version mới"* kèm nút *"Cập nhật và kiểm tra tương thích"*.
 
 #### D. Dọn dẹp & Tối ưu Codebase (Clean-up)
-- [ ] Rà soát và gỡ bỏ các đoạn code liên quan đến mô hình Single/On-Demand vs Batch/Campaign Workflow cũ (như flow import danh sách participant excel hàng loạt trong ServiceCatalog cũ nếu không còn dùng).
-- [ ] Đảm bảo toàn bộ test case hiện có của core engine chạy xanh.
-- [ ] Cập nhật tài liệu README và API Docs của dự án.
+- [x] Rà soát và gỡ bỏ các đoạn code liên quan đến mô hình Single/On-Demand vs Batch/Campaign Workflow cũ (như flow import danh sách participant excel hàng loạt trong ServiceCatalog cũ nếu không còn dùng, tối ưu CreateWorkflowModal tinh gọn).
+- [x] Đảm bảo toàn bộ test case hiện có của core engine chạy xanh.
+- [x] Cập nhật tài liệu README và API Docs của dự án.
 
 ### 5.3. Tiêu chí Nghiệm thu
 - [x] Sau khi User tạo ticket -> Task xuất hiện ngay tại My Tasks của Trưởng phòng (`MANAGER_OF`).

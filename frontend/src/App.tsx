@@ -68,7 +68,7 @@ const router = createBrowserRouter([
       {
         path: '/forms',
         element: (
-          <ProtectedRoute permissions={['FORM_VIEW', 'FORM_EDIT', 'WORKFLOW_VIEW', 'WORKFLOW_EDIT']}>
+          <ProtectedRoute permissions={['FORM_VIEW', 'FORM_EDIT']}>
             <FormList />
           </ProtectedRoute>
         ),
@@ -84,7 +84,7 @@ const router = createBrowserRouter([
       {
         path: '/categories',
         element: (
-          <ProtectedRoute permissions={['CATEGORY_VIEW', 'CATEGORY_MANAGE', 'WORKFLOW_VIEW', 'FORM_VIEW']}>
+          <ProtectedRoute permissions={['CATEGORY_MANAGE']}>
             <CategoryList />
           </ProtectedRoute>
         ),
@@ -105,10 +105,38 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
-      { path: '/workflows/:id', element: <WorkflowDetail /> },
-      { path: '/workflows/:id/history', element: <WorkflowDetail /> },
-      { path: '/workflows/:id/runtime', element: <InstancesList /> },
-      { path: '/workflows/:id/instances', element: <InstancesList /> },
+      {
+        path: '/workflows/:id',
+        element: (
+          <ProtectedRoute permissions={['WORKFLOW_VIEW', 'WORKFLOW_EDIT']}>
+            <WorkflowDetail />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/workflows/:id/history',
+        element: (
+          <ProtectedRoute permissions={['WORKFLOW_VIEW', 'WORKFLOW_EDIT']}>
+            <WorkflowDetail />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/workflows/:id/runtime',
+        element: (
+          <ProtectedRoute permission="INSTANCE_VIEW">
+            <InstancesList />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: '/workflows/:id/instances',
+        element: (
+          <ProtectedRoute permission="INSTANCE_VIEW">
+            <InstancesList />
+          </ProtectedRoute>
+        ),
+      },
       {
         path: '/workflows/:id/designer',
         element: (
@@ -117,7 +145,14 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
-      { path: '/workflows/:workflowId/instances/:instanceId', element: <InstanceDetail /> },
+      {
+        path: '/workflows/:workflowId/instances/:instanceId',
+        element: (
+          <ProtectedRoute permission="INSTANCE_VIEW">
+            <InstanceDetail />
+          </ProtectedRoute>
+        ),
+      },
       { path: '/my-tasks', element: <MyTasksPage /> },
       {
         path: '/connectors',

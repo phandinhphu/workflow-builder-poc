@@ -7,7 +7,6 @@ import {
   Code2, 
   Database, 
   Globe2, 
-  FormInput, 
   GitBranch,
   TrendingUp,
   Clock,
@@ -22,7 +21,6 @@ const NODE_CATEGORIES = [
     name: 'NGHIỆP VỤ & NGƯỜI DÙNG',
     nodes: [
       { type: 'assignment', label: 'Phân bổ người tham gia', description: 'Thu thập/chọn danh sách người tham gia bằng User Picker hoặc Upload file Excel', icon: UserPlus },
-      { type: 'form', label: 'Biểu mẫu nhập liệu (Form)', description: 'Thiết kế form và giao cho người dùng cụ thể hoặc danh sách động từ bước trước', icon: FormInput },
       { type: 'approval', label: 'Phê duyệt', description: 'Gửi yêu cầu và chờ phê duyệt từ quản lý hoặc bên liên quan', icon: CheckCircle2 },
       { type: 'review', label: 'Kiểm duyệt', description: 'Kiểm duyệt nội dung trước khi tiếp tục', icon: Eye },
       { type: 'notification', label: 'Thông báo', description: 'Gửi thông báo tự động (Email, In-app, Slack) đến các người liên quan', icon: BellRing },

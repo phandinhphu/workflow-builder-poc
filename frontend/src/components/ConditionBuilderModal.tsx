@@ -352,10 +352,6 @@ export default function ConditionBuilderModal({ isOpen, onClose, expression, onS
         addNodeOutput('totalParticipants', 'Tổng số người tham gia', 'number');
         addNodeOutput('participantIds', 'Danh sách ID người tham gia', 'array');
         addNodeOutput('participants', 'Danh sách người tham gia', 'array');
-      } else if (nodeType === 'FORM') {
-        addNodeOutput('totalSubmissions', 'Tổng số phản hồi (totalSubmissions)', 'number');
-        addNodeOutput('submissionList', 'Danh sách phản hồi (submissionList)', 'array');
-        addNodeOutput('submissions', 'Dữ liệu phản hồi theo người dùng (submissions)', 'object');
       } else if (nodeType === 'CONDITION') {
         addNodeOutput('result', 'Kết quả điều kiện (result)', 'boolean', { description: 'true / false' });
       }

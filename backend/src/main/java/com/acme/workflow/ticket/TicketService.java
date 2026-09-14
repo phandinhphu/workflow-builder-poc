@@ -93,7 +93,7 @@ public class TicketService {
 
     private void requireCreate(String actor) {
         if (!permissionService.has(actor, "TICKET_CREATE", null)
-                && !permissionService.has(actor, "ROLE_USER", null)
+                && !canManageAll(actor)
                 && !permissionService.has(actor, "WORKFLOW_EDIT", null)) {
             throw ApiException.forbidden("Thiếu quyền TICKET_CREATE để tạo yêu cầu");
         }
@@ -101,8 +101,7 @@ public class TicketService {
 
     private void requireView(String actor) {
         if (!permissionService.has(actor, "TICKET_VIEW", null)
-                && !permissionService.has(actor, "TICKET_MANAGE", null)
-                && !permissionService.has(actor, "ROLE_USER", null)) {
+                && !canManageAll(actor)) {
             throw ApiException.forbidden("Thiếu quyền TICKET_VIEW để xem danh sách vé");
         }
     }
@@ -199,8 +198,34 @@ public class TicketService {
         try {
             Map<String, Object> runResult = runtimeEngineService.startWithExecutable(
                     category.workflowExecutableId, startRequest, user.id);
-            String instanceId = (String) runResult.get("id");
-            ticket.workflowInstanceId = instanceId;
+            String actualInstanceId = (String) runResult.get("id");
+            if (actualInstanceId != null) {
+                ticket.workflowInstanceId = actualInstanceId;
+            }
+
+            // Sync with final or current status in case workflow finished or moved synchronously
+            workflowInstanceRepository.findById(ticket.workflowInstanceId).ifPresent(instance -> {
+                if ("COMPLETED".equalsIgnoreCase(instance.status)) {
+                    ticket.status = "APPROVED";
+                    ticket.currentStepName = "Hoàn tất";
+                    ticket.resolvedAt = instance.completedAt != null ? instance.completedAt : Instant.now();
+                } else if ("REJECTED".equalsIgnoreCase(instance.status) || "FAILED".equalsIgnoreCase(instance.status)) {
+                    ticket.status = "REJECTED";
+                    ticket.currentStepName = "Từ chối";
+                    ticket.resolvedAt = instance.completedAt != null ? instance.completedAt : Instant.now();
+                } else if ("CANCELLED".equalsIgnoreCase(instance.status)) {
+                    ticket.status = "CANCELLED";
+                    ticket.currentStepName = "Đã hủy";
+                    ticket.resolvedAt = instance.completedAt != null ? instance.completedAt : Instant.now();
+                } else if ("RUNNING".equalsIgnoreCase(instance.status) && "SUBMITTED".equals(ticket.status)) {
+                    List<WorkflowTaskEntity> activeTasks = workflowTaskRepository.findByInstanceIdOrderByCreatedAtAsc(instance.id)
+                            .stream().filter(t -> "PENDING".equals(t.status) || "CLAIMED".equals(t.status)).toList();
+                    if (!activeTasks.isEmpty()) {
+                        ticket.status = "IN_REVIEW";
+                        ticket.currentStepName = activeTasks.get(0).title;
+                    }
+                }
+            });
             ticketRepository.saveAndFlush(ticket);
         } catch (Exception e) {
             log.error("Failed to start workflow instance for ticket {}", ticket.ticketCode, e);
