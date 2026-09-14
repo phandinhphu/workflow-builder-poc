@@ -492,3 +492,272 @@ export function loadMockTasks(filters?: any) {
 
   return { tasks: filtered, total: filtered.length };
 }
+
+// ===== MOCK DATA FOR TICKET CATEGORIES & TICKETS (Decoupled Architecture) =====
+export interface MockTicketCategory {
+  id: string;
+  name: string;
+  code: string;
+  description: string;
+  icon: string;
+  color: string;
+  formVersionId: string;
+  formName: string;
+  formVersionNumber: number;
+  hasNewerFormVersion: boolean;
+  latestFormVersionNumber?: number;
+  workflowExecutableId: string;
+  workflowName: string;
+  workflowVersionNo: string;
+  isActive: boolean;
+  ticketsCount: number;
+  activeTicketsCount: number;
+}
+
+export interface MockTicket {
+  id: string;
+  ticketCode: string;
+  categoryId: string;
+  categoryName: string;
+  categoryIcon: string;
+  categoryColor: string;
+  initiatorId: string;
+  initiatorName: string;
+  initiatorDepartmentId: string;
+  initiatorDepartmentName: string;
+  status: 'SUBMITTED' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  currentStepName: string;
+  currentAssigneeName?: string;
+  slaStatus: 'ON_TIME' | 'OVERDUE' | 'WARNING';
+  overdueDuration?: string;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+}
+
+export const mockTicketCategories: MockTicketCategory[] = [
+  {
+    id: 'cat-1',
+    name: 'Phê duyệt Mua sắm Thiết bị',
+    code: 'CAT_PURCHASE',
+    description: 'Đăng ký mua sắm laptop, máy tính, thiết bị ngoại vi và bản quyền phần mềm',
+    icon: 'Laptop',
+    color: '#3B82F6',
+    formVersionId: 'fv-1',
+    formName: 'Biểu mẫu Đăng ký Mua sắm',
+    formVersionNumber: 2,
+    hasNewerFormVersion: true,
+    latestFormVersionNumber: 3,
+    workflowExecutableId: 'wf-1',
+    workflowName: 'Phê duyệt Mua sắm (2 Cấp)',
+    workflowVersionNo: 'v2.2',
+    isActive: true,
+    ticketsCount: 42,
+    activeTicketsCount: 8,
+  },
+  {
+    id: 'cat-2',
+    name: 'Đăng ký Đi Công tác',
+    code: 'CAT_BUSINESS_TRIP',
+    description: 'Yêu cầu đi công tác trong và ngoài nước, tạm ứng chi phí và phương tiện',
+    icon: 'Plane',
+    color: '#8B5CF6',
+    formVersionId: 'fv-2',
+    formName: 'Biểu mẫu Công tác & Chi phí',
+    formVersionNumber: 1,
+    hasNewerFormVersion: false,
+    workflowExecutableId: 'wf-2',
+    workflowName: 'Phê duyệt Công tác & Dự toán',
+    workflowVersionNo: 'v1.0',
+    isActive: true,
+    ticketsCount: 35,
+    activeTicketsCount: 6,
+  },
+  {
+    id: 'cat-3',
+    name: 'Phê duyệt Nghỉ phép Năm',
+    code: 'CAT_LEAVE',
+    description: 'Đơn xin nghỉ phép năm, nghỉ việc riêng, nghỉ thai sản',
+    icon: 'Calendar',
+    color: '#10B981',
+    formVersionId: 'fv-3',
+    formName: 'Biểu mẫu Nghỉ phép',
+    formVersionNumber: 3,
+    hasNewerFormVersion: false,
+    workflowExecutableId: 'wf-3',
+    workflowName: 'Quy trình Nghỉ phép',
+    workflowVersionNo: 'v1.4',
+    isActive: true,
+    ticketsCount: 28,
+    activeTicketsCount: 4,
+  },
+  {
+    id: 'cat-4',
+    name: 'Tạm ứng & Hoàn ứng Chi phí',
+    code: 'CAT_EXPENSE_ADVANCE',
+    description: 'Tạm ứng ngân sách hoạt động dự án, chi phí tiếp khách, hoàn ứng hóa đơn',
+    icon: 'Receipt',
+    color: '#F59E0B',
+    formVersionId: 'fv-4',
+    formName: 'Biểu mẫu Chi phí & Hóa đơn',
+    formVersionNumber: 1,
+    hasNewerFormVersion: true,
+    latestFormVersionNumber: 2,
+    workflowExecutableId: 'wf-4',
+    workflowName: 'Phê duyệt Ngân sách Tài chính',
+    workflowVersionNo: 'v2.0',
+    isActive: true,
+    ticketsCount: 15,
+    activeTicketsCount: 3,
+  },
+  {
+    id: 'cat-5',
+    name: 'Cấp quyền & Tài nguyên CNTT',
+    code: 'CAT_IT_ACCESS',
+    description: 'Yêu cầu mở quyền truy cập hệ thống, VPN, Server, CSDL',
+    icon: 'Key',
+    color: '#EC4899',
+    formVersionId: 'fv-5',
+    formName: 'Biểu mẫu Cấp quyền Hệ thống',
+    formVersionNumber: 1,
+    hasNewerFormVersion: false,
+    workflowExecutableId: 'wf-5',
+    workflowName: 'Phê duyệt An toàn Thông tin',
+    workflowVersionNo: 'v1.0',
+    isActive: true,
+    ticketsCount: 8,
+    activeTicketsCount: 3,
+  },
+];
+
+export const mockTickets: MockTicket[] = [
+  {
+    id: 'tck-101',
+    ticketCode: 'TCK-20260914-001',
+    categoryId: 'cat-1',
+    categoryName: 'Phê duyệt Mua sắm Thiết bị',
+    categoryIcon: 'Laptop',
+    categoryColor: '#3B82F6',
+    initiatorId: 'U002',
+    initiatorName: 'Trần Hoàng Bách',
+    initiatorDepartmentId: 'DEPT-TECH',
+    initiatorDepartmentName: 'Phòng Công nghệ',
+    status: 'IN_REVIEW',
+    currentStepName: 'Trưởng phòng IT phê duyệt',
+    currentAssigneeName: 'Phạm Hồng Đăng',
+    slaStatus: 'OVERDUE',
+    overdueDuration: 'Quá hạn 4 giờ',
+    createdAt: '2026-09-14 07:30',
+    updatedAt: '2026-09-14 08:00',
+  },
+  {
+    id: 'tck-102',
+    ticketCode: 'TCK-20260914-002',
+    categoryId: 'cat-2',
+    categoryName: 'Đăng ký Đi Công tác',
+    categoryIcon: 'Plane',
+    categoryColor: '#8B5CF6',
+    initiatorId: 'U003',
+    initiatorName: 'Lê Minh Tâm',
+    initiatorDepartmentId: 'DEPT-SALES',
+    initiatorDepartmentName: 'Phòng Kinh doanh',
+    status: 'IN_REVIEW',
+    currentStepName: 'Giám đốc phê duyệt dự toán',
+    currentAssigneeName: 'Đỗ Hữu Châu',
+    slaStatus: 'ON_TIME',
+    createdAt: '2026-09-14 08:15',
+    updatedAt: '2026-09-14 08:45',
+  },
+  {
+    id: 'tck-103',
+    ticketCode: 'TCK-20260913-005',
+    categoryId: 'cat-3',
+    categoryName: 'Phê duyệt Nghỉ phép Năm',
+    categoryIcon: 'Calendar',
+    categoryColor: '#10B981',
+    initiatorId: 'U001',
+    initiatorName: 'Nguyễn Thị Mai',
+    initiatorDepartmentId: 'DEPT-HR',
+    initiatorDepartmentName: 'Phòng Nhân sự',
+    status: 'APPROVED',
+    currentStepName: 'Hoàn tất quy trình',
+    slaStatus: 'ON_TIME',
+    createdAt: '2026-09-13 14:10',
+    updatedAt: '2026-09-13 16:30',
+    resolvedAt: '2026-09-13 16:30',
+  },
+  {
+    id: 'tck-104',
+    ticketCode: 'TCK-20260913-004',
+    categoryId: 'cat-4',
+    categoryName: 'Tạm ứng & Hoàn ứng Chi phí',
+    categoryIcon: 'Receipt',
+    categoryColor: '#F59E0B',
+    initiatorId: 'U005',
+    initiatorName: 'Vũ Ngọc Trinh',
+    initiatorDepartmentId: 'DEPT-MKT',
+    initiatorDepartmentName: 'Phòng Marketing',
+    status: 'IN_REVIEW',
+    currentStepName: 'Kế toán trưởng kiểm tra hóa đơn',
+    currentAssigneeName: 'Phạm Hồng Đăng',
+    slaStatus: 'OVERDUE',
+    overdueDuration: 'Quá hạn 1 ngày',
+    createdAt: '2026-09-12 10:00',
+    updatedAt: '2026-09-13 09:00',
+  },
+  {
+    id: 'tck-105',
+    ticketCode: 'TCK-20260913-003',
+    categoryId: 'cat-1',
+    categoryName: 'Phê duyệt Mua sắm Thiết bị',
+    categoryIcon: 'Laptop',
+    categoryColor: '#3B82F6',
+    initiatorId: 'U008',
+    initiatorName: 'Bùi Phương Thảo',
+    initiatorDepartmentId: 'DEPT-LEGAL',
+    initiatorDepartmentName: 'Phòng Pháp chế',
+    status: 'REJECTED',
+    currentStepName: 'Trưởng bộ phận từ chối',
+    currentAssigneeName: 'Đỗ Hữu Châu',
+    slaStatus: 'ON_TIME',
+    createdAt: '2026-09-13 09:20',
+    updatedAt: '2026-09-13 11:45',
+    resolvedAt: '2026-09-13 11:45',
+  },
+  {
+    id: 'tck-106',
+    ticketCode: 'TCK-20260912-008',
+    categoryId: 'cat-5',
+    categoryName: 'Cấp quyền & Tài nguyên CNTT',
+    categoryIcon: 'Key',
+    categoryColor: '#EC4899',
+    initiatorId: 'U002',
+    initiatorName: 'Trần Hoàng Bách',
+    initiatorDepartmentId: 'DEPT-TECH',
+    initiatorDepartmentName: 'Phòng Công nghệ',
+    status: 'APPROVED',
+    currentStepName: 'Cấp quyền hoàn tất',
+    slaStatus: 'ON_TIME',
+    createdAt: '2026-09-12 15:30',
+    updatedAt: '2026-09-12 17:00',
+    resolvedAt: '2026-09-12 17:00',
+  },
+  {
+    id: 'tck-107',
+    ticketCode: 'TCK-20260911-002',
+    categoryId: 'cat-2',
+    categoryName: 'Đăng ký Đi Công tác',
+    categoryIcon: 'Plane',
+    categoryColor: '#8B5CF6',
+    initiatorId: 'U003',
+    initiatorName: 'Lê Minh Tâm',
+    initiatorDepartmentId: 'DEPT-SALES',
+    initiatorDepartmentName: 'Phòng Kinh doanh',
+    status: 'CANCELLED',
+    currentStepName: 'Người tạo hủy yêu cầu',
+    slaStatus: 'ON_TIME',
+    createdAt: '2026-09-11 11:00',
+    updatedAt: '2026-09-11 13:20',
+    resolvedAt: '2026-09-11 13:20',
+  },
+];
