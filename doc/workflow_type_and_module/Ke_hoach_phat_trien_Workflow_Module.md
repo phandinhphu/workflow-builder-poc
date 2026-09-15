@@ -92,9 +92,9 @@ graph TD
    - **Xoá Workflow (`DELETE /api/workflows/{id}`)**: Chỉ cho phép khi có quyền xóa theo cả 2 lớp.
 
 #### 2.3. Tiêu chí hoàn thành (DoD)
-- [ ] User chỉ thấy các workflow thuộc Module mình được phân quyền khi gọi API danh sách.
-- [ ] User không thể truy cập trái phép workflow của Module khác thông qua việc truyền thẳng Workflow ID vào API chi tiết.
-- [ ] Admin có toàn quyền xem và quản trị workflow trên mọi Module.
+- [x] User chỉ thấy các workflow thuộc Module mình được phân quyền khi gọi API danh sách.
+- [x] User không thể truy cập trái phép workflow của Module khác thông qua việc truyền thẳng Workflow ID vào API chi tiết.
+- [x] Admin có toàn quyền xem và quản trị workflow trên mọi Module.
 
 ---
 

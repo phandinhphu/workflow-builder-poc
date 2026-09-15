@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/workflows")
+@RequestMapping({"/api/v1/workflows", "/api/workflows"})
 public class WorkflowController {
     private final WorkflowService service;
 
@@ -17,8 +17,9 @@ public class WorkflowController {
 
     @GetMapping
     List<Map<String, Object>> list(@RequestParam(required = false) String status,
-            @RequestParam(required = false) String search) {
-        return service.list(status, search);
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String moduleId) {
+        return service.list(status, search, moduleId);
     }
 
     @GetMapping("/{id}")

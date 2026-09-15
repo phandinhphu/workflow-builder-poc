@@ -3,6 +3,8 @@ package com.acme.workflow.workflow;
 import com.acme.workflow.auth.*;
 import com.acme.workflow.common.*;
 import com.acme.workflow.identity.repository.HrmUserRepository;
+import com.acme.workflow.module.ModuleAccessService;
+import com.acme.workflow.module.repository.ModuleRepository;
 import com.acme.workflow.runtime.repository.WorkflowInstanceRepository;
 import com.acme.workflow.workflow.domain.*;
 import com.acme.workflow.workflow.repository.*;
@@ -26,12 +28,24 @@ public class WorkflowService {
     private final CurrentUserService current;
     private final PermissionService permissions;
     private final WorkflowAccessService access;
+    private final ModuleAccessService moduleAccess;
+    private final ModuleRepository moduleRepository;
     private final AuditService audit;
 
-    public WorkflowService(WorkflowDefinitionRepository definitions, WorkflowVersionRepository versions,
+    public WorkflowService(
+            WorkflowDefinitionRepository definitions,
+            WorkflowVersionRepository versions,
             WorkflowInstanceRepository instances,
-            HrmUserRepository users, Jsons jsons, WorkflowCompiler compiler, CurrentUserService current,
-            PermissionService permissions, WorkflowAccessService access, AuditService audit) {
+            HrmUserRepository users,
+            Jsons jsons,
+            WorkflowCompiler compiler,
+            CurrentUserService current,
+            PermissionService permissions,
+            WorkflowAccessService access,
+            ModuleAccessService moduleAccess,
+            ModuleRepository moduleRepository,
+            AuditService audit
+    ) {
         this.definitions = definitions;
         this.versions = versions;
         this.instances = instances;
@@ -41,15 +55,29 @@ public class WorkflowService {
         this.current = current;
         this.permissions = permissions;
         this.access = access;
+        this.moduleAccess = moduleAccess;
+        this.moduleRepository = moduleRepository;
         this.audit = audit;
     }
 
     public List<Map<String, Object>> list(String status, String search) {
+        return list(status, search, null);
+    }
+
+    public List<Map<String, Object>> list(String status, String search, String moduleId) {
         String actor = current.id(), query = search == null ? "" : search.toLowerCase(Locale.ROOT);
+        if (moduleId != null && !moduleId.isBlank()) {
+            moduleAccess.requireModuleAccess(actor, moduleId, "VIEWER");
+        }
+        List<String> accessibleModuleIds = moduleAccess.getAccessibleModuleIds(actor, "VIEWER");
+
         return definitions.findByStatusNotOrderByUpdatedAtDesc("DELETED").stream()
+                .filter(w -> accessibleModuleIds.contains(w.moduleId))
+                .filter(w -> moduleId == null || moduleId.isBlank() || moduleId.equals(w.moduleId))
                 .filter(w -> access.canView(actor, w.id))
                 .filter(w -> status == null || status.isBlank() || status.equals(w.status))
-                .filter(w -> query.isBlank() || w.name.toLowerCase(Locale.ROOT).contains(query)).map(this::summary)
+                .filter(w -> query.isBlank() || w.name.toLowerCase(Locale.ROOT).contains(query))
+                .map(this::summary)
                 .toList();
     }
 
@@ -73,8 +101,11 @@ public class WorkflowService {
     }
 
     public ObjectNode get(String id) {
-        access.requireView(current.id(), id);
-        return map(entity(id));
+        WorkflowDefinitionEntity workflow = entity(id);
+        String actor = current.id();
+        moduleAccess.requireModuleAccess(actor, workflow.moduleId, "VIEWER");
+        access.requireView(actor, id);
+        return map(workflow);
     }
 
     private ObjectNode map(WorkflowDefinitionEntity workflow) {
@@ -117,12 +148,26 @@ public class WorkflowService {
     public ObjectNode create(ObjectNode body) {
         String actor = current.id();
         permissions.require(actor, "WORKFLOW_EDIT", null);
+
+        String targetModuleId = body.hasNonNull("moduleId")
+                ? body.path("moduleId").asText().trim()
+                : (body.hasNonNull("module") ? body.path("module").asText().trim() : "MOD_GENERAL");
+        if (targetModuleId.isBlank()) {
+            targetModuleId = "MOD_GENERAL";
+        }
+        if (!moduleRepository.existsById(targetModuleId)) {
+            throw ApiException.badRequest("INVALID_MODULE", "Module không tồn tại: " + targetModuleId);
+        }
+        moduleAccess.requireModuleAccess(actor, targetModuleId, "EDITOR");
+
         String id = body.path("id").asText();
         if (id.isBlank())
             id = Ids.uuid();
         if (definitions.existsById(id))
             throw ApiException.badRequest("DUPLICATE_WORKFLOW", "Workflow id đã tồn tại");
         body.put("id", id);
+        body.put("moduleId", targetModuleId);
+        body.put("module", targetModuleId);
         body.put("ownerId", body.path("ownerId").asText(actor));
         body.put("status", "DRAFT");
         body.put("draftVersion", body.path("draftVersion").asText("1.0"));
@@ -143,13 +188,30 @@ public class WorkflowService {
     public ObjectNode save(String id, ObjectNode body) {
         WorkflowDefinitionEntity workflow = entity(id);
         String actor = current.id();
+        moduleAccess.requireModuleAccess(actor, workflow.moduleId, "EDITOR");
         access.requireEdit(actor, id);
+
+        String targetModuleId = body.hasNonNull("moduleId")
+                ? body.path("moduleId").asText().trim()
+                : (body.hasNonNull("module") ? body.path("module").asText().trim() : workflow.moduleId);
+        if (targetModuleId.isBlank()) {
+            targetModuleId = workflow.moduleId;
+        }
+        if (!targetModuleId.equals(workflow.moduleId)) {
+            if (!moduleRepository.existsById(targetModuleId)) {
+                throw ApiException.badRequest("INVALID_MODULE", "Module không tồn tại: " + targetModuleId);
+            }
+            moduleAccess.requireModuleAccess(actor, targetModuleId, "EDITOR");
+        }
+
         ObjectNode before = map(workflow);
         long expected = body.has("lockVersion") ? body.path("lockVersion").asLong() : workflow.lockVersion;
         if (expected != workflow.lockVersion)
             throw new ApiException(HttpStatus.CONFLICT, "WORKFLOW_CONFLICT",
                     "Workflow đã được người khác cập nhật; hãy tải lại");
         body.put("id", id);
+        body.put("moduleId", targetModuleId);
+        body.put("module", targetModuleId);
         body.put("ownerId", body.path("ownerId").asText(workflow.ownerId));
         body.put("status", workflow.status);
         body.put("draftVersion", body.path("draftVersion").asText(workflow.draftVersion));
@@ -183,14 +245,18 @@ public class WorkflowService {
     }
 
     public Map<String, Object> validate(String id) {
-        access.requireEdit(current.id(), id);
-        return compiler.validate(map(entity(id)));
+        WorkflowDefinitionEntity workflow = entity(id);
+        String actor = current.id();
+        moduleAccess.requireModuleAccess(actor, workflow.moduleId, "VIEWER");
+        access.requireEdit(actor, id);
+        return compiler.validate(map(workflow));
     }
 
     @Transactional
     public Map<String, Object> publish(String id) {
         WorkflowDefinitionEntity workflow = entity(id);
         String actor = current.id();
+        moduleAccess.requireModuleAccess(actor, workflow.moduleId, "EDITOR");
         access.requirePublish(actor, id);
         ObjectNode definition = map(workflow);
         Map<String, Object> report = compiler.validate(definition);
@@ -245,8 +311,10 @@ public class WorkflowService {
     }
 
     public List<Map<String, Object>> versions(String id) {
-        access.requireView(current.id(), id);
-        entity(id);
+        WorkflowDefinitionEntity workflow = entity(id);
+        String actor = current.id();
+        moduleAccess.requireModuleAccess(actor, workflow.moduleId, "VIEWER");
+        access.requireView(actor, id);
         return versions.findByWorkflowIdOrderByCreatedAtDesc(id).stream().map(version -> {
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("id", version.id);
@@ -264,7 +332,10 @@ public class WorkflowService {
     }
 
     public ObjectNode version(String workflowId, String versionId) {
-        access.requireView(current.id(), workflowId);
+        WorkflowDefinitionEntity workflow = entity(workflowId);
+        String actor = current.id();
+        moduleAccess.requireModuleAccess(actor, workflow.moduleId, "VIEWER");
+        access.requireView(actor, workflowId);
         WorkflowVersionEntity version = versions.findById(versionId).filter(v -> workflowId.equals(v.workflowId))
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy workflow version"));
         ObjectNode result = jsons.object(version.definitionSnapshot);
@@ -277,6 +348,7 @@ public class WorkflowService {
     public ObjectNode changeStatus(String id, String status) {
         WorkflowDefinitionEntity workflow = entity(id);
         String target = status.toUpperCase(Locale.ROOT), actor = current.id();
+        moduleAccess.requireModuleAccess(actor, workflow.moduleId, "EDITOR");
         access.requireEdit(actor, id);
         if (!Set.of("PUBLISHED", "SUSPENDED", "DELETED").contains(target))
             throw ApiException.badRequest("INVALID_STATUS", "Trạng thái không hợp lệ");
@@ -292,7 +364,10 @@ public class WorkflowService {
     }
 
     public List<Map<String, Object>> members(String id) {
-        access.requireView(current.id(), id);
+        WorkflowDefinitionEntity workflow = entity(id);
+        String actor = current.id();
+        moduleAccess.requireModuleAccess(actor, workflow.moduleId, "VIEWER");
+        access.requireView(actor, id);
         return access.members(id).stream()
                 .map(member -> Map.<String, Object>of("userId", member.userId, "displayName",
                         users.findById(member.userId).map(u -> u.displayName).orElse(member.userId), "role",
@@ -302,11 +377,14 @@ public class WorkflowService {
 
     @Transactional
     public List<Map<String, Object>> replaceMembers(String id, List<Map<String, Object>> members) {
-        access.requirePublish(current.id(), id);
+        WorkflowDefinitionEntity workflow = entity(id);
+        String actor = current.id();
+        moduleAccess.requireModuleAccess(actor, workflow.moduleId, "MANAGER");
+        access.requirePublish(actor, id);
         if (members.stream().noneMatch(item -> "OWNER".equalsIgnoreCase(String.valueOf(item.get("role")))))
             throw ApiException.badRequest("OWNER_REQUIRED", "Workflow phải có ít nhất một owner");
         access.replace(id, members);
-        audit.append(current.id(), "UPDATE_MEMBERS", "WORKFLOW", id, null, null, members, null);
+        audit.append(actor, "UPDATE_MEMBERS", "WORKFLOW", id, null, null, members, null);
         return members(id);
     }
 
