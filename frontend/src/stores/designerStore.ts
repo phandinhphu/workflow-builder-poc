@@ -25,6 +25,7 @@ export interface DesignerPanelState {
   isDirty: boolean;
   savedAt: string | null;
   validationIssues: any[];
+  allowedNodes: string[];
   activeLeftPanel: 'none' | 'triggers' | 'nodes';
   panel: 'none' | 'node-library' | 'trigger-library' | 'validation' | 'context-explorer';
 }
@@ -66,6 +67,9 @@ export interface DesignerActions {
   setIsDirty: (dirty: boolean) => void;
   setSavedAt: (time: string | null) => void;
   setValidationIssues: (issues: any[]) => void;
+  setAllowedNodes: (nodes: string[]) => void;
+  highlightInvalidNodes: (nodeIds: string[]) => void;
+  clearInvalidNodes: () => void;
   setActiveLeftPanel: (panel: 'none' | 'triggers' | 'nodes') => void;
   setPanel: (panel: 'none' | 'node-library' | 'trigger-library' | 'validation' | 'context-explorer') => void;
   reset: () => void;
@@ -108,6 +112,7 @@ const initialState: DesignerPanelState = {
   isDirty: false,
   savedAt: null,
   validationIssues: [],
+  allowedNodes: [],
   activeLeftPanel: 'none',
   panel: 'none',
 };
@@ -280,6 +285,31 @@ export const useDesignerStore = create<DesignerStore>((set) => ({
   setSavedAt: (time) => set({ savedAt: time }),
 
   setValidationIssues: (issues) => set({ validationIssues: issues }),
+
+  setAllowedNodes: (nodes) => set({ allowedNodes: nodes }),
+
+  highlightInvalidNodes: (nodeIds) => set((state) => {
+    const errorSet = new Set(nodeIds);
+    return {
+      nodes: state.nodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          invalid: errorSet.has(node.id),
+        },
+      })),
+    };
+  }),
+
+  clearInvalidNodes: () => set((state) => ({
+    nodes: state.nodes.map(node => ({
+      ...node,
+      data: {
+        ...node.data,
+        invalid: false,
+      },
+    })),
+  })),
 
   setActiveLeftPanel: (panel) => set({ activeLeftPanel: panel }),
 

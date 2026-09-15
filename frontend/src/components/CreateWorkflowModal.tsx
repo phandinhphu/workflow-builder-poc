@@ -1,22 +1,54 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { useNavigate } from 'react-router-dom';
 import { orgUsers } from '../data/mockData';
 import { useAuthStore } from '../stores/authStore';
+import { api, type WorkflowTypeResponse } from '../api/client';
+import { FALLBACK_WORKFLOW_TYPES } from '../utils/workflowTypeUtils';
 
 export default function CreateWorkflowModal({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const currentUser = useAuthStore((s) => s.currentUser);
+  const [workflowTypes, setWorkflowTypes] = useState<WorkflowTypeResponse[]>(FALLBACK_WORKFLOW_TYPES);
+  const [loadingTypes, setLoadingTypes] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    type: 'Approval',
+    type: 'APPROVAL',
     module: 'Operations',
     owner: currentUser?.id ?? (orgUsers[0]?.id || 'U000'),
     version: '1.0',
     executionPattern: 'ON_DEMAND',
   });
+
+  useEffect(() => {
+    let mounted = true;
+    setLoadingTypes(true);
+    api.workflowTypes.list(false)
+      .then((types) => {
+        if (mounted && types && types.length > 0) {
+          const sorted = [...types].sort((a, b) => a.sortOrder - b.sortOrder);
+          setWorkflowTypes(sorted);
+          // Default to first non-CUSTOM type if available, else first type
+          const firstNonCustom = sorted.find(t => t.id !== 'CUSTOM') || sorted[0];
+          setFormData(prev => ({
+            ...prev,
+            type: prev.type || firstNonCustom.id,
+          }));
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load workflow types from API, using fallback:', err);
+      })
+      .finally(() => {
+        if (mounted) setLoadingTypes(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,6 +82,8 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
+
+  const selectedTypeObj = workflowTypes.find(t => t.id === formData.type);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
@@ -110,12 +144,19 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
                   value={formData.type}
                   onChange={handleChange}
                   className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                  disabled={loadingTypes}
                 >
-                  <option value="Approval">Phê duyệt (Approval)</option>
-                  <option value="Review">Xem xét / Đánh giá (Review)</option>
-                  <option value="Assignment">Phân công công việc (Task Assignment)</option>
-                  <option value="Automation">Tự động hóa hệ thống (Automation)</option>
+                  {workflowTypes.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.id})
+                    </option>
+                  ))}
                 </select>
+                {selectedTypeObj?.description && (
+                  <p className="text-[11px] text-muted mt-1 leading-snug">
+                    {selectedTypeObj.description}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">Phân loại bộ phận</label>

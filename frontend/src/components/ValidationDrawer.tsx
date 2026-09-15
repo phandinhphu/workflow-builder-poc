@@ -3,6 +3,7 @@ import { Transition } from '@headlessui/react';
 import { XCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import type { Node, Edge } from '@xyflow/react';
 import type { TriggerDefinition, WorkflowVariable } from '../types/workflow';
+import { toBackendNodeType } from '../utils/workflowTypeUtils';
 
 export interface ValidationIssue {
   type: 'error' | 'warning';
@@ -53,11 +54,28 @@ function normalizeReference(reference: string): string {
 export function validateWorkflow(
   nodes: Node[],
   edges: Edge[],
-  options?: { trigger?: TriggerDefinition; variables?: WorkflowVariable[] },
+  options?: { trigger?: TriggerDefinition; variables?: WorkflowVariable[]; workflowType?: string; allowedNodes?: string[] },
 ): ValidationResult {
   const issues: ValidationIssue[] = [];
   const trigger = options?.trigger;
   const variables = options?.variables ?? [];
+  const workflowType = (options?.workflowType || '').toUpperCase();
+  const allowedNodes = options?.allowedNodes;
+
+  // Check: Workflow Type Allowed Nodes
+  if (workflowType && workflowType !== 'CUSTOM' && allowedNodes && allowedNodes.length > 0) {
+    nodes.forEach(node => {
+      if (['start', 'end'].includes(node.data.nodeType as string)) return;
+      const backendType = toBackendNodeType(node.data.nodeType as string);
+      if (!allowedNodes.includes(backendType)) {
+        issues.push({
+          type: 'error',
+          nodeId: node.id,
+          message: `Bước "${node.data.label}" (${node.data.nodeType}) không được phép sử dụng trong Loại quy trình "${workflowType}".`,
+        });
+      }
+    });
+  }
 
   // Check 0: Trigger
   if (!trigger) {

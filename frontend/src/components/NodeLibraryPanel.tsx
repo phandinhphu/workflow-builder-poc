@@ -1,22 +1,26 @@
 import { XMarkIcon } from '@heroicons/react/24/outline';
-import { 
-  CheckCircle2, 
-  Eye, 
-  UserPlus, 
-  BellRing, 
-  Code2, 
-  Database, 
-  Globe2, 
+import {
+  CheckCircle2,
+  Eye,
+  UserPlus,
+  BellRing,
+  Code2,
+  Database,
+  Globe2,
   GitBranch,
   TrendingUp,
   Clock,
   Zap,
   ArrowLeftRight,
   ArrowRightLeft,
-  Layers
+  Layers,
+  Sparkles,
+  ShieldCheck,
 } from 'lucide-react';
+import { useDesignerStore } from '../stores/designerStore';
+import { toBackendNodeType } from '../utils/workflowTypeUtils';
 
-const NODE_CATEGORIES = [
+const ALL_NODE_CATEGORIES = [
   {
     name: 'NGHIỆP VỤ & NGƯỜI DÙNG',
     nodes: [
@@ -59,31 +63,67 @@ const NODE_CATEGORIES = [
 ];
 
 export default function NodeLibraryPanel({ onClose }: { onClose: () => void }) {
+  const { workflowData, allowedNodes } = useDesignerStore();
+  const currentType = (workflowData.type || 'APPROVAL').toUpperCase();
+  const isCustom = currentType === 'CUSTOM';
+
   const onDragStart = (event: React.DragEvent, nodeType: string, label: string) => {
     event.dataTransfer.setData('application/reactflow', nodeType);
     event.dataTransfer.setData('application/label', label);
     event.dataTransfer.effectAllowed = 'move';
   };
 
+  // Filter nodes based on allowedNodes
+  const filteredCategories = ALL_NODE_CATEGORIES.map(category => {
+    const validNodes = category.nodes.filter(node => {
+      if (isCustom || !allowedNodes || allowedNodes.length === 0) return true;
+      const backendType = toBackendNodeType(node.type);
+      return allowedNodes.includes(backendType);
+    });
+    return {
+      ...category,
+      nodes: validNodes,
+    };
+  }).filter(category => category.nodes.length > 0);
+
+  const totalVisibleNodes = filteredCategories.reduce((acc, cat) => acc + cat.nodes.length, 0);
+
   return (
     <div className="w-80 border-r border-border bg-white flex flex-col h-full z-10 shadow-sm relative shrink-0">
-      <div className="flex items-center justify-between p-4 border-b border-border bg-gray-50/50">
-        <div>
-          <h2 className="text-base font-bold text-navy flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-gray-200 flex items-center justify-center">
-              <span className="w-3 h-3 border-2 border-gray-600 rounded-sm"></span>
-            </div>
-            Thư viện
-          </h2>
-          <p className="text-xs text-muted mt-1">Lựa chọn node để thêm vào workflow</p>
+      <div className="p-4 border-b border-border bg-gray-50/50">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-navy flex items-center gap-2">
+              <div className="w-6 h-6 rounded bg-gray-200 flex items-center justify-center">
+                <span className="w-3 h-3 border-2 border-gray-600 rounded-sm"></span>
+              </div>
+              Thư viện node
+            </h2>
+            <p className="text-xs text-muted mt-0.5">Kéo thả node vào bản vẽ</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-navy p-1 rounded-full hover:bg-gray-100 transition-colors">
+            <XMarkIcon className="w-5 h-5" />
+          </button>
         </div>
-        <button onClick={onClose} className="text-gray-400 hover:text-navy p-1 rounded-full hover:bg-gray-100 transition-colors">
-          <XMarkIcon className="w-5 h-5" />
-        </button>
+
+        {/* Dynamic Type Badge */}
+        <div className="mt-3 flex items-center justify-between bg-indigo-50/70 border border-indigo-100 rounded-lg px-2.5 py-1.5 text-xs text-indigo-950">
+          <div className="flex items-center gap-1.5 truncate">
+            {isCustom ? (
+              <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+            ) : (
+              <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+            )}
+            <span className="truncate font-medium">Loại: <strong className="font-bold">{currentType}</strong></span>
+          </div>
+          <span className="text-[10px] bg-white border border-indigo-200 text-indigo-700 font-semibold px-1.5 py-0.5 rounded-full shrink-0">
+            {isCustom ? 'Toàn bộ' : `${totalVisibleNodes} node`}
+          </span>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        {NODE_CATEGORIES.map(category => (
+        {filteredCategories.map(category => (
           <div key={category.name}>
             <h3 className="text-xs font-bold text-muted mb-3 flex items-center gap-2 tracking-wide">
               <span className="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
@@ -93,7 +133,7 @@ export default function NodeLibraryPanel({ onClose }: { onClose: () => void }) {
               {category.nodes.map(node => {
                 const Icon = node.icon;
                 return (
-                  <div 
+                  <div
                     key={node.type}
                     draggable
                     onDragStart={(e) => onDragStart(e, node.type, node.label)}
@@ -107,7 +147,7 @@ export default function NodeLibraryPanel({ onClose }: { onClose: () => void }) {
                       <p className="text-[11px] text-muted leading-snug line-clamp-2">{node.description}</p>
                     </div>
                   </div>
-                )
+                );
               })}
             </div>
           </div>

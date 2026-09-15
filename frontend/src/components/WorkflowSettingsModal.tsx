@@ -1,10 +1,13 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon, UsersIcon, CheckCircleIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 import { useDesignerStore } from '../stores/designerStore';
-import { getWorkflowTypeOptions, getModuleOptions, orgUsers, resolveParticipantScope } from '../data/mockData';
+import { getModuleOptions, orgUsers, resolveParticipantScope } from '../data/mockData';
 import type { WorkflowVariable } from '../types/workflow';
+import { api, type WorkflowTypeResponse } from '../api/client';
+import TypeSwitchWarningModal, { type ViolatingNodeItem } from './TypeSwitchWarningModal';
+import { FALLBACK_WORKFLOW_TYPES, toBackendNodeType } from '../utils/workflowTypeUtils';
 
 interface WorkflowSettingsModalProps {
   isOpen: boolean;
@@ -15,7 +18,105 @@ const VAR_TYPES = ['STRING', 'NUMBER', 'BOOLEAN', 'DATE', 'OBJECT', 'LIST'];
 
 export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'info' | 'scope' | 'vars'>('info');
-  const { workflowData, setWorkflowData, trigger, participantScope, setParticipantScope, participantNotification, setParticipantNotification, variables, setVariables } = useDesignerStore();
+  const { 
+    workflowData, setWorkflowData, trigger, participantScope, setParticipantScope, 
+    participantNotification, setParticipantNotification, variables, setVariables, 
+    nodes, setAllowedNodes 
+  } = useDesignerStore();
+
+  const [workflowTypes, setWorkflowTypes] = useState<WorkflowTypeResponse[]>(FALLBACK_WORKFLOW_TYPES);
+  const [isWarningOpen, setIsWarningOpen] = useState(false);
+  const [pendingTypeId, setPendingTypeId] = useState<string>('');
+  const [violatingNodes, setViolatingNodes] = useState<ViolatingNodeItem[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    api.workflowTypes.list(true)
+      .then((types) => {
+        if (mounted && types && types.length > 0) {
+          setWorkflowTypes([...types].sort((a, b) => a.sortOrder - b.sortOrder));
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load workflow types:', err);
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  const handleTypeSelect = async (targetTypeId: string) => {
+    const upperTarget = targetTypeId.toUpperCase();
+    if (upperTarget === (workflowData.type || '').toUpperCase()) return;
+
+    // Determine allowed nodes for the target type
+    let targetAllowedNodes: string[] = [];
+    const typeObj = workflowTypes.find(t => t.id.toUpperCase() === upperTarget);
+    if (typeObj && typeObj.allowedNodes && typeObj.allowedNodes.length > 0) {
+      targetAllowedNodes = typeObj.allowedNodes;
+    } else {
+      try {
+        targetAllowedNodes = await api.workflowTypes.getAllowedNodes(upperTarget);
+      } catch {
+        const fallback = FALLBACK_WORKFLOW_TYPES.find(t => t.id.toUpperCase() === upperTarget);
+        targetAllowedNodes = fallback?.allowedNodes || [];
+      }
+    }
+
+    // Check violations on existing canvas nodes (ignoring start & end)
+    if (upperTarget !== 'CUSTOM') {
+      const nonStartEndNodes = nodes.filter(n => !['start', 'end'].includes(n.data.nodeType as string));
+      const violations: ViolatingNodeItem[] = [];
+      nonStartEndNodes.forEach(node => {
+        const backendType = toBackendNodeType(node.data.nodeType as string);
+        if (!targetAllowedNodes.includes(backendType)) {
+          violations.push({
+            id: node.id,
+            name: String(node.data.label || 'Bước xử lý'),
+            type: String(node.data.nodeType || backendType),
+          });
+        }
+      });
+
+      if (violations.length > 0) {
+        setViolatingNodes(violations);
+        setPendingTypeId(upperTarget);
+        setIsWarningOpen(true);
+        return;
+      }
+    }
+
+    // No violations or CUSTOM -> apply directly
+    setWorkflowData({ type: upperTarget });
+    setAllowedNodes(targetAllowedNodes);
+  };
+
+  const handleConfirmTypeSwitch = async () => {
+    if (!pendingTypeId) return;
+    const upperTarget = pendingTypeId.toUpperCase();
+    let targetAllowedNodes: string[] = [];
+    const typeObj = workflowTypes.find(t => t.id.toUpperCase() === upperTarget);
+    if (typeObj && typeObj.allowedNodes && typeObj.allowedNodes.length > 0) {
+      targetAllowedNodes = typeObj.allowedNodes;
+    } else {
+      try {
+        targetAllowedNodes = await api.workflowTypes.getAllowedNodes(upperTarget);
+      } catch {
+        const fallback = FALLBACK_WORKFLOW_TYPES.find(t => t.id.toUpperCase() === upperTarget);
+        targetAllowedNodes = fallback?.allowedNodes || [];
+      }
+    }
+
+    setWorkflowData({ type: upperTarget });
+    setAllowedNodes(targetAllowedNodes);
+    setIsWarningOpen(false);
+    setPendingTypeId('');
+    setViolatingNodes([]);
+  };
+
+  const handleCancelTypeSwitch = () => {
+    setIsWarningOpen(false);
+    setPendingTypeId('');
+    setViolatingNodes([]);
+  };
 
   const [newVarKey, setNewVarKey] = useState('');
   const [newVarType, setNewVarType] = useState('STRING');
@@ -150,10 +251,14 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
                           <label className="block text-sm font-medium text-gray-700 mb-1">Loại workflow</label>
                           <select
                             className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary bg-white"
-                            value={workflowData.type || ''}
-                            onChange={e => setWorkflowData({ type: e.target.value })}
+                            value={(workflowData.type || 'APPROVAL').toUpperCase()}
+                            onChange={e => handleTypeSelect(e.target.value)}
                           >
-                            {getWorkflowTypeOptions().map(t => <option key={t} value={t}>{t}</option>)}
+                            {workflowTypes.map(t => (
+                              <option key={t.id} value={t.id.toUpperCase()}>
+                                {t.name} ({t.id})
+                              </option>
+                            ))}
                           </select>
                         </div>
                         <div>
@@ -679,6 +784,14 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
           </div>
         </div>
       </Dialog>
+      <TypeSwitchWarningModal
+        isOpen={isWarningOpen}
+        onClose={handleCancelTypeSwitch}
+        onConfirm={handleConfirmTypeSwitch}
+        targetTypeId={pendingTypeId}
+        targetTypeName={workflowTypes.find(t => t.id.toUpperCase() === pendingTypeId.toUpperCase())?.name || pendingTypeId}
+        violatingNodes={violatingNodes}
+      />
     </Transition.Root>
   );
 }

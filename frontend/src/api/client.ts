@@ -205,6 +205,12 @@ export const api = {
       downloadTemplateUrl: `${API_BASE}/runtime/participants/template`,
     },
   },
+  workflowTypes: {
+    list: (includeDetails = false) => request<WorkflowTypeResponse[]>(`/workflow-types?includeDetails=${includeDetails}`),
+    get: (id: string, includeDetails = true) => request<WorkflowTypeResponse>(`/workflow-types/${id}?includeDetails=${includeDetails}`),
+    getAllowedNodes: (id: string) => request<string[]>(`/workflow-types/${id}/allowed-nodes`),
+    getRules: (id: string) => request<ValidationRuleDto[]>(`/workflow-types/${id}/rules`),
+  },
   notifications: {
     list: () => request<any[]>('/notifications'),
     read: (id: string) => request<any>(`/notifications/${id}/read`, { method: 'POST' }),
@@ -213,3 +219,22 @@ export const api = {
     list: (query = '') => request<any>(`/audit-logs${query ? `?${query}` : ''}`),
   },
 };
+
+export interface WorkflowTypeResponse {
+  id: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  sortOrder: number;
+  allowedNodes?: string[];
+  rules?: ValidationRuleDto[];
+}
+
+export interface ValidationRuleDto {
+  id: string;
+  workflowTypeId: string;
+  ruleCode: string;
+  targetNodeType?: string;
+  errorMessage: string;
+  ruleConfig?: string;
+}
