@@ -37,25 +37,15 @@ import {
   Database,
   Globe2,
   Play,
-  Clock,
-  Webhook,
   Users,
   FileSpreadsheet,
   Layers,
-  Sparkles,
   Trash2,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useDesignerStore } from '../stores/designerStore';
 import { toIsoDuration } from '../utils/duration';
-import type { TriggerType } from '../types/workflow';
 
-const TRIGGER_TYPE_OPTIONS: { value: TriggerType; label: string; icon: any }[] = [
-  { value: 'manual', label: 'Kích hoạt thủ công', icon: MousePointer2 },
-  { value: 'schedule', label: 'Theo lịch trình', icon: Clock },
-  { value: 'form', label: 'Khi gửi biểu mẫu', icon: FormInput },
-  { value: 'webhook', label: 'Theo sự kiện Webhook', icon: Webhook },
-];
 
 const MOCK_FORMS = [
   { id: 'FORM-001', name: 'Yêu cầu nghỉ phép' },
@@ -64,10 +54,9 @@ const MOCK_FORMS = [
   { id: 'FORM-004', name: 'PC Request Form' },
 ];
 
-const INITIATOR_ROLES = ['HR', 'Manager', 'Finance', 'Everyone'];
 
 const nodeConfig: Record<string, { title: string; desc: string; icon: any; color: string }> = {
-  start: { title: 'TRIGGER', desc: 'Bắt đầu workflow', icon: MousePointer2, color: 'text-indigo-500' },
+  start: { title: 'BẮT ĐẦU', desc: 'Điểm bắt đầu quy trình, tiếp nhận Context từ Ticket', icon: Play, color: 'text-indigo-500' },
   approval: { title: 'PHÊ DUYỆT', desc: 'Gửi yêu cầu và chờ phê duyệt', icon: CheckCircle2, color: 'text-blue-500' },
   review: { title: 'KIỂM DUYỆT', desc: 'Đánh giá nội dung và đưa ra quyết định', icon: Eye, color: 'text-purple-500' },
   assignment: { title: 'PHÂN CÔNG & THU THẬP', desc: 'Tập hợp người tham gia qua danh bạ hoặc Excel', icon: UserPlus, color: 'text-orange-500' },
@@ -88,6 +77,9 @@ function ContextRefBadge({ path }: { path: string }) {
   const firstSeg = path.split('.')[0];
   const colorMap: Record<string, string> = {
     trigger: 'bg-blue-100 text-blue-700 border-blue-200',
+    formData: 'bg-green-100 text-green-700 border-green-200',
+    ticket: 'bg-sky-100 text-sky-700 border-sky-200',
+    initiator: 'bg-amber-100 text-amber-700 border-amber-200',
     variables: 'bg-purple-100 text-purple-700 border-purple-200',
     nodes: 'bg-teal-100 text-teal-700 border-teal-200',
     participant: 'bg-orange-100 text-orange-700 border-orange-200',
@@ -478,35 +470,12 @@ export default function NodeConfigPanel({
   const [activeTab, setActiveTab] = useState<'input' | 'config' | 'preview'>('config');
   const [conditionModalOpen, setConditionModalOpen] = useState(false);
 
-  const setStoreTrigger = useDesignerStore(s => s.setTrigger);
-  const setPanel = useDesignerStore(s => s.setPanel);
   const nodes = useDesignerStore(s => s.nodes);
   const edges = useDesignerStore(s => s.edges);
   const trigger = useDesignerStore(s => s.trigger);
   const variables = useDesignerStore(s => s.variables);
-  const workflowData = useDesignerStore(s => s.workflowData);
-
-  const executionPattern = workflowData.executionPattern || 'ON_DEMAND';
 
   const upstreamNodes = useMemo(() => findUpstreamNodes(node.id, nodes, edges), [node.id, nodes, edges]);
-
-  const openTriggerLibrary = () => {
-    setPanel('trigger-library');
-  };
-
-  const triggerType: TriggerType = (data.triggerType as TriggerType) || 'manual';
-  const triggerConfig = (data.triggerConfig as Record<string, unknown>) || {};
-
-  const changeTriggerType = (t: TriggerType) => {
-    onUpdate({ triggerType: t, triggerConfig: {} });
-    setStoreTrigger({ type: t, config: {} });
-  };
-
-  const updateTriggerConfig = (patch: Record<string, unknown>) => {
-    const next = { ...triggerConfig, ...patch };
-    onUpdate({ triggerConfig: next });
-    setStoreTrigger({ type: triggerType, config: next });
-  };
 
   const assignee: AssigneeResolverConfig = data.assignee || defaultAssignee;
   const setAssignee = (a: AssigneeResolverConfig) => onUpdate({ assignee: a });
@@ -612,159 +581,71 @@ export default function NodeConfigPanel({
               />
             </div>
 
-            {/* START TRIGGER NODE */}
+
+            {/* START NODE - Simplified for new Decoupled Binding Architecture */}
             {type === 'start' && (
               <div className="pt-4 border-t border-border space-y-4">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-navy uppercase">Loại Trigger</label>
-                  <button
-                    onClick={openTriggerLibrary}
-                    className="text-xs font-semibold text-primary hover:text-primary-dark flex items-center gap-1"
-                  >
-                    Mở Trigger Library
-                  </button>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-xs font-bold text-navy uppercase mb-1.5">Mô tả (Tùy chọn)</label>
+                  <textarea
+                    rows={3}
+                    className="w-full border border-border rounded px-3 py-2 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
+                    placeholder="Mô tả ngắn về mục đích của quy trình này..."
+                    value={(data.description as string) || ''}
+                    onChange={e => onUpdate({ description: e.target.value })}
+                  />
                 </div>
 
-                {/* Guidance Banner based on Execution Pattern */}
+                {/* Guidance Banner */}
                 <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-lg text-xs text-indigo-900 flex items-start gap-2">
-                  <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                  <svg className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
                   <div>
-                    <span className="font-semibold">
-                      Chế độ quy trình:{' '}
-                      {executionPattern === 'ON_DEMAND'
-                        ? 'Dịch vụ theo yêu cầu (On-Demand)'
-                        : 'Chiến dịch định kỳ (Batch Campaign)'}
-                    </span>
-                    <p className="mt-0.5 text-indigo-700 text-[11px]">
-                      {executionPattern === 'ON_DEMAND'
-                        ? 'Phù hợp: Kích hoạt thủ công hoặc khi người dùng nộp yêu cầu qua Danh mục Ticket (Ticket Category).'
-                        : 'Phù hợp: Chạy tự động theo lịch (Schedule) hoặc đợt khởi chạy hàng loạt.'}
+                    <span className="font-semibold block mb-0.5">Cơ chế kích hoạt</span>
+                    <p className="text-indigo-700 text-[11px] leading-relaxed">
+                      Quy trình được kích hoạt tự động khi người dùng gửi yêu cầu từ{' '}
+                      <strong>Danh mục Ticket (Ticket Category)</strong>. Dữ liệu biểu mẫu, thông tin
+                      người gửi và metadata sẽ được truyền vào luồng dưới dạng Context.
                     </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  {TRIGGER_TYPE_OPTIONS.map(opt => {
-                    const IconComp = opt.icon;
-                    return (
-                      <button
-                        key={opt.value}
-                        onClick={() => changeTriggerType(opt.value)}
-                        className={clsx(
-                          'flex items-center gap-2 px-3 py-2.5 rounded-md border text-sm text-left transition-colors',
-                          triggerType === opt.value
-                            ? 'border-primary bg-primary/5 text-primary font-medium'
-                            : 'border-border bg-white text-gray-600 hover:border-gray-300'
-                        )}
-                      >
-                        <IconComp size={15} className={triggerType === opt.value ? 'text-primary' : 'text-gray-400'} />
-                        {opt.label}
-                      </button>
-                    );
-                  })}
+                {/* Context Info */}
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 space-y-2">
+                  <div className="font-semibold text-slate-900">Các biến Context sẵn có trong luồng:</div>
+                  <ul className="space-y-1 font-mono text-[11px]">
+                    <li><span className="inline-block bg-green-100 text-green-800 border border-green-200 rounded px-1.5 py-0.5">formData.&lt;fieldKey&gt;</span> – Dữ liệu người dùng đã nhập</li>
+                    <li><span className="inline-block bg-sky-100 text-sky-800 border border-sky-200 rounded px-1.5 py-0.5">ticket.ticketCode</span>, <span className="inline-block bg-sky-100 text-sky-800 border border-sky-200 rounded px-1.5 py-0.5">ticket.categoryId</span> – Metadata phiếu</li>
+                    <li><span className="inline-block bg-amber-100 text-amber-800 border border-amber-200 rounded px-1.5 py-0.5">initiator.userId</span>, <span className="inline-block bg-amber-100 text-amber-800 border border-amber-200 rounded px-1.5 py-0.5">initiator.managerId</span> – Người nộp đơn</li>
+                  </ul>
                 </div>
 
-                <div className="pt-2 border-t border-border space-y-3">
-                  <label className="block text-xs font-bold text-navy uppercase">Cấu hình trigger</label>
-                  {triggerType === 'manual' && (
-                    <p className="text-xs text-muted bg-gray-50 border border-border rounded p-3">
-                      Workflow được khởi chạy thủ công từ Service Catalog hoặc qua API. Không cần cấu hình thêm.
-                    </p>
-                  )}
-                  {triggerType === 'schedule' && (
-                    <>
-                      <div>
-                        <span className="text-xs text-muted block mb-1">Tần suất</span>
-                        <select
-                          className="w-full border border-border rounded px-3 py-2 text-sm"
-                          value={String(triggerConfig.frequency || 'Hàng ngày')}
-                          onChange={e => updateTriggerConfig({ frequency: e.target.value })}
-                        >
-                          <option>Hàng ngày</option>
-                          <option>Hàng tuần</option>
-                          <option>Theo khoảng thời gian</option>
-                        </select>
-                      </div>
-                      <div>
-                        <span className="text-xs text-muted block mb-1">Giờ chạy</span>
-                        <input
-                          type="time"
-                          className="w-full border border-border rounded px-3 py-2 text-sm"
-                          value={String(triggerConfig.time || '08:30')}
-                          onChange={e => updateTriggerConfig({ time: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <span className="text-xs text-muted block mb-1">Múi giờ</span>
-                        <select
-                          className="w-full border border-border rounded px-3 py-2 text-sm"
-                          value={String(triggerConfig.timezone || 'Asia/Ho_Chi_Minh')}
-                          onChange={e => updateTriggerConfig({ timezone: e.target.value })}
-                        >
-                          <option>Asia/Ho_Chi_Minh</option>
-                          <option>UTC</option>
-                          <option>Asia/Singapore</option>
-                        </select>
-                      </div>
-                    </>
-                  )}
-                  {triggerType === 'form' && (
-                    <>
-                      <div>
-                        <span className="text-xs text-muted block mb-1">Biểu mẫu kết nối</span>
-                        <select
-                          className="w-full border border-border rounded px-3 py-2 text-sm"
-                          value={String(triggerConfig.formId || '')}
-                          onChange={e => updateTriggerConfig({ formId: e.target.value })}
-                        >
-                          <option value="">Chọn biểu mẫu...</option>
-                          {MOCK_FORMS.map(f => (
-                            <option key={f.id} value={f.id}>
-                              {f.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <span className="text-xs text-muted block mb-1">
-                          Người được phép khởi tạo (Allowed Initiator)
-                        </span>
-                        <select
-                          className="w-full border border-border rounded px-3 py-2 text-sm"
-                          value={String((triggerConfig.allowedInitiator as any)?.role ?? 'HR')}
-                          onChange={e =>
-                            updateTriggerConfig({
-                              allowedInitiator: { type: 'ROLE', role: e.target.value },
-                            })
-                          }
-                        >
-                          {INITIATOR_ROLES.map(r => (
-                            <option key={r} value={r}>
-                              {r}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </>
-                  )}
-                  {triggerType === 'webhook' && (
-                    <>
-                      <div>
-                        <span className="text-xs text-muted block mb-1">Webhook Endpoint</span>
-                        <input
-                          readOnly
-                          value={String(
-                            triggerConfig.endpoint ||
-                              `https://api.workflow-builder.local/webhooks/${node.id}`
-                          )}
-                          className="w-full border border-border rounded px-3 py-2 text-sm font-mono bg-gray-50 text-gray-600"
-                        />
-                      </div>
-                    </>
-                  )}
+                {/* Design-time Form Preview (Hint only, not compiled into executable) */}
+                <div className="pt-2 border-t border-border space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-navy uppercase">Gợi ý Form Thiết kế</label>
+                    <span className="text-[10px] text-muted bg-gray-100 px-1.5 py-0.5 rounded">Chỉ hỗ trợ thiết kế</span>
+                  </div>
+                  <select
+                    className="w-full border border-border rounded px-3 py-2 text-sm focus:outline-none focus:border-primary"
+                    value={(data.previewFormId as string) || ''}
+                    onChange={e => onUpdate({ previewFormId: e.target.value || null })}
+                  >
+                    <option value="">Chọn Form để gợi ý tên biến...</option>
+                    {MOCK_FORMS.map(f => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-muted leading-snug">
+                    💡 Giúp gợi ý tên trường trong Condition &amp; Notification. Không gán cứng Form vào quy trình này.
+                  </p>
                 </div>
               </div>
             )}
+
 
             {/* DEDICATED APPROVAL NODE CONFIGURATION */}
             {type === 'approval' && (

@@ -2,7 +2,7 @@ package com.acme.workflow.workflow;
 
 import com.acme.workflow.runtime.ExpressionEngine;
 import com.fasterxml.jackson.databind.JsonNode;
-import org.springframework.scheduling.support.CronExpression;
+
 import org.springframework.stereotype.Component;
 
 import java.time.*;
@@ -28,7 +28,7 @@ public class WorkflowCompiler {
         this.typeRuleEngine = null;
     }
     private static final Set<String> HUMAN_TYPES = Set.of("ASSIGNMENT", "APPROVAL", "REVIEW");
-    private static final Set<String> TRIGGERS = Set.of("manual", "schedule", "form", "webhook");
+
     private static final Set<String> RESOLVERS = Set.of("fixed", "fixed_user", "role", "group", "current_participant",
             "participant_manager", "creator_manager", "manager_of", "department_head", "dynamic", "initiator", "creator",
             // Per-participant dynamic resolution types
@@ -53,7 +53,9 @@ public class WorkflowCompiler {
         List<Map<String, Object>> errors = new ArrayList<>();
         List<Map<String, Object>> warnings = new ArrayList<>();
         requiredText(definition, "name", "WF_NAME_REQUIRED", "Workflow cần có tên", errors);
-        validateTrigger(definition.path("trigger"), errors);
+        // Trigger validation removed: Start Node is now a simple entry point.
+        // Activation is always via TicketService -> RuntimeEngineService.startWithExecutable().
+        // No trigger type, cron, form fields, or webhook secret is required on the workflow definition.
         validateVariables(definition.path("variables"), errors);
 
         JsonNode nodes = definition.path("nodes");
@@ -137,21 +139,9 @@ public class WorkflowCompiler {
         report.put("runtimeCapabilityVersion", "2.0"); return report;
     }
 
-    private void validateTrigger(JsonNode trigger, List<Map<String, Object>> errors) {
-        if (!trigger.isObject()) { error(errors, "TRIGGER_REQUIRED", "Workflow cần có trigger", null, null); return; }
-        String type = trigger.path("type").asText().toLowerCase(Locale.ROOT);
-        if (!TRIGGERS.contains(type)) { error(errors, "TRIGGER_UNSUPPORTED", "Trigger không được hỗ trợ: " + type, null, null); return; }
-        JsonNode config = trigger.path("config");
-        if ("schedule".equals(type)) {
-            String cron = config.path("cron").asText();
-            try { CronExpression.parse(cron); } catch (RuntimeException error) { error(errors, "INVALID_CRON", "Cron schedule không hợp lệ", null, null); }
-            try { ZoneId.of(config.path("timezone").asText("Asia/Bangkok")); } catch (RuntimeException error) { error(errors, "INVALID_TIMEZONE", "Timezone không hợp lệ", null, null); }
-        }
-        if ("form".equals(type) && !config.path("formFields").isArray() && config.path("formRef").asText().isBlank())
-            error(errors, "TRIGGER_FORM_REQUIRED", "Form trigger cần formFields hoặc formRef", null, null);
-        if ("webhook".equals(type) && config.path("secretReference").asText().isBlank())
-            error(errors, "WEBHOOK_SECRET_REQUIRED", "Webhook trigger cần secretReference", null, null);
-    }
+    // validateTrigger() removed: In the new Decoupled Binding Architecture, the Start Node is a
+    // simple DAG entry point. All workflow activation is done via TicketService -> startWithExecutable().
+    // The trigger object on the workflow definition is no longer required.
 
     private void validateVariables(JsonNode variables, List<Map<String, Object>> errors) {
         if (!variables.isArray()) { error(errors, "VARIABLES_INVALID", "variables phải là mảng", null, null); return; }
@@ -246,7 +236,14 @@ public class WorkflowCompiler {
                 validateNodeBinding(path, parts, nodeId, nodes, graph, errors, warnings);
                 return;
             }
-            if (!Set.of("trigger", "instance", "participant", "currentUser").contains(root))
+            // Supported context namespaces in new architecture:
+            // - formData: Fields from the submitted form (injected by TicketService)
+            // - ticket: Ticket metadata (ticketId, ticketCode, categoryId, status)
+            // - initiator: Submitter info (userId, displayName, departmentId, managerId)
+            // - instance: Runtime workflow instance metadata
+            // - participant, currentUser: User context within execution
+            // - trigger: Kept for backward compatibility; previewFormId is design-time only and not compiled
+            if (!Set.of("formData", "ticket", "initiator", "trigger", "instance", "participant", "currentUser").contains(root))
                 error(errors, "BINDING_ROOT_UNSUPPORTED", "Namespace context không được hỗ trợ: " + root, nodeId, null);
         }));
         nodes.forEach((nodeId, node) -> validateTypedExpressions(definition, nodeId, node, nodes, errors));
@@ -328,10 +325,12 @@ public class WorkflowCompiler {
         }
         if ("participant".equals(parts[0]) || "currentUser".equals(parts[0])) return Set.of("id", "name", "displayName", "email", "departmentId", "organizationUnitId", "managerId").contains(parts[1]) ? ExpressionEngine.ValueType.STRING : ExpressionEngine.ValueType.UNKNOWN;
         if ("instance".equals(parts[0])) return Set.of("id", "requestCode", "workflowId", "workflowVersionId", "creatorId", "status", "startedAt").contains(parts[1]) ? ExpressionEngine.ValueType.STRING : ExpressionEngine.ValueType.UNKNOWN;
-        if ("trigger".equals(parts[0])) {
-            String key = parts[parts.length - 1];
-            for (JsonNode field : definition.path("trigger").path("config").path("formFields")) if (key.equals(field.path("outputMapping").asText(field.path("id").asText()))) return formType(field.path("type").asText());
-        }
+        // New architecture: formData.<fieldKey> - type is UNKNOWN at compile time (resolved at runtime from FormVersion schema)
+        if ("formData".equals(parts[0])) return ExpressionEngine.ValueType.UNKNOWN;
+        // ticket.<field> - ticket metadata fields
+        if ("ticket".equals(parts[0])) return Set.of("ticketId", "ticketCode", "categoryId", "status", "formVersionId").contains(parts[1]) ? ExpressionEngine.ValueType.STRING : ExpressionEngine.ValueType.UNKNOWN;
+        // initiator.<field> - submitter info injected by TicketService
+        if ("initiator".equals(parts[0])) return Set.of("userId", "displayName", "departmentId", "managerId", "email").contains(parts[1]) ? ExpressionEngine.ValueType.STRING : ExpressionEngine.ValueType.UNKNOWN;
         return ExpressionEngine.ValueType.UNKNOWN;
     }
 

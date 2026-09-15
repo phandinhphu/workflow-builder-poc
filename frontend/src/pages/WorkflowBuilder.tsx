@@ -14,7 +14,8 @@ import WorkflowSettingsModal from '../components/WorkflowSettingsModal';
 import ValidationDrawer, { validateWorkflow, type ValidationResult } from '../components/ValidationDrawer';
 import VersionHistoryModal from '../components/VersionHistoryModal';
 import NodeLibraryPanel from '../components/NodeLibraryPanel';
-import TriggerLibraryPanel from '../components/TriggerLibraryPanel';
+// TriggerLibraryPanel removed: In the new Decoupled Binding Architecture, the Start Node
+// is a simple entry point. No trigger type selection is needed in the Workflow Designer.
 import ContextExplorerPanel from '../components/ContextExplorerPanel';
 import NodeConfigPanel from '../components/NodeConfigPanel';
 import EdgeConfigPanel from '../components/EdgeConfigPanel';
@@ -541,7 +542,7 @@ export default function WorkflowBuilder() {
         </div>
 
         {panel === 'node-library' && <NodeLibraryPanel onClose={closePanels} />}
-        {panel === 'trigger-library' && <TriggerLibraryPanel onClose={closePanels} />}
+        {/* trigger-library panel removed: Start Node no longer needs trigger type selection */}
         {panel === 'context-explorer' && <ContextExplorerPanel nodes={nodes} trigger={trigger} variables={variables} onClose={closePanels} />}
 
         <main className="flex-1 relative bg-page" ref={reactFlowWrapper}>

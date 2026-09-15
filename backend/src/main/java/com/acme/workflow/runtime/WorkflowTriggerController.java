@@ -4,13 +4,49 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
+/**
+ * WorkflowTriggerController (Simplified - New Architecture)
+ *
+ * Old endpoints removed:
+ *   POST /api/v1/triggers/form/{workflowId}    - form trigger (removed)
+ *   POST /api/v1/triggers/webhook/{workflowId} - webhook trigger with HMAC (removed)
+ *
+ * In the new Decoupled Binding Architecture, all workflow activation flows through:
+ *   POST /api/v1/tickets -> TicketService -> RuntimeEngineService.startWithExecutable()
+ *
+ * The event signal endpoint is kept for WAIT_EVENT node wakeup.
+ */
 @RestController
 @RequestMapping("/api/v1/triggers")
 public class WorkflowTriggerController {
     private final WorkflowTriggerService triggers;
     private final RuntimeEngineService engine;
-    public WorkflowTriggerController(WorkflowTriggerService triggers,RuntimeEngineService engine){this.triggers=triggers;this.engine=engine;}
-    @PostMapping("/form/{workflowId}") Map<String,Object> form(@PathVariable String workflowId,@RequestBody ObjectNode payload){return triggers.form(workflowId,payload);}
-    @PostMapping("/webhook/{workflowId}") Map<String,Object> webhook(@PathVariable String workflowId,@RequestBody ObjectNode payload,@RequestHeader(value="X-Workflow-Signature",required=false)String signature,@RequestHeader(value="Idempotency-Key",required=false)String idempotencyKey){return triggers.webhook(workflowId,payload,signature,idempotencyKey);}
-    @PostMapping("/events/{eventName}/{correlationKey}") Map<String,Object> event(@PathVariable String eventName,@PathVariable String correlationKey,@RequestBody(required=false)ObjectNode payload){return engine.signal(eventName,correlationKey,payload==null?new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode():payload);}
+
+    public WorkflowTriggerController(WorkflowTriggerService triggers, RuntimeEngineService engine) {
+        this.triggers = triggers;
+        this.engine = engine;
+    }
+
+    /**
+     * Signal an event to resume a WAIT_EVENT node.
+     * This is kept as it is a workflow-internal mechanism unrelated to trigger types.
+     */
+    @PostMapping("/events/{eventName}/{correlationKey}")
+    Map<String, Object> event(@PathVariable String eventName,
+                               @PathVariable String correlationKey,
+                               @RequestBody(required = false) ObjectNode payload) {
+        return engine.signal(eventName, correlationKey,
+                payload == null ? new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode() : payload);
+    }
+
+    // -----------------------------------------------------------------------
+    // REMOVED in new architecture:
+    //
+    // POST /api/v1/triggers/form/{workflowId}
+    //   - Form trigger type removed. Form is bound at Ticket Category level.
+    //
+    // POST /api/v1/triggers/webhook/{workflowId}
+    //   - Webhook trigger with HMAC-SHA256 verification removed.
+    //   - Workflow definitions no longer carry secretReference.
+    // -----------------------------------------------------------------------
 }
