@@ -59,7 +59,8 @@ public class WorkflowService {
         result.put("name", workflow.name);
         result.put("description", workflow.description);
         result.put("type", workflow.workflowType);
-        result.put("module", workflow.moduleName);
+        result.put("module", workflow.moduleId);
+        result.put("moduleId", workflow.moduleId);
         result.put("ownerId", workflow.ownerId);
         result.put("ownerName", users.findById(workflow.ownerId).map(u -> u.displayName).orElse(workflow.ownerId));
         result.put("status", workflow.status);
@@ -86,10 +87,13 @@ public class WorkflowService {
             definition.put("description", workflow.description);
         definition.put("type", workflow.workflowType);
         definition.put("workflowType", workflow.workflowType);
-        if (workflow.moduleName == null)
+        if (workflow.moduleId == null) {
             definition.remove("module");
-        else
-            definition.put("module", workflow.moduleName);
+            definition.remove("moduleId");
+        } else {
+            definition.put("module", workflow.moduleId);
+            definition.put("moduleId", workflow.moduleId);
+        }
         definition.put("ownerId", workflow.ownerId);
         definition.put("status", workflow.status);
         definition.put("draftVersion", workflow.draftVersion);
@@ -168,7 +172,12 @@ public class WorkflowService {
         workflow.workflowType = rawType != null && !rawType.isBlank()
                 ? rawType.trim().toUpperCase(Locale.ROOT)
                 : "APPROVAL";
-        workflow.moduleName = nullable(body, "module");
+        String rawModule = body.hasNonNull("moduleId")
+                ? body.path("moduleId").asText()
+                : (body.hasNonNull("module") ? body.path("module").asText() : "MOD_GENERAL");
+        workflow.moduleId = rawModule != null && !rawModule.isBlank()
+                ? rawModule.trim()
+                : "MOD_GENERAL";
         workflow.ownerId = body.path("ownerId").asText();
         workflow.draftVersion = body.path("draftVersion").asText("1.0");
     }

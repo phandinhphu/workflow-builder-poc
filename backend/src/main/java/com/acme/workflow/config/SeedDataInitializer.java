@@ -41,7 +41,7 @@ public class SeedDataInitializer implements ApplicationRunner {
         String versionId = "VERSION-EVAL-1";
         WorkflowDefinitionEntity workflow=new WorkflowDefinitionEntity();workflow.id="6";workflow.name="Đánh giá hiệu quả công việc";
         workflow.description="Quy trình đánh giá hiệu quả công việc định kỳ: nhân viên tự đánh giá, quản lý trực tiếp đánh giá, HR kiểm tra, lưu và thông báo kết quả";
-        workflow.workflowType="Review";workflow.moduleName="HR";workflow.ownerId="U000";workflow.status="PUBLISHED";workflow.draftVersion="1.0";
+        workflow.workflowType="REVIEW";workflow.moduleId="MOD_HR";workflow.ownerId="U000";workflow.status="PUBLISHED";workflow.draftVersion="1.0";
         workflow.draftDefinition=definition;workflow.activeVersionId=versionId;workflows.save(workflow);
         WorkflowVersionEntity version=new WorkflowVersionEntity();version.id=versionId;version.workflowId="6";version.versionNo="1.0";version.status="PUBLISHED";
         version.definitionSnapshot=definition;version.checksum=Ids.sha256(definition);version.validationReport="{\"valid\":true,\"errors\":[],\"warnings\":[]}";

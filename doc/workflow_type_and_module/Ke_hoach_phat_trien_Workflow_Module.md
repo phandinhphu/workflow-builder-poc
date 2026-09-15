@@ -62,9 +62,9 @@ graph TD
    - Cấp quyền truy cập Module tương ứng cho các user quản lý nghiệp vụ hiện hữu.
 
 #### 1.3. Tiêu chí hoàn thành (DoD)
-- [ ] Schema database mới được áp dụng hoàn tất.
-- [ ] 100% bản ghi workflow cũ được chuyển đổi thành công từ text sang `module_id` hợp lệ.
-- [ ] Script migration chạy an toàn, có khả năng rollback nếu có sự cố.
+- [x] Schema database mới được áp dụng hoàn tất.
+- [x] 100% bản ghi workflow cũ được chuyển đổi thành công từ text sang `module_id` hợp lệ.
+- [x] Script migration chạy an toàn, có khả năng rollback nếu có sự cố.
 
 ---
 
