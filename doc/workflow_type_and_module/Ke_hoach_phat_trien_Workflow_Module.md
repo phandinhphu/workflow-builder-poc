@@ -120,9 +120,9 @@ graph TD
    - Hiển thị màn hình thông báo thân thiện (403 Forbidden / Empty State) khi người dùng cố truy cập workflow thuộc Module mà mình không có quyền thông qua đường dẫn trực tiếp.
 
 #### 3.3. Tiêu chí hoàn thành (DoD)
-- [ ] Không còn ô nhập free-text cho trường Module trên toàn bộ ứng dụng Frontend.
-- [ ] Bộ lọc Module hoạt động mượt mà, phân trang và tìm kiếm kết hợp chính xác với bộ lọc Module.
-- [ ] Giao diện trực quan, rõ ràng, hiển thị badge module chuẩn theo thiết kế.
+- [x] Không còn ô nhập free-text cho trường Module trên toàn bộ ứng dụng Frontend.
+- [x] Bộ lọc Module hoạt động mượt mà, phân trang và tìm kiếm kết hợp chính xác với bộ lọc Module.
+- [x] Giao diện trực quan, rõ ràng, hiển thị badge module chuẩn theo thiết kế.
 
 ---
 

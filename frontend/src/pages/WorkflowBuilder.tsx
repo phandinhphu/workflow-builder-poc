@@ -28,6 +28,7 @@ import type { NodeType, TriggerType, WorkflowDefinition } from '../types/workflo
 import { api, ApiError } from '../api/client';
 import { normalizeNodeDurations } from '../utils/duration';
 import { FALLBACK_WORKFLOW_TYPES } from '../utils/workflowTypeUtils';
+import { normalizeModuleId } from '../utils/moduleUtils';
 
 const nodeTypes = {
   custom: CustomNode,
@@ -223,7 +224,7 @@ export default function WorkflowBuilder() {
       name,
       description: wf?.description ?? createState.description ?? '',
       type: wf?.type ?? createState.type ?? 'APPROVAL',
-      module: wf?.module ?? createState.module ?? 'Operations',
+      module: normalizeModuleId(wf?.module ?? createState.module ?? 'MOD_GENERAL'),
       owner,
       version: wf?.draftVersion ?? '1.0',
       status: wf?.status ?? 'DRAFT',

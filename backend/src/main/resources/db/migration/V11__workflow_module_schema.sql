@@ -76,7 +76,7 @@ UPDATE workflow_definitions SET module_id = 'MOD_MKT' WHERE LOWER(TRIM(module_na
 UPDATE workflow_definitions SET module_id = 'MOD_LEGAL' WHERE LOWER(TRIM(module_name)) IN ('legal', 'pháp chế');
 UPDATE workflow_definitions SET module_id = 'MOD_GENERAL' WHERE module_id IS NULL;
 
-ALTER TABLE workflow_definitions ALTER COLUMN module_id SET NOT NULL;
+ALTER TABLE workflow_definitions MODIFY COLUMN module_id VARCHAR(50) NOT NULL;
 ALTER TABLE workflow_definitions ADD CONSTRAINT fk_workflow_module FOREIGN KEY (module_id) REFERENCES modules(id);
 CREATE INDEX idx_workflow_module ON workflow_definitions(module_id);
 

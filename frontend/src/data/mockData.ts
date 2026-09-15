@@ -82,7 +82,7 @@ export let workflows: WorkflowDefinition[] = [
     name: 'Phê duyệt mua sắm',
     description: 'Quy trình phê duyệt yêu cầu mua sắm trang thiết bị',
     type: 'Approval',
-    module: 'Operations',
+    module: 'MOD_OPS',
     ownerId: 'U000',
     status: 'PUBLISHED',
     draftVersion: '2.2',
@@ -101,7 +101,7 @@ export let workflows: WorkflowDefinition[] = [
     name: 'Phê duyệt nghỉ phép',
     description: 'Quy trình phê duyệt nghỉ phép năm cho nhân viên',
     type: 'Approval',
-    module: 'Operations',
+    module: 'MOD_HR',
     ownerId: 'U000',
     status: 'PUBLISHED',
     draftVersion: '1.4',
@@ -120,7 +120,7 @@ export let workflows: WorkflowDefinition[] = [
     name: 'Phê duyệt hợp đồng',
     description: 'Quy trình phê duyệt hợp đồng trước khi ký',
     type: 'Review',
-    module: 'Finance',
+    module: 'MOD_FIN',
     ownerId: 'U004',
     status: 'SUSPENDED',
     draftVersion: '3.0',
@@ -136,7 +136,7 @@ export let workflows: WorkflowDefinition[] = [
     name: 'Review tài liệu kỹ thuật',
     description: 'Quy trình review tài liệu kỹ thuật trước khi xuất bản',
     type: 'Review',
-    module: 'Operations',
+    module: 'MOD_IT',
     ownerId: 'U002',
     status: 'SUSPENDED',
     draftVersion: '1.2',
@@ -152,7 +152,7 @@ export let workflows: WorkflowDefinition[] = [
     name: 'Phê duyệt chi phí',
     description: 'Quy trình phê duyệt chi phí nội bộ',
     type: 'Approval',
-    module: 'Finance',
+    module: 'MOD_FIN',
     ownerId: 'U005',
     status: 'DRAFT',
     draftVersion: '2.0',
@@ -168,7 +168,7 @@ export let workflows: WorkflowDefinition[] = [
     name: 'Đánh giá hiệu quả công việc',
     description: 'Quy trình đánh giá hiệu quả công việc định kỳ: nhân viên tự đánh giá, quản lý trực tiếp đánh giá, HR kiểm tra, lưu và thông báo kết quả',
     type: 'Review',
-    module: 'HR',
+    module: 'MOD_HR',
     ownerId: 'U000',
     status: 'PUBLISHED',
     draftVersion: '1.0',
@@ -397,7 +397,16 @@ export function getWorkflowTypeOptions() {
 }
 
 export function getModuleOptions() {
-  return ['Operations', 'HR', 'Finance'];
+  return [
+    'MOD_GENERAL',
+    'MOD_HR',
+    'MOD_IT',
+    'MOD_FIN',
+    'MOD_SALES',
+    'MOD_MKT',
+    'MOD_LEGAL',
+    'MOD_OPS',
+  ];
 }
 
 export interface SyncLogEntry {

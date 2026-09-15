@@ -1,4 +1,5 @@
 import type { OrgUser, WorkflowDefinition, WorkflowInstanceSummary } from '../types/workflow';
+import type { ModuleResponse, UserModuleAccessResponse } from '../types/module';
 import type { FormDetail, FormSummary, FormVersion, CreateFormDto, UpdateDraftDto } from '../types/form';
 import type {
   TicketCategorySummary,
@@ -110,7 +111,14 @@ export const api = {
     update: (id: string, body: Record<string, unknown>) => request<any>(`/credential-references/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   },
   workflows: {
-    list: () => request<WorkflowDefinition[]>('/workflows'),
+    list: (params?: { status?: string; search?: string; moduleId?: string }) => {
+      const sp = new URLSearchParams();
+      if (params?.status) sp.set('status', params.status);
+      if (params?.search) sp.set('search', params.search);
+      if (params?.moduleId) sp.set('moduleId', params.moduleId);
+      const query = sp.toString() ? `?${sp.toString()}` : '';
+      return request<WorkflowDefinition[]>(`/workflows${query}`);
+    },
     get: (id: string) => request<WorkflowDefinition & { lockVersion?: number }>(`/workflows/${id}`),
     create: (body: WorkflowDefinition) => request<WorkflowDefinition>('/workflows', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: WorkflowDefinition) => request<WorkflowDefinition>(`/workflows/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
@@ -121,6 +129,11 @@ export const api = {
     members: (id: string) => request<Record<string, unknown>[]>(`/workflows/${id}/members`),
     updateMembers: (id: string, members: Record<string, unknown>[]) => request<Record<string, unknown>[]>(`/workflows/${id}/members`, { method: 'PUT', body: JSON.stringify(members) }),
     changeStatus: (id: string, status: string) => request(`/workflows/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  },
+  modules: {
+    list: () => request<ModuleResponse[]>('/modules'),
+    myModules: () => request<UserModuleAccessResponse[]>('/users/me/modules'),
+    get: (id: string) => request<ModuleResponse>(`/modules/${id}`),
   },
   forms: {
     list: (status?: string, search?: string) => {
@@ -238,3 +251,5 @@ export interface ValidationRuleDto {
   errorMessage: string;
   ruleConfig?: string;
 }
+
+export type { ModuleResponse, UserModuleAccessResponse };
