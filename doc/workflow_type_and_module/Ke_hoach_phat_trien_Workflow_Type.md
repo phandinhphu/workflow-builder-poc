@@ -121,9 +121,9 @@ graph TD
    - Highlight trực tiếp các node vi phạm trên Designer Canvas để người dùng dễ dàng định vị và sửa chữa.
 
 #### 3.3. Tiêu chí hoàn thành (DoD)
-- [ ] Node Palette chỉ hiển thị các node hợp lệ theo loại workflow đã chọn.
-- [ ] Khi đổi loại workflow có node vi phạm, modal cảnh báo hiển thị đầy đủ và không làm mất dữ liệu trên canvas.
-- [ ] Lỗi publish được highlight trực quan trên canvas.
+- [x] Node Palette chỉ hiển thị các node hợp lệ theo loại workflow đã chọn.
+- [x] Khi đổi loại workflow có node vi phạm, modal cảnh báo hiển thị đầy đủ và không làm mất dữ liệu trên canvas.
+- [x] Lỗi publish được highlight trực quan trên canvas.
 
 ---
 

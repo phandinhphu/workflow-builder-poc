@@ -11,6 +11,7 @@ import {
   Play,
   Sparkles,
   Plus,
+  AlertCircle,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useDesignerStore } from '../../stores/designerStore';
@@ -50,7 +51,7 @@ export default function CustomNode({ data, isConnectable, selected }: any) {
   const isCondition = data.nodeType === 'condition';
   const isStart = data.nodeType === 'start';
   const isEnd = data.nodeType === 'end';
-  const hasError = data.invalid === true;
+  const hasError = data.invalid === true || data.hasError === true;
 
   const openNodeLibrary = () => {
     useDesignerStore.getState().setActiveLeftPanel('nodes');
@@ -60,10 +61,20 @@ export default function CustomNode({ data, isConnectable, selected }: any) {
     <div className="relative group">
       <div
         className={clsx(
-          'w-[248px] shadow-sm rounded-lg bg-white flex flex-col min-h-[64px] border transition-colors',
-          selected ? 'border-primary ring-1 ring-primary' : hasError ? 'border-danger ring-1 ring-danger/50' : 'border-border hover:border-gray-300'
+          'w-[248px] shadow-sm rounded-lg bg-white flex flex-col min-h-[64px] border transition-all duration-150',
+          selected
+            ? 'border-primary ring-2 ring-primary shadow-md'
+            : hasError
+            ? 'border-red-500 ring-2 ring-red-500/80 bg-red-50/10 shadow-md shadow-red-100 animate-pulse'
+            : 'border-border hover:border-gray-300'
         )}
       >
+        {hasError && (
+          <div className="absolute -top-2 -right-2 z-10 w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center shadow-sm" title="Node này vi phạm quy tắc loại workflow hoặc cấu hình">
+            <AlertCircle size={12} strokeWidth={3} />
+          </div>
+        )}
+
         {!isStart && (
           <Handle
             type="target"

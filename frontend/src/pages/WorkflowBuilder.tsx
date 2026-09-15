@@ -26,6 +26,7 @@ import { getWorkflow, workflows, addVersionEntry } from '../data/mockData';
 import type { NodeType, TriggerType, WorkflowDefinition } from '../types/workflow';
 import { api, ApiError } from '../api/client';
 import { normalizeNodeDurations } from '../utils/duration';
+import { FALLBACK_WORKFLOW_TYPES } from '../utils/workflowTypeUtils';
 
 const nodeTypes = {
   custom: CustomNode,
@@ -220,7 +221,7 @@ export default function WorkflowBuilder() {
       id: id ?? `wf-${Date.now()}`,
       name,
       description: wf?.description ?? createState.description ?? '',
-      type: wf?.type ?? createState.type ?? 'Approval',
+      type: wf?.type ?? createState.type ?? 'APPROVAL',
       module: wf?.module ?? createState.module ?? 'Operations',
       owner,
       version: wf?.draftVersion ?? '1.0',
@@ -234,6 +235,23 @@ export default function WorkflowBuilder() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, location.state]);
+
+  // Load allowed nodes whenever workflow type changes
+  useEffect(() => {
+    const currentType = (workflowData.type || 'APPROVAL').toUpperCase();
+    api.workflowTypes.getAllowedNodes(currentType)
+      .then((allowedList) => {
+        if (allowedList && allowedList.length > 0) {
+          store.setAllowedNodes(allowedList);
+        }
+      })
+      .catch(() => {
+        const fallback = FALLBACK_WORKFLOW_TYPES.find(t => t.id.toUpperCase() === currentType);
+        if (fallback?.allowedNodes) {
+          store.setAllowedNodes(fallback.allowedNodes);
+        }
+      });
+  }, [workflowData.type]);
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedElement(node, 'node');
@@ -342,15 +360,33 @@ export default function WorkflowBuilder() {
     } finally { setSaving(false); }
   };
 
-  const handleValidate = () => {
-    const result = validateWorkflow(nodes, edges, { trigger, variables });
+  const runValidation = () => {
+    const result = validateWorkflow(nodes, edges, { 
+      trigger, 
+      variables, 
+      workflowType: workflowData.type, 
+      allowedNodes: store.allowedNodes 
+    });
     setValidationResult(result);
+    const errorNodeIds = result.issues
+      .filter(i => i.type === 'error' && i.nodeId)
+      .map(i => i.nodeId as string);
+    
+    if (errorNodeIds.length > 0) {
+      store.highlightInvalidNodes(errorNodeIds);
+    } else {
+      store.clearInvalidNodes();
+    }
+    return result;
+  };
+
+  const handleValidate = () => {
+    runValidation();
     setIsValidationOpen(true);
   };
 
   const handlePublishClick = () => {
-    const result = validateWorkflow(nodes, edges, { trigger, variables });
-    setValidationResult(result);
+    runValidation();
     setIsValidationOpen(true);
   };
 
@@ -365,7 +401,14 @@ export default function WorkflowBuilder() {
       const saved = await handleSave(false);
       const serverValidation = await api.workflows.validate(saved.id);
       if (serverValidation.valid !== true) {
-        setValidationResult(backendValidationResult(serverValidation));
+        const valRes = backendValidationResult(serverValidation);
+        setValidationResult(valRes);
+        const errorNodeIds = valRes.issues
+          .filter(i => i.type === 'error' && i.nodeId)
+          .map(i => i.nodeId as string);
+        if (errorNodeIds.length > 0) {
+          store.highlightInvalidNodes(errorNodeIds);
+        }
         setIsValidationOpen(true);
         toasts.pushToast('error', 'Backend từ chối publish. Vui lòng sửa các lỗi được hiển thị.');
         return;
@@ -375,6 +418,7 @@ export default function WorkflowBuilder() {
         const cachedIndex = workflows.findIndex(workflow => workflow.id === saved.id);
         if (cachedIndex >= 0) workflows[cachedIndex] = result.workflow;
       }
+      store.clearInvalidNodes();
       setWorkflowData({ status: 'PUBLISHED', version: result.versionNo ?? workflowData.version });
       setIsDirty(false); setSavedAt(`Đã xuất bản lúc ${formatTime(new Date())}`);
       addVersionEntry(result.versionNo ?? workflowData.version, workflowData.owner, [`Publish phiên bản ${result.versionNo ?? workflowData.version} của "${workflowData.name}"`]);
@@ -383,7 +427,14 @@ export default function WorkflowBuilder() {
       if (cause instanceof ApiError && cause.code === 'WORKFLOW_INVALID') {
         try {
           const report = JSON.parse(cause.message) as Record<string, any>;
-          setValidationResult(backendValidationResult(report));
+          const valRes = backendValidationResult(report);
+          setValidationResult(valRes);
+          const errorNodeIds = valRes.issues
+            .filter(i => i.type === 'error' && i.nodeId)
+            .map(i => i.nodeId as string);
+          if (errorNodeIds.length > 0) {
+            store.highlightInvalidNodes(errorNodeIds);
+          }
           setIsValidationOpen(true);
         } catch { /* thông báo lỗi gốc vẫn được hiển thị bên dưới */ }
       }
@@ -398,6 +449,9 @@ export default function WorkflowBuilder() {
     const node = nodes.find(n => n.id === nodeId);
     if (node) {
       setSelectedElement(node, 'node');
+      if (reactFlowInstance) {
+        reactFlowInstance.setCenter(node.position.x + 120, node.position.y + 40, { zoom: 1.15, duration: 400 });
+      }
     }
   };
 

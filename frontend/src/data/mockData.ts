@@ -393,7 +393,7 @@ export const mockContext = {
 };
 
 export function getWorkflowTypeOptions() {
-  return ['Approval', 'Review', 'Assignment'];
+  return ['APPROVAL', 'NOTIFICATION', 'AUTOMATION', 'REVIEW', 'CUSTOM'];
 }
 
 export function getModuleOptions() {
