@@ -27,7 +27,7 @@ public class FormSchemaService {
     }
 
     public ArrayNode resolveEffectiveFormFields(ObjectNode definition, JsonNode node, JsonNode config,
-                                                ObjectNode context) {
+            ObjectNode context) {
         ArrayNode result = jsons.mapper().createArrayNode();
         String reviewSourceNodeId = config.path("reviewSourceNodeId").asText(null);
         String nodeType = node.path("type").asText().toUpperCase(Locale.ROOT);
@@ -122,6 +122,7 @@ public class FormSchemaService {
         return result;
     }
 
+    @SuppressWarnings("deprecation")
     public ObjectNode normalizeSubmission(ArrayNode fields, JsonNode data) {
         ObjectNode result = jsons.object();
         if (data != null && data.isObject())
@@ -139,7 +140,8 @@ public class FormSchemaService {
     }
 
     public void validateSubmission(ArrayNode fields, ObjectNode output) {
-        if (fields == null) return;
+        if (fields == null)
+            return;
         List<String> errors = new ArrayList<>();
         fields.forEach(field -> {
             if (field.path("readOnly").asBoolean() || (field.has("visible") && !field.path("visible").asBoolean()))

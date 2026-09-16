@@ -26,12 +26,12 @@ public class AssigneeResolverService {
     private final ParticipantResolverService participantResolver;
 
     public AssigneeResolverService(HrmUserRepository users,
-                                   OrganizationUnitRepository organizations,
-                                   SystemRoleRepository roles,
-                                   UserRoleAssignmentRepository roleAssignments,
-                                   DirectoryGroupService groups,
-                                   RuntimeValueResolver resolver,
-                                   ParticipantResolverService participantResolver) {
+            OrganizationUnitRepository organizations,
+            SystemRoleRepository roles,
+            UserRoleAssignmentRepository roleAssignments,
+            DirectoryGroupService groups,
+            RuntimeValueResolver resolver,
+            ParticipantResolverService participantResolver) {
         this.users = users;
         this.organizations = organizations;
         this.roles = roles;
@@ -41,8 +41,10 @@ public class AssigneeResolverService {
         this.participantResolver = participantResolver;
     }
 
-    public List<String> resolveAssignees(JsonNode config, ObjectNode context, String instanceId, String fallbackCreatorId) {
-        if (config == null) return List.of();
+    public List<String> resolveAssignees(JsonNode config, ObjectNode context, String instanceId,
+            String fallbackCreatorId) {
+        if (config == null)
+            return List.of();
         String type = config.path("type").asText("fixed").toLowerCase(Locale.ROOT);
         String value = assigneeValue(config.path("value"), context);
         LinkedHashSet<String> result = new LinkedHashSet<>();
@@ -105,19 +107,23 @@ public class AssigneeResolverService {
         result.removeIf(id -> users.findById(id).map(u -> !"ACTIVE".equals(u.status)).orElse(true));
         if (result.isEmpty() && config.path("fallback").isObject())
             return resolveAssignees(config.path("fallback"), context, instanceId, fallbackCreatorId);
-        // Fallback for manager_of if user has no direct manager: fallback to an active ADMIN to prevent stranded ticket
+        // Fallback for manager_of if user has no direct manager: fallback to an active
+        // ADMIN to prevent stranded ticket
         if (result.isEmpty() && ("manager_of".equals(type) || "creator_manager".equals(type))) {
-            log.warn("[resolveAssignees] Could not resolve active manager for instance {}. Falling back to admin.", instanceId);
+            log.warn("[resolveAssignees] Could not resolve active manager for instance {}. Falling back to admin.",
+                    instanceId);
             roles.findByCode("ADMIN").or(() -> roles.findByCode("ROLE-ADMIN"))
                     .ifPresent(role -> roleAssignments.findByRoleIdIn(List.of(role.id)).stream()
                             .findFirst().ifPresent(a -> result.add(a.userId)));
             if (result.isEmpty()) {
-                users.findAll().stream().filter(u -> "ACTIVE".equals(u.status)).findFirst().ifPresent(u -> result.add(u.id));
+                users.findAll().stream().filter(u -> "ACTIVE".equals(u.status)).findFirst()
+                        .ifPresent(u -> result.add(u.id));
             }
         }
         return result.stream().sorted().toList();
     }
 
+    @SuppressWarnings("deprecation")
     public Set<String> extractAllUpstreamParticipants(ObjectNode context) {
         LinkedHashSet<String> pids = new LinkedHashSet<>();
         JsonNode nodes = context.path("nodes");
@@ -129,7 +135,8 @@ public class AssigneeResolverService {
                 if (subList.isArray()) {
                     subList.forEach(item -> {
                         String uid = item.path("userId").asText(null);
-                        if (uid != null && !uid.isBlank()) pids.add(uid);
+                        if (uid != null && !uid.isBlank())
+                            pids.add(uid);
                     });
                 }
                 // 2. Assignment node participantIds
@@ -137,14 +144,16 @@ public class AssigneeResolverService {
                 if (pIdArray.isArray()) {
                     pIdArray.forEach(item -> {
                         String uid = item.isObject() ? item.path("id").asText(null) : item.asText(null);
-                        if (uid != null && !uid.isBlank()) pids.add(uid);
+                        if (uid != null && !uid.isBlank())
+                            pids.add(uid);
                     });
                 }
                 // 3. Form submissions map
                 JsonNode submissions = nodeData.path("submissions");
                 if (submissions.isObject()) {
                     submissions.fieldNames().forEachRemaining(uid -> {
-                        if (uid != null && !uid.isBlank()) pids.add(uid);
+                        if (uid != null && !uid.isBlank())
+                            pids.add(uid);
                     });
                 }
             });

@@ -2,7 +2,6 @@ package com.acme.workflow.module;
 
 import com.acme.workflow.auth.PermissionService;
 import com.acme.workflow.common.ApiException;
-import com.acme.workflow.identity.domain.OrganizationUnit;
 import com.acme.workflow.identity.domain.UserRoleAssignment;
 import com.acme.workflow.identity.repository.OrganizationUnitRepository;
 import com.acme.workflow.identity.repository.SystemRoleRepository;
@@ -33,8 +32,7 @@ public class ModuleAccessService {
             OrganizationUnitRepository organizationUnitRepository,
             UserRoleAssignmentRepository userRoleAssignmentRepository,
             SystemRoleRepository systemRoleRepository,
-            PermissionService permissionService
-    ) {
+            PermissionService permissionService) {
         this.moduleRepository = moduleRepository;
         this.userModuleAccessRepository = userModuleAccessRepository;
         this.organizationUnitRepository = organizationUnitRepository;
@@ -63,7 +61,8 @@ public class ModuleAccessService {
     }
 
     public int levelWeight(String level) {
-        if (level == null) return 0;
+        if (level == null)
+            return 0;
         return switch (level.toUpperCase(Locale.ROOT)) {
             case "MANAGER" -> 3;
             case "EDITOR" -> 2;
@@ -127,8 +126,7 @@ public class ModuleAccessService {
                             m.description,
                             m.departmentId,
                             m.departmentId != null ? orgNameMap.get(m.departmentId) : null,
-                            "MANAGER"
-                    ))
+                            "MANAGER"))
                     .toList();
         }
 
@@ -146,8 +144,7 @@ public class ModuleAccessService {
                         module.description,
                         module.departmentId,
                         module.departmentId != null ? orgNameMap.get(module.departmentId) : null,
-                        access.accessLevel
-                ));
+                        access.accessLevel));
             }
         }
         return result;

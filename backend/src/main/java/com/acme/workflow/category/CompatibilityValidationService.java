@@ -23,14 +23,16 @@ public class CompatibilityValidationService {
     private final Jsons jsons;
 
     public CompatibilityValidationService(FormVersionRepository formVersions,
-                                          WorkflowVersionRepository workflowVersions,
-                                          Jsons jsons) {
+            WorkflowVersionRepository workflowVersions,
+            Jsons jsons) {
         this.formVersions = formVersions;
         this.workflowVersions = workflowVersions;
         this.jsons = jsons;
     }
 
-    public CompatibilityValidationResult validate(String formVersionId, String workflowExecutableId, JsonNode fieldMappingNode) {
+    @SuppressWarnings("deprecation")
+    public CompatibilityValidationResult validate(String formVersionId, String workflowExecutableId,
+            JsonNode fieldMappingNode) {
         if (formVersionId == null || formVersionId.isBlank()) {
             throw ApiException.badRequest("FORM_VERSION_REQUIRED", "formVersionId không được để trống");
         }
@@ -39,10 +41,12 @@ public class CompatibilityValidationService {
         }
 
         FormVersionEntity formVersion = formVersions.findById(formVersionId)
-                .orElseThrow(() -> ApiException.badRequest("FORM_VERSION_NOT_FOUND", "Không tìm thấy FormVersion có id: " + formVersionId));
+                .orElseThrow(() -> ApiException.badRequest("FORM_VERSION_NOT_FOUND",
+                        "Không tìm thấy FormVersion có id: " + formVersionId));
 
         WorkflowVersionEntity workflowVersion = workflowVersions.findById(workflowExecutableId)
-                .orElseThrow(() -> ApiException.badRequest("WORKFLOW_VERSION_NOT_FOUND", "Không tìm thấy WorkflowVersion có id: " + workflowExecutableId));
+                .orElseThrow(() -> ApiException.badRequest("WORKFLOW_VERSION_NOT_FOUND",
+                        "Không tìm thấy WorkflowVersion có id: " + workflowExecutableId));
 
         CompatibilityValidationResult result = new CompatibilityValidationResult();
 
@@ -56,7 +60,8 @@ public class CompatibilityValidationService {
                 String type = field.path("type").asText("string").trim().toLowerCase(Locale.ROOT);
                 boolean required = field.path("required").asBoolean(false);
                 if (!key.isEmpty()) {
-                    CompatibilityValidationResult.FormFieldInfo info = new CompatibilityValidationResult.FormFieldInfo(key, label, type, required);
+                    CompatibilityValidationResult.FormFieldInfo info = new CompatibilityValidationResult.FormFieldInfo(
+                            key, label, type, required);
                     formFieldsByKey.put(key, info);
                     result.formFields.add(info);
                 }
@@ -88,7 +93,6 @@ public class CompatibilityValidationService {
                 String nodeName = node.hasNonNull("name") && !node.path("name").asText().isBlank()
                         ? node.path("name").asText()
                         : node.path("data").path("label").asText(nodeId);
-                String type = node.path("type").asText(node.path("data").path("type").asText("")).toUpperCase(Locale.ROOT);
 
                 // Condition nodes
                 JsonNode rulesNode = node.path("data").path("rules");
@@ -101,8 +105,8 @@ public class CompatibilityValidationService {
                         String field = rule.path("field").asText("").trim();
                         String fieldType = rule.path("fieldType").asText("string").trim().toLowerCase(Locale.ROOT);
                         if (!field.isEmpty()) {
-                            CompatibilityValidationResult.WorkflowFieldInfo wfField =
-                                    new CompatibilityValidationResult.WorkflowFieldInfo(field, fieldType, nodeId, nodeName);
+                            CompatibilityValidationResult.WorkflowFieldInfo wfField = new CompatibilityValidationResult.WorkflowFieldInfo(
+                                    field, fieldType, nodeId, nodeName);
                             requiredFields.add(wfField);
                             String dedupeKey = field + "::" + fieldType;
                             if (processedFieldKeys.add(dedupeKey)) {
@@ -123,8 +127,8 @@ public class CompatibilityValidationService {
                                 nodeId,
                                 nodeName,
                                 "UNRESOLVED_TEMPLATE_VARIABLE",
-                                "Node '" + nodeName + "' chứa biến tham chiếu '${formData." + refVar + "}' nhưng Form không có trường '" + mappedVar + "'."
-                        ));
+                                "Node '" + nodeName + "' chứa biến tham chiếu '${formData." + refVar
+                                        + "}' nhưng Form không có trường '" + mappedVar + "'."));
                     }
                 }
             }
@@ -145,8 +149,8 @@ public class CompatibilityValidationService {
                         req.fieldType,
                         null,
                         "MISSING_FIELD",
-                        "Node '" + req.nodeName + "' yêu cầu trường '" + req.field + "' (" + req.fieldType + ") nhưng Form không có trường '" + targetFormField + "'."
-                ));
+                        "Node '" + req.nodeName + "' yêu cầu trường '" + req.field + "' (" + req.fieldType
+                                + ") nhưng Form không có trường '" + targetFormField + "'."));
             } else if (!isTypeCompatible(req.fieldType, formField.type)) {
                 result.valid = false;
                 result.errors.add(new CompatibilityValidationResult.ValidationError(
@@ -157,8 +161,9 @@ public class CompatibilityValidationService {
                         req.fieldType,
                         formField.type,
                         "TYPE_MISMATCH",
-                        "Node '" + req.nodeName + "' yêu cầu trường '" + req.field + "' kiểu " + req.fieldType + ", nhưng trường '" + targetFormField + "' trong Form lại là kiểu " + formField.type + "."
-                ));
+                        "Node '" + req.nodeName + "' yêu cầu trường '" + req.field + "' kiểu " + req.fieldType
+                                + ", nhưng trường '" + targetFormField + "' trong Form lại là kiểu " + formField.type
+                                + "."));
             }
         }
 
@@ -166,10 +171,12 @@ public class CompatibilityValidationService {
     }
 
     public boolean isTypeCompatible(String wfType, String formType) {
-        if (wfType == null || formType == null) return false;
+        if (wfType == null || formType == null)
+            return false;
         String wt = wfType.trim().toLowerCase(Locale.ROOT);
         String ft = formType.trim().toLowerCase(Locale.ROOT);
-        if (wt.equals(ft)) return true;
+        if (wt.equals(ft))
+            return true;
 
         return switch (wt) {
             case "string" -> Set.of("string", "textarea", "select").contains(ft);

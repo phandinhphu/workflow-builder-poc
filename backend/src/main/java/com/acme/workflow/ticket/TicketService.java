@@ -8,7 +8,6 @@ import com.acme.workflow.common.ApiException;
 import com.acme.workflow.common.AuditService;
 import com.acme.workflow.common.Ids;
 import com.acme.workflow.common.Jsons;
-import com.acme.workflow.form.domain.FormDefinitionEntity;
 import com.acme.workflow.form.domain.FormVersionEntity;
 import com.acme.workflow.form.repository.FormDefinitionRepository;
 import com.acme.workflow.form.repository.FormVersionRepository;
@@ -58,21 +57,21 @@ public class TicketService {
     private final Jsons jsons;
 
     public TicketService(TicketRepository ticketRepository,
-                         TicketCategoryRepository categoryRepository,
-                         FormVersionRepository formVersionRepository,
-                         FormDefinitionRepository formDefinitionRepository,
-                         RuntimeEngineService runtimeEngineService,
-                         NodeExecutionRepository nodeExecutionRepository,
-                         WorkflowTaskRepository workflowTaskRepository,
-                         WorkflowInstanceRepository workflowInstanceRepository,
-                         WorkflowVersionRepository workflowVersionRepository,
-                         HrmUserRepository userRepository,
-                         OrganizationUnitRepository orgRepository,
-                         CurrentUserService currentUserService,
-                         PermissionService permissionService,
-                         AuditService auditService,
-                         FormSubmissionValidator formValidator,
-                         Jsons jsons) {
+            TicketCategoryRepository categoryRepository,
+            FormVersionRepository formVersionRepository,
+            FormDefinitionRepository formDefinitionRepository,
+            RuntimeEngineService runtimeEngineService,
+            NodeExecutionRepository nodeExecutionRepository,
+            WorkflowTaskRepository workflowTaskRepository,
+            WorkflowInstanceRepository workflowInstanceRepository,
+            WorkflowVersionRepository workflowVersionRepository,
+            HrmUserRepository userRepository,
+            OrganizationUnitRepository orgRepository,
+            CurrentUserService currentUserService,
+            PermissionService permissionService,
+            AuditService auditService,
+            FormSubmissionValidator formValidator,
+            Jsons jsons) {
         this.ticketRepository = ticketRepository;
         this.categoryRepository = categoryRepository;
         this.formVersionRepository = formVersionRepository;
@@ -111,6 +110,7 @@ public class TicketService {
                 || permissionService.has(actor, "ADMIN", null);
     }
 
+    @SuppressWarnings("deprecation")
     @Transactional
     public TicketDetailResponse createTicket(CreateTicketRequest req) {
         String actor = currentUserService.id();
@@ -203,7 +203,8 @@ public class TicketService {
                 ticket.workflowInstanceId = actualInstanceId;
             }
 
-            // Sync with final or current status in case workflow finished or moved synchronously
+            // Sync with final or current status in case workflow finished or moved
+            // synchronously
             workflowInstanceRepository.findById(ticket.workflowInstanceId).ifPresent(instance -> {
                 if ("COMPLETED".equalsIgnoreCase(instance.status)) {
                     ticket.status = "APPROVED";
@@ -218,7 +219,8 @@ public class TicketService {
                     ticket.currentStepName = "Đã hủy";
                     ticket.resolvedAt = instance.completedAt != null ? instance.completedAt : Instant.now();
                 } else if ("RUNNING".equalsIgnoreCase(instance.status) && "SUBMITTED".equals(ticket.status)) {
-                    List<WorkflowTaskEntity> activeTasks = workflowTaskRepository.findByInstanceIdOrderByCreatedAtAsc(instance.id)
+                    List<WorkflowTaskEntity> activeTasks = workflowTaskRepository
+                            .findByInstanceIdOrderByCreatedAtAsc(instance.id)
                             .stream().filter(t -> "PENDING".equals(t.status) || "CLAIMED".equals(t.status)).toList();
                     if (!activeTasks.isEmpty()) {
                         ticket.status = "IN_REVIEW";
@@ -245,8 +247,11 @@ public class TicketService {
         requireView(actor);
 
         String cleanQuery = (query != null && !query.isBlank()) ? query.trim() : null;
-        String cleanStatus = (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) ? status.trim() : null;
-        String cleanCat = (categoryId != null && !categoryId.isBlank() && !"ALL".equalsIgnoreCase(categoryId)) ? categoryId.trim() : null;
+        String cleanStatus = (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) ? status.trim()
+                : null;
+        String cleanCat = (categoryId != null && !categoryId.isBlank() && !"ALL".equalsIgnoreCase(categoryId))
+                ? categoryId.trim()
+                : null;
 
         List<TicketEntity> list = ticketRepository.searchTickets(actor, cleanStatus, cleanCat, cleanQuery);
         return list.stream().map(this::toSummaryResponse).toList();
@@ -259,8 +264,11 @@ public class TicketService {
         }
 
         String cleanQuery = (query != null && !query.isBlank()) ? query.trim() : null;
-        String cleanStatus = (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) ? status.trim() : null;
-        String cleanCat = (categoryId != null && !categoryId.isBlank() && !"ALL".equalsIgnoreCase(categoryId)) ? categoryId.trim() : null;
+        String cleanStatus = (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) ? status.trim()
+                : null;
+        String cleanCat = (categoryId != null && !categoryId.isBlank() && !"ALL".equalsIgnoreCase(categoryId))
+                ? categoryId.trim()
+                : null;
 
         List<TicketEntity> list = ticketRepository.searchTickets(null, cleanStatus, cleanCat, cleanQuery);
         return list.stream().map(this::toSummaryResponse).toList();
@@ -357,7 +365,8 @@ public class TicketService {
         return res;
     }
 
-    private TicketDetailResponse toDetailResponse(TicketEntity entity, TicketCategoryEntity category, FormVersionEntity formVersion) {
+    private TicketDetailResponse toDetailResponse(TicketEntity entity, TicketCategoryEntity category,
+            FormVersionEntity formVersion) {
         TicketDetailResponse res = new TicketDetailResponse();
         res.id = entity.id;
         res.ticketCode = entity.ticketCode;
@@ -420,8 +429,10 @@ public class TicketService {
 
     private List<TicketTimelineNodeDto> buildTimeline(String instanceId) {
         List<TicketTimelineNodeDto> list = new ArrayList<>();
-        List<NodeExecutionEntity> nodeExecs = nodeExecutionRepository.findByInstanceIdOrderByExecutionOrderAsc(instanceId);
-        if (nodeExecs.isEmpty() || (nodeExecs.size() > 1 && nodeExecs.get(0).executionOrder == 0 && nodeExecs.get(1).executionOrder == 0)) {
+        List<NodeExecutionEntity> nodeExecs = nodeExecutionRepository
+                .findByInstanceIdOrderByExecutionOrderAsc(instanceId);
+        if (nodeExecs.isEmpty() || (nodeExecs.size() > 1 && nodeExecs.get(0).executionOrder == 0
+                && nodeExecs.get(1).executionOrder == 0)) {
             // Fallback for legacy records without execution_order
             nodeExecs = nodeExecutionRepository.findByInstanceIdOrderByStartedAtAsc(instanceId);
         }
@@ -476,7 +487,8 @@ public class TicketService {
 
             WorkflowTaskEntity task = taskByNodeExec.get(ne.id);
             if (task != null) {
-                item.nodeName = (task.title != null && !task.title.isBlank()) ? task.title : resolveFriendlyNodeName(ne.nodeId, ne.nodeType, nodeNamesFromDef);
+                item.nodeName = (task.title != null && !task.title.isBlank()) ? task.title
+                        : resolveFriendlyNodeName(ne.nodeId, ne.nodeType, nodeNamesFromDef);
                 item.assigneeId = task.assigneeId;
                 if (task.assigneeId != null) {
                     item.assigneeName = userRepository.findById(task.assigneeId)

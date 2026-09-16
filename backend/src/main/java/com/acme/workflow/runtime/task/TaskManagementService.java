@@ -48,20 +48,20 @@ public class TaskManagementService {
     private final Jsons jsons;
 
     public TaskManagementService(WorkflowTaskRepository tasks,
-                                 TaskCandidateUserRepository candidates,
-                                 NodeExecutionRepository executions,
-                                 WorkflowInstanceRepository instances,
-                                 WorkflowDefinitionRepository workflowDefinitions,
-                                 HrmUserRepository users,
-                                 DirectoryService directory,
-                                 RuntimeValueResolver resolver,
-                                 DurationParser durationParser,
-                                 FormSchemaService formSchemaService,
-                                 AssigneeResolverService assigneeResolver,
-                                 RuntimeNotificationService notificationService,
-                                 RuntimeJobService jobService,
-                                 RuntimeEventLogger eventLogger,
-                                 Jsons jsons) {
+            TaskCandidateUserRepository candidates,
+            NodeExecutionRepository executions,
+            WorkflowInstanceRepository instances,
+            WorkflowDefinitionRepository workflowDefinitions,
+            HrmUserRepository users,
+            DirectoryService directory,
+            RuntimeValueResolver resolver,
+            DurationParser durationParser,
+            FormSchemaService formSchemaService,
+            AssigneeResolverService assigneeResolver,
+            RuntimeNotificationService notificationService,
+            RuntimeJobService jobService,
+            RuntimeEventLogger eventLogger,
+            Jsons jsons) {
         this.tasks = tasks;
         this.candidates = candidates;
         this.executions = executions;
@@ -80,7 +80,7 @@ public class TaskManagementService {
     }
 
     public boolean createTasks(String instanceId, String peId, NodeExecutionEntity execution, JsonNode node,
-                               ObjectNode context, ObjectNode definition) {
+            ObjectNode context, ObjectNode definition) {
         JsonNode config = node.path("config");
         JsonNode assignee = config.has("assigneeResolver") ? config.path("assigneeResolver") : config.path("assignee");
         String nodeType = node.path("type").asText().toUpperCase(Locale.ROOT);
@@ -89,7 +89,8 @@ public class TaskManagementService {
         if ("APPROVAL".equals(nodeType) || "REVIEW".equals(nodeType)) {
             List<ObjectNode> submissionEntries = collectUpstreamSubmissions(config, context);
             if (!submissionEntries.isEmpty()) {
-                log.info("[createTasks] Detected {} upstream submissions for nodeId={}. Routing to per-submission task creation.",
+                log.info(
+                        "[createTasks] Detected {} upstream submissions for nodeId={}. Routing to per-submission task creation.",
                         submissionEntries.size(), node.path("id").asText());
                 return createPerParticipantApprovalTasks(instanceId, peId, execution, node, config, context, assignee,
                         submissionEntries, definition);
@@ -118,13 +119,15 @@ public class TaskManagementService {
         List<String> taskAssignees = "DIRECT_ALL".equals(mode) ? resolved
                 : List.of("CLAIMABLE_POOL".equals(mode) ? "" : resolved.getFirst());
         for (String assigneeId : taskAssignees) {
-            createSingleTask(instanceId, peId, execution, node, config, context, assigneeId, mode, resolved, definition);
+            createSingleTask(instanceId, peId, execution, node, config, context, assigneeId, mode, resolved,
+                    definition);
         }
         execution.state = "WAITING";
         executions.save(execution);
         return true;
     }
 
+    @SuppressWarnings("deprecation")
     public List<ObjectNode> collectUpstreamSubmissions(JsonNode config, ObjectNode context) {
         List<ObjectNode> entries = new ArrayList<>();
         String reviewSourceNodeId = config.path("reviewSourceNodeId").asText(null);
@@ -132,16 +135,23 @@ public class TaskManagementService {
             JsonNode formOutput = context.path("nodes").path(reviewSourceNodeId);
             JsonNode submissionList = formOutput.path("submissionList");
             if (submissionList.isArray()) {
-                submissionList.forEach(e -> { if (e.isObject()) entries.add((ObjectNode) e.deepCopy()); });
+                submissionList.forEach(e -> {
+                    if (e.isObject())
+                        entries.add((ObjectNode) e.deepCopy());
+                });
             }
         } else {
             JsonNode nodesCtx = context.path("nodes");
             if (nodesCtx.isObject()) {
                 nodesCtx.fields().forEachRemaining(field -> {
-                    if (!entries.isEmpty()) return;
+                    if (!entries.isEmpty())
+                        return;
                     JsonNode submissionList = field.getValue().path("submissionList");
                     if (submissionList.isArray() && submissionList.size() > 0) {
-                        submissionList.forEach(e -> { if (e.isObject()) entries.add((ObjectNode) e.deepCopy()); });
+                        submissionList.forEach(e -> {
+                            if (e.isObject())
+                                entries.add((ObjectNode) e.deepCopy());
+                        });
                     }
                 });
             }
@@ -150,8 +160,8 @@ public class TaskManagementService {
     }
 
     private boolean createPerParticipantApprovalTasks(String instanceId, String peId, NodeExecutionEntity execution,
-                                                      JsonNode node, JsonNode config, ObjectNode context, JsonNode assigneeConfig,
-                                                      List<ObjectNode> submissionEntries, ObjectNode definition) {
+            JsonNode node, JsonNode config, ObjectNode context, JsonNode assigneeConfig,
+            List<ObjectNode> submissionEntries, ObjectNode definition) {
 
         String assigneeType = assigneeConfig.path("type").asText("").toLowerCase(Locale.ROOT);
         boolean managerPerParticipant = "participant_manager".equals(assigneeType)
@@ -178,13 +188,15 @@ public class TaskManagementService {
 
         for (ObjectNode entry : submissionEntries) {
             String participantId = entry.path("userId").asText(null);
-            if (participantId == null || participantId.isBlank()) continue;
+            if (participantId == null || participantId.isBlank())
+                continue;
 
             String approverId;
             if (managerPerParticipant) {
                 String managerId = users.findById(participantId).map(u -> u.managerId).orElse(null);
                 if (managerId == null || managerId.isBlank()) {
-                    log.warn("[createPerParticipantApprovalTasks] No manager for participantId={}, skipping.", participantId);
+                    log.warn("[createPerParticipantApprovalTasks] No manager for participantId={}, skipping.",
+                            participantId);
                     continue;
                 }
                 if (users.findById(managerId).map(u -> !"ACTIVE".equals(u.status)).orElse(true)) {
@@ -221,8 +233,8 @@ public class TaskManagementService {
     }
 
     public void createSingleTask(String instanceId, String peId, NodeExecutionEntity execution,
-                                 JsonNode node, JsonNode config, ObjectNode context, String assigneeId, String mode,
-                                 List<String> candidateIds, ObjectNode definition) {
+            JsonNode node, JsonNode config, ObjectNode context, String assigneeId, String mode,
+            List<String> candidateIds, ObjectNode definition) {
         WorkflowTaskEntity task = new WorkflowTaskEntity();
         task.id = Ids.uuid();
         task.instanceId = instanceId;
@@ -288,13 +300,15 @@ public class TaskManagementService {
                 .reduce((a, b) -> a + ", " + b).orElse("Chưa gán");
         eventLogger.logEvent(instanceId, peId, execution.id, "TASK_ASSIGNED", node.path("name").asText(),
                 "Giao task '" + task.title + "' cho: " + assigneeNames,
-                "WAITING", null, Map.of("taskId", task.id, "taskTitle", task.title, "assigneeIds", candidateIds, "assignmentMode", mode, "assigneeNames", assigneeNames));
+                "WAITING", null, Map.of("taskId", task.id, "taskTitle", task.title, "assigneeIds", candidateIds,
+                        "assignmentMode", mode, "assigneeNames", assigneeNames));
         String stepName = node.path("name").asText("");
         String workflowName = instances.findById(instanceId)
                 .flatMap(inst -> workflowDefinitions.findById(inst.workflowId))
                 .map(def -> def.name)
                 .orElse("");
-        notificationService.sendTaskNotification(instanceId, task, config.path("channels"), candidateIds, stepName, workflowName);
+        notificationService.sendTaskNotification(instanceId, task, config.path("channels"), candidateIds, stepName,
+                workflowName);
         jobService.scheduleSla(task, config);
     }
 }

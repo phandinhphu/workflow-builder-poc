@@ -6,7 +6,6 @@ import com.acme.workflow.common.ApiException;
 import com.acme.workflow.common.AuditService;
 import com.acme.workflow.common.Ids;
 import com.acme.workflow.common.Jsons;
-import com.acme.workflow.directory.DirectoryService;
 import com.acme.workflow.identity.repository.HrmUserRepository;
 import com.acme.workflow.integration.IntegrationService;
 import com.acme.workflow.runtime.context.ExecutionContextManager;
@@ -89,36 +88,36 @@ public class RuntimeEngineService {
     private final int maxSyncDepth;
 
     public RuntimeEngineService(WorkflowInstanceRepository instances,
-                                ParticipantExecutionRepository participants,
-                                NodeExecutionRepository executions,
-                                WorkflowTaskRepository tasks,
-                                EvaluationResultRepository evaluations,
-                                RuntimeJobRepository jobs,
-                                WaitSubscriptionRepository waits,
-                                TaskCandidateUserRepository candidates,
-                                HrmUserRepository users,
-                                WorkflowVersionRepository workflowVersions,
-                                Jsons jsons,
-                                WorkflowService workflows,
-                                RuntimeValueResolver resolver,
-                                IntegrationService integrations,
-                                CurrentUserService current,
-                                PermissionService permissions,
-                                AuditService audit,
-                                NodeExecutorFactory nodeExecutorFactory,
-                                ExecutionContextManager contextManager,
-                                VariableResolverService variableResolver,
-                                ParticipantResolverService participantResolver,
-                                AssigneeResolverService assigneeResolver,
-                                TaskManagementService taskManagement,
-                                TaskActionService taskAction,
-                                WorkflowRouter router,
-                                ExecutionOrderManager orderManager,
-                                RuntimeJobService jobService,
-                                RuntimeNotificationService notificationService,
-                                RuntimeEventLogger eventLogger,
-                                DurationParser durationParser,
-                                @Value("${app.runtime.max-sync-depth:200}") int maxSyncDepth) {
+            ParticipantExecutionRepository participants,
+            NodeExecutionRepository executions,
+            WorkflowTaskRepository tasks,
+            EvaluationResultRepository evaluations,
+            RuntimeJobRepository jobs,
+            WaitSubscriptionRepository waits,
+            TaskCandidateUserRepository candidates,
+            HrmUserRepository users,
+            WorkflowVersionRepository workflowVersions,
+            Jsons jsons,
+            WorkflowService workflows,
+            RuntimeValueResolver resolver,
+            IntegrationService integrations,
+            CurrentUserService current,
+            PermissionService permissions,
+            AuditService audit,
+            NodeExecutorFactory nodeExecutorFactory,
+            ExecutionContextManager contextManager,
+            VariableResolverService variableResolver,
+            ParticipantResolverService participantResolver,
+            AssigneeResolverService assigneeResolver,
+            TaskManagementService taskManagement,
+            TaskActionService taskAction,
+            WorkflowRouter router,
+            ExecutionOrderManager orderManager,
+            RuntimeJobService jobService,
+            RuntimeNotificationService notificationService,
+            RuntimeEventLogger eventLogger,
+            DurationParser durationParser,
+            @Value("${app.runtime.max-sync-depth:200}") int maxSyncDepth) {
         this.instances = instances;
         this.participants = participants;
         this.executions = executions;
@@ -184,18 +183,19 @@ public class RuntimeEngineService {
     }
 
     private Map<String, Object> startWithActor(String workflowId, ObjectNode request, String actor,
-                                              String parentInstanceId, String parentNodeExecutionId) {
+            String parentInstanceId, String parentNodeExecutionId) {
         WorkflowVersionEntity version = workflows.activeVersion(workflowId);
         return startWithVersion(version, request, actor, parentInstanceId, parentNodeExecutionId);
     }
 
     private Map<String, Object> startWithVersion(WorkflowVersionEntity version, ObjectNode request, String actor,
-                                                String parentInstanceId, String parentNodeExecutionId) {
+            String parentInstanceId, String parentNodeExecutionId) {
         String workflowId = version.workflowId;
         ObjectNode definition = jsons.object(version.definitionSnapshot);
         String idempotency = nullable(request.path("idempotencyKey").asText(null));
         if (idempotency != null) {
-            Optional<WorkflowInstanceEntity> existing = instances.findByWorkflowIdAndIdempotencyKey(workflowId, idempotency);
+            Optional<WorkflowInstanceEntity> existing = instances.findByWorkflowIdAndIdempotencyKey(workflowId,
+                    idempotency);
             if (existing.isPresent())
                 return Map.of("id", existing.get().id, "idempotentReplay", true, "status", existing.get().status);
         }
@@ -229,9 +229,11 @@ public class RuntimeEngineService {
         instances.saveAndFlush(instance);
 
         String actorName = users.findById(actor).map(u -> u.displayName).orElse(actor);
-        eventLogger.logEvent(instance.id, null, null, "TRIGGER", "Khởi tạo workflow", "Khởi tạo bởi " + actorName + " (" + resolved.size() + " participant)",
+        eventLogger.logEvent(instance.id, null, null, "TRIGGER", "Khởi tạo workflow",
+                "Khởi tạo bởi " + actorName + " (" + resolved.size() + " participant)",
                 "SUCCESS", actor,
-                Map.of("workflowVersion", version.versionNo, "participantCount", resolved.size(), "actorName", actorName));
+                Map.of("workflowVersion", version.versionNo, "participantCount", resolved.size(), "actorName",
+                        actorName));
 
         String startNode = router.startNode(definition);
         for (Map<String, Object> user : resolved) {
@@ -295,7 +297,8 @@ public class RuntimeEngineService {
         participant.iterationNo = iteration;
         participants.save(participant);
 
-        eventLogger.logEvent(instanceId, peId, execution.id, "NODE_STARTED", node.path("name").asText(nodeId), "Bắt đầu node " + type,
+        eventLogger.logEvent(instanceId, peId, execution.id, "NODE_STARTED", node.path("name").asText(nodeId),
+                "Bắt đầu node " + type,
                 "RUNNING", null, Map.of("nodeId", nodeId, "iteration", iteration));
         eventLogger.publishNodeStarted(instanceId, peId, execution.id, nodeId, node.path("name").asText(nodeId), type);
 
@@ -319,7 +322,7 @@ public class RuntimeEngineService {
     }
 
     public void completeAutomatic(String instanceId, String peId, NodeExecutionEntity execution, JsonNode node,
-                                 ObjectNode definition, String port, ObjectNode output, int depth) {
+            ObjectNode definition, String port, ObjectNode output, int depth) {
         completeExecution(execution, "COMPLETED", port, output);
         eventLogger.logEvent(instanceId, peId, execution.id, "NODE_COMPLETED", node.path("name").asText(),
                 "Hoàn thành bước " + node.path("name").asText() + " (Outcome: " + port + ")",
@@ -338,7 +341,8 @@ public class RuntimeEngineService {
                 failParticipant(instanceId, peId, "DEAD_END", "Node không có route cho outcome " + port);
             return;
         }
-        routes.forEach(connection -> executeNode(instanceId, peId, connection.path("targetNodeId").asText(), definition, depth + 1));
+        routes.forEach(connection -> executeNode(instanceId, peId, connection.path("targetNodeId").asText(), definition,
+                depth + 1));
     }
 
     // =========================================================================
@@ -362,7 +366,8 @@ public class RuntimeEngineService {
             NodeExecutionEntity execution = executions.findById(task.nodeExecutionId).orElseThrow();
             completeExecution(execution, "COMPLETED", result.outcomePort(), result.finalOutput());
             ObjectNode definition = definition(task.instanceId);
-            route(task.instanceId, task.participantExecutionId, router.findNode(definition, task.nodeId), definition, result.outcomePort(), 0);
+            route(task.instanceId, task.participantExecutionId, router.findNode(definition, task.nodeId), definition,
+                    result.outcomePort(), 0);
         }
         return Map.of("success", result.success(), "taskId", result.taskId(), "status", result.status(),
                 "outcomePort", result.outcomePort(), "routed", result.routed());
@@ -372,8 +377,9 @@ public class RuntimeEngineService {
     // Specialized Node Handlers
     // =========================================================================
 
+    @SuppressWarnings("deprecation")
     public ObjectNode executeSystem(String instanceId, String peId, NodeExecutionEntity execution, JsonNode node,
-                                   ObjectNode context) {
+            ObjectNode context) {
         JsonNode config = node.path("config");
         String action = config.path("action").asText();
         ObjectNode input = jsons.object();
@@ -412,6 +418,7 @@ public class RuntimeEngineService {
                 config.path("credentialId").asText(null), execution.id);
     }
 
+    @SuppressWarnings("deprecation")
     public ObjectNode executeMapping(JsonNode node, ObjectNode context) {
         ObjectNode output = jsons.object();
         JsonNode mapping = node.path("config").path("outputMapping");
@@ -436,13 +443,15 @@ public class RuntimeEngineService {
                 node.path("config").path("duration").asText(node.path("config").path("waitFor").asText()));
         execution.state = "WAITING";
         executions.save(execution);
-        jobService.createJob("TIMER", instanceId, peId, execution.id, null, "timer:" + execution.id, due, jsons.object());
-        eventLogger.logEvent(instanceId, peId, execution.id, "NODE_WAITING", node.path("name").asText(), "Timer chờ đến " + due,
+        jobService.createJob("TIMER", instanceId, peId, execution.id, null, "timer:" + execution.id, due,
+                jsons.object());
+        eventLogger.logEvent(instanceId, peId, execution.id, "NODE_WAITING", node.path("name").asText(),
+                "Timer chờ đến " + due,
                 "WAITING", null, Map.of("dueAt", due));
     }
 
     public void waitForEvent(String instanceId, String peId, NodeExecutionEntity execution, JsonNode node,
-                             ObjectNode context) {
+            ObjectNode context) {
         JsonNode config = node.path("config");
         String eventName = config.path("eventName").asText();
         String correlation = resolver.render(config.path("correlationKey").asText(), context);
@@ -464,24 +473,26 @@ public class RuntimeEngineService {
         waits.save(wait);
         execution.state = "WAITING";
         executions.save(execution);
-        eventLogger.logEvent(instanceId, peId, execution.id, "NODE_WAITING", node.path("name").asText(), "Đang chờ event " + eventName,
+        eventLogger.logEvent(instanceId, peId, execution.id, "NODE_WAITING", node.path("name").asText(),
+                "Đang chờ event " + eventName,
                 "WAITING", null, Map.of("eventName", eventName, "correlationKey", correlation));
     }
 
     public void split(String instanceId, String peId, NodeExecutionEntity execution, JsonNode node,
-                      ObjectNode definition) {
+            ObjectNode definition) {
         List<JsonNode> outgoing = router.allOutgoing(definition, node.path("id").asText());
         completeExecution(execution, "COMPLETED", "SUCCESS", jsons.object().put("branchCount", outgoing.size()));
         int index = 0;
         for (JsonNode connection : outgoing)
             jobService.scheduleContinuation(instanceId, peId, connection.path("targetNodeId").asText(),
                     "split:" + execution.id + ":" + (index++));
-        eventLogger.logEvent(instanceId, peId, execution.id, "PARALLEL_SPLIT", "Đã tách nhánh", outgoing.size() + " nhánh", "SUCCESS",
+        eventLogger.logEvent(instanceId, peId, execution.id, "PARALLEL_SPLIT", "Đã tách nhánh",
+                outgoing.size() + " nhánh", "SUCCESS",
                 null, Map.of("branchCount", outgoing.size()));
     }
 
     public void join(String instanceId, String peId, NodeExecutionEntity execution, JsonNode node,
-                     ObjectNode definition, int depth) {
+            ObjectNode definition, int depth) {
         participants.findLockedById(peId).orElseThrow();
         List<NodeExecutionEntity> arrivals = executions.findByParticipantExecutionIdAndNodeIdOrderByStartedAtAsc(peId,
                 node.path("id").asText());
@@ -509,7 +520,7 @@ public class RuntimeEngineService {
     }
 
     public void subworkflow(String instanceId, String peId, NodeExecutionEntity execution, JsonNode node,
-                            ObjectNode context) {
+            ObjectNode context) {
         JsonNode config = node.path("config");
         ObjectNode request = jsons.object();
         request.putArray("participantUserIds").add(context.path("participant").path("id").asText());
@@ -528,7 +539,8 @@ public class RuntimeEngineService {
             execution.state = "WAITING";
             execution.outputData = jsons.write(Map.of("childInstanceId", childId));
             executions.save(execution);
-            jobService.createJob("SUBWORKFLOW_POLL", instanceId, peId, execution.id, null, "subworkflow:" + execution.id,
+            jobService.createJob("SUBWORKFLOW_POLL", instanceId, peId, execution.id, null,
+                    "subworkflow:" + execution.id,
                     Instant.now().plusSeconds(5), jsons.object().put("childInstanceId", childId));
         }
     }
@@ -641,7 +653,8 @@ public class RuntimeEngineService {
         if ("REASSIGN".equals(action) || "ESCALATE".equals(action)) {
             String creatorId = instances.findById(task.instanceId).map(i -> i.creatorId).orElse(null);
             List<String> assignees = assigneeResolver.resolveAssignees(payload.path("assignee"),
-                    contextManager.buildContext(task.instanceId, task.participantExecutionId), task.instanceId, creatorId);
+                    contextManager.buildContext(task.instanceId, task.participantExecutionId), task.instanceId,
+                    creatorId);
             if (!assignees.isEmpty()) {
                 task.assigneeId = assignees.getFirst();
                 task.claimantId = null;
@@ -655,14 +668,16 @@ public class RuntimeEngineService {
         List<String> recipients = task.assigneeId == null
                 ? candidates.findByTaskId(task.id).stream().map(c -> c.userId).toList()
                 : List.of(task.assigneeId);
-        recipients.forEach(id -> notificationService.insertNotification(task.instanceId, task.id, id, "inapp", "Task quá hạn", task.title,
+        recipients.forEach(id -> notificationService.insertNotification(task.instanceId, task.id, id, "inapp",
+                "Task quá hạn", task.title,
                 "sla:" + task.id + ":" + action));
-        eventLogger.logEvent(task.instanceId, task.participantExecutionId, task.nodeExecutionId, "SLA_" + action, "SLA action",
+        eventLogger.logEvent(task.instanceId, task.participantExecutionId, task.nodeExecutionId, "SLA_" + action,
+                "SLA action",
                 task.title, "SUCCESS", null, payload);
     }
 
     private void technicalFailure(String instanceId, String peId, NodeExecutionEntity execution, JsonNode node,
-                                  ObjectNode definition, RuntimeException error, int depth) {
+            ObjectNode definition, RuntimeException error, int depth) {
         JsonNode retry = node.path("config").path("retryPolicy");
         int max = retry.path("maxAttempts").asInt(0);
         if (max > 0) {
@@ -713,7 +728,8 @@ public class RuntimeEngineService {
         pe.currentNodeId = null;
         pe.completedAt = Instant.now();
         participants.saveAndFlush(pe);
-        eventLogger.logEvent(instanceId, peId, null, "PARTICIPANT_COMPLETED", "Hoàn thành workflow", "Participant đã đi tới END",
+        eventLogger.logEvent(instanceId, peId, null, "PARTICIPANT_COMPLETED", "Hoàn thành workflow",
+                "Participant đã đi tới END",
                 "SUCCESS", null, Map.of());
         finishInstanceIfDone(instanceId);
     }
@@ -723,7 +739,8 @@ public class RuntimeEngineService {
                 .anyMatch(t -> ("APPROVAL".equalsIgnoreCase(t.taskType) || "REVIEW".equalsIgnoreCase(t.taskType))
                         && "REJECTED".equals(t.status)
                         && (peId == null || peId.equals(t.participantExecutionId)));
-        if (taskRejected) return true;
+        if (taskRejected)
+            return true;
 
         return executions.findByInstanceIdOrderByExecutionOrderAsc(instanceId).stream()
                 .anyMatch(ne -> ("APPROVAL".equalsIgnoreCase(ne.nodeType) || "REVIEW".equalsIgnoreCase(ne.nodeType))
@@ -767,7 +784,8 @@ public class RuntimeEngineService {
             instance.completedAt = Instant.now();
             instance.updatedAt = instance.completedAt;
             instances.save(instance);
-            eventLogger.logEvent(instanceId, null, null, "INSTANCE_COMPLETED", "Workflow đã kết thúc", instance.status, "SUCCESS",
+            eventLogger.logEvent(instanceId, null, null, "INSTANCE_COMPLETED", "Workflow đã kết thúc", instance.status,
+                    "SUCCESS",
                     null, Map.of());
             eventLogger.publishInstanceCompleted(instanceId, instance.status, instance.completedAt);
         }
@@ -802,7 +820,8 @@ public class RuntimeEngineService {
         instance.completedAt = now;
         instance.updatedAt = now;
         instances.save(instance);
-        eventLogger.logEvent(instanceId, null, null, "INSTANCE_CANCELLED", "Workflow đã bị hủy", "Hủy bởi " + actor, "CANCELLED",
+        eventLogger.logEvent(instanceId, null, null, "INSTANCE_CANCELLED", "Workflow đã bị hủy", "Hủy bởi " + actor,
+                "CANCELLED",
                 actor, Map.of());
         eventLogger.publishInstanceCompleted(instanceId, "CANCELLED", now);
         audit.append(actor, "CANCEL", "INSTANCE", instanceId, null, null, Map.of("status", "CANCELLED"), null);

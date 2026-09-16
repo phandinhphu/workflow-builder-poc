@@ -21,10 +21,10 @@ public class ExecutionContextManager {
     private final Jsons jsons;
 
     public ExecutionContextManager(WorkflowInstanceRepository instances,
-                                  ParticipantExecutionRepository participants,
-                                  NodeExecutionRepository executions,
-                                  DirectoryService directory,
-                                  Jsons jsons) {
+            ParticipantExecutionRepository participants,
+            NodeExecutionRepository executions,
+            DirectoryService directory,
+            Jsons jsons) {
         this.instances = instances;
         this.participants = participants;
         this.executions = executions;
@@ -32,6 +32,7 @@ public class ExecutionContextManager {
         this.jsons = jsons;
     }
 
+    @SuppressWarnings("deprecation")
     public ObjectNode buildContext(String instanceId, String peId) {
         WorkflowInstanceEntity instance = instances.findById(instanceId).orElseThrow();
         ParticipantExecutionEntity pe = participants.findById(peId).orElseThrow();

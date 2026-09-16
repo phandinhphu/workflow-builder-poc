@@ -14,6 +14,7 @@ public class VariableResolverService {
         this.jsons = jsons;
     }
 
+    @SuppressWarnings("deprecation")
     public ObjectNode resolveVariables(ObjectNode definition, JsonNode overrides) {
         ObjectNode result = jsons.object();
         definition.path("variables").forEach(variable -> {

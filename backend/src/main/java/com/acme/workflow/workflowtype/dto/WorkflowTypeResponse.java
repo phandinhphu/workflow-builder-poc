@@ -1,6 +1,5 @@
 package com.acme.workflow.workflowtype.dto;
 
-import com.acme.workflow.workflowtype.domain.WorkflowTypeAllowedNodeEntity;
 import com.acme.workflow.workflowtype.domain.WorkflowTypeEntity;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
@@ -16,7 +15,8 @@ public class WorkflowTypeResponse {
     public List<String> allowedNodes;
     public List<ValidationRuleDto> rules;
 
-    public WorkflowTypeResponse() {}
+    public WorkflowTypeResponse() {
+    }
 
     public WorkflowTypeResponse(String id, String name, String description, boolean isActive, int sortOrder) {
         this.id = id;
@@ -27,25 +27,26 @@ public class WorkflowTypeResponse {
     }
 
     public static WorkflowTypeResponse summary(WorkflowTypeEntity entity) {
-        if (entity == null) return null;
+        if (entity == null)
+            return null;
         return new WorkflowTypeResponse(
                 entity.id,
                 entity.name,
                 entity.description,
                 entity.isActive,
-                entity.sortOrder
-        );
+                entity.sortOrder);
     }
 
-    public static WorkflowTypeResponse detail(WorkflowTypeEntity entity, List<String> allowedNodes, List<ValidationRuleDto> rules) {
-        if (entity == null) return null;
+    public static WorkflowTypeResponse detail(WorkflowTypeEntity entity, List<String> allowedNodes,
+            List<ValidationRuleDto> rules) {
+        if (entity == null)
+            return null;
         WorkflowTypeResponse res = new WorkflowTypeResponse(
                 entity.id,
                 entity.name,
                 entity.description,
                 entity.isActive,
-                entity.sortOrder
-        );
+                entity.sortOrder);
         res.allowedNodes = allowedNodes;
         res.rules = rules;
         return res;

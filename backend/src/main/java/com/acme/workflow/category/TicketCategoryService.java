@@ -9,13 +9,9 @@ import com.acme.workflow.common.ApiException;
 import com.acme.workflow.common.AuditService;
 import com.acme.workflow.common.Ids;
 import com.acme.workflow.common.Jsons;
-import com.acme.workflow.form.domain.FormDefinitionEntity;
-import com.acme.workflow.form.domain.FormVersionEntity;
 import com.acme.workflow.form.repository.FormDefinitionRepository;
 import com.acme.workflow.form.repository.FormVersionRepository;
 import com.acme.workflow.identity.repository.HrmUserRepository;
-import com.acme.workflow.workflow.domain.WorkflowDefinitionEntity;
-import com.acme.workflow.workflow.domain.WorkflowVersionEntity;
 import com.acme.workflow.workflow.repository.WorkflowDefinitionRepository;
 import com.acme.workflow.workflow.repository.WorkflowVersionRepository;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -44,16 +40,16 @@ public class TicketCategoryService {
     private final Jsons jsons;
 
     public TicketCategoryService(TicketCategoryRepository categories,
-                                 CompatibilityValidationService validator,
-                                 FormVersionRepository formVersions,
-                                 FormDefinitionRepository formDefinitions,
-                                 WorkflowVersionRepository workflowVersions,
-                                 WorkflowDefinitionRepository workflowDefinitions,
-                                 HrmUserRepository users,
-                                 CurrentUserService current,
-                                 PermissionService permissions,
-                                 AuditService audit,
-                                 Jsons jsons) {
+            CompatibilityValidationService validator,
+            FormVersionRepository formVersions,
+            FormDefinitionRepository formDefinitions,
+            WorkflowVersionRepository workflowVersions,
+            WorkflowDefinitionRepository workflowDefinitions,
+            HrmUserRepository users,
+            CurrentUserService current,
+            PermissionService permissions,
+            AuditService audit,
+            Jsons jsons) {
         this.categories = categories;
         this.validator = validator;
         this.formVersions = formVersions;
@@ -114,14 +110,12 @@ public class TicketCategoryService {
         CompatibilityValidationResult validation = validator.validate(
                 request.formVersionId,
                 request.workflowExecutableId,
-                request.fieldMapping
-        );
+                request.fieldMapping);
         if (!validation.valid) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "INCOMPATIBLE_BINDING",
-                    "Cấu hình liên kết Form và Workflow không tương thích: " + jsons.write(validation.errors)
-            );
+                    "Cấu hình liên kết Form và Workflow không tương thích: " + jsons.write(validation.errors));
         }
 
         TicketCategoryEntity entity = new TicketCategoryEntity();
@@ -163,14 +157,12 @@ public class TicketCategoryService {
         CompatibilityValidationResult validation = validator.validate(
                 request.formVersionId,
                 request.workflowExecutableId,
-                request.fieldMapping
-        );
+                request.fieldMapping);
         if (!validation.valid) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "INCOMPATIBLE_BINDING",
-                    "Cấu hình liên kết Form và Workflow không tương thích: " + jsons.write(validation.errors)
-            );
+                    "Cấu hình liên kết Form và Workflow không tương thích: " + jsons.write(validation.errors));
         }
 
         TicketCategoryResponse before = toDetailResponse(entity);
@@ -190,7 +182,8 @@ public class TicketCategoryService {
         categories.saveAndFlush(entity);
 
         TicketCategoryResponse after = toDetailResponse(entity);
-        audit.append(actor, "UPDATE", "TICKET_CATEGORY", entity.id, null, jsons.map(jsons.value(before)), jsons.map(jsons.value(after)), null);
+        audit.append(actor, "UPDATE", "TICKET_CATEGORY", entity.id, null, jsons.map(jsons.value(before)),
+                jsons.map(jsons.value(after)), null);
         return after;
     }
 
@@ -266,7 +259,8 @@ public class TicketCategoryService {
             throw ApiException.badRequest("CODE_REQUIRED", "Mã danh mục không được để trống");
         }
         if (!CODE_PATTERN.matcher(code.trim()).matches()) {
-            throw ApiException.badRequest("INVALID_CODE", "Mã danh mục chỉ được chứa chữ cái, số, gạch dưới và gạch ngang (2-64 ký tự)");
+            throw ApiException.badRequest("INVALID_CODE",
+                    "Mã danh mục chỉ được chứa chữ cái, số, gạch dưới và gạch ngang (2-64 ký tự)");
         }
     }
 
