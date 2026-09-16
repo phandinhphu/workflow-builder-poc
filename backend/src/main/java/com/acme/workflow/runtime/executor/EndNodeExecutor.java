@@ -16,15 +16,19 @@ public class EndNodeExecutor implements NodeExecutor {
     @Override
     public void execute(NodeExecutionContext ctx) {
         JsonNode config = ctx.node().path("config");
-        String endType = config.path("endType").asText(config.path("status").asText("")).toUpperCase(Locale.ROOT);
-        boolean isExplicitRejected = "REJECTED".equals(endType);
+        String configuredOutcome = config.path("endType").asText(config.path("outcome").asText(config.path("status").asText(""))).toUpperCase(Locale.ROOT);
+        if (configuredOutcome.isBlank()) {
+            configuredOutcome = "APPROVED";
+        }
+        boolean isExplicitRejected = "REJECTED".equals(configuredOutcome);
         boolean hasRejectedApproval = ctx.engine().hasRejectedApproval(ctx.instanceId(), ctx.peId());
 
-        ctx.engine().completeExecution(ctx.execution(), "COMPLETED", "SUCCESS", ctx.engine().getJsons().object());
-        if (isExplicitRejected || hasRejectedApproval) {
+        String finalOutcome = (isExplicitRejected || hasRejectedApproval) ? "REJECTED" : configuredOutcome;
+        ctx.engine().completeExecution(ctx.execution(), "COMPLETED", finalOutcome, ctx.engine().getJsons().object());
+        if ("REJECTED".equals(finalOutcome)) {
             ctx.engine().rejectParticipant(ctx.instanceId(), ctx.peId(), "Quy trình kết thúc tại bước Từ chối");
         } else {
-            ctx.engine().completeParticipant(ctx.instanceId(), ctx.peId());
+            ctx.engine().completeParticipant(ctx.instanceId(), ctx.peId(), finalOutcome);
         }
     }
 }

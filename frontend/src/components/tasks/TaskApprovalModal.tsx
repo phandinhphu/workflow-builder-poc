@@ -85,7 +85,7 @@ export default function TaskApprovalModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* MODAL HEADER */}
-        <div className="border-b border-gray-100 bg-linear-to-r from-gray-50 via-white to-gray-50 px-6 py-4.5">
+        <div className="border-b border-gray-100 bg-linear-to-r from-gray-50 via-white to-gray-50 px-6 py-4.5 mt-4">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -101,16 +101,14 @@ export default function TaskApprovalModal({
                   </span>
                 )}
                 <span
-                  className={`rounded-md px-2 py-0.5 text-xs font-semibold uppercase tracking-wider ${
-                    priorityColors[task.metadata?.priority as string] || 'bg-blue-100 text-blue-700'
-                  }`}
+                  className={`rounded-md px-2 py-0.5 text-xs font-semibold uppercase tracking-wider ${priorityColors[task.metadata?.priority as string] || 'bg-blue-100 text-blue-700'
+                    }`}
                 >
                   {String(task.metadata?.priority || 'NORMAL')}
                 </span>
                 <span
-                  className={`rounded-md border px-2.5 py-0.5 text-xs font-medium ${
-                    statusColors[task.status || 'PENDING'] || 'bg-gray-100 text-gray-700'
-                  }`}
+                  className={`rounded-md border px-2.5 py-0.5 text-xs font-medium ${statusColors[task.status || 'PENDING'] || 'bg-gray-100 text-gray-700'
+                    }`}
                 >
                   {task.status || 'PENDING'}
                 </span>
@@ -134,11 +132,10 @@ export default function TaskApprovalModal({
             <button
               type="button"
               onClick={() => setActiveTab('form')}
-              className={`flex items-center gap-1.5 pb-3 text-sm font-semibold border-b-2 transition-colors ${
-                activeTab === 'form'
+              className={`flex items-center gap-1.5 pb-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'form'
                   ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-900'
-              }`}
+                }`}
             >
               <FileText className="w-4 h-4" />
               Thông tin nộp phiếu {task.formName ? `(${task.formName})` : ''}
@@ -147,11 +144,10 @@ export default function TaskApprovalModal({
               <button
                 type="button"
                 onClick={() => setActiveTab('history')}
-                className={`flex items-center gap-1.5 pb-3 text-sm font-semibold border-b-2 transition-colors ${
-                  activeTab === 'history'
+                className={`flex items-center gap-1.5 pb-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'history'
                     ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-900'
-                }`}
+                  }`}
               >
                 <History className="w-4 h-4" />
                 Lịch sử xét duyệt ({historyList.length})
@@ -172,10 +168,10 @@ export default function TaskApprovalModal({
                 <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-600 text-white font-bold text-base shadow-xs">
                   {initiator.displayName
                     ? initiator.displayName
-                        .split(' ')
-                        .slice(-1)[0]
-                        .charAt(0)
-                        .toUpperCase()
+                      .split(' ')
+                      .slice(-1)[0]
+                      .charAt(0)
+                      .toUpperCase()
                     : 'U'}
                 </div>
                 <div className="space-y-0.5">
@@ -265,9 +261,8 @@ export default function TaskApprovalModal({
                 {historyList.map((item, idx) => (
                   <div key={item.taskId || idx} className="relative pb-4 last:pb-0">
                     <div
-                      className={`absolute -left-[23px] top-0.5 h-4 w-4 rounded-full border-2 border-white ${
-                        item.action === 'COMPLETE' ? 'bg-emerald-500' : 'bg-rose-500'
-                      }`}
+                      className={`absolute -left-[23px] top-0.5 h-4 w-4 rounded-full border-2 border-white ${item.action === 'COMPLETE' ? 'bg-emerald-500' : 'bg-rose-500'
+                        }`}
                     />
                     <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-2xs">
                       <div className="flex items-center justify-between text-xs mb-1">
@@ -280,9 +275,8 @@ export default function TaskApprovalModal({
                       </div>
                       <div className="flex items-center gap-2 text-xs">
                         <span
-                          className={`font-semibold ${
-                            item.action === 'COMPLETE' ? 'text-emerald-700' : 'text-rose-700'
-                          }`}
+                          className={`font-semibold ${item.action === 'COMPLETE' ? 'text-emerald-700' : 'text-rose-700'
+                            }`}
                         >
                           {item.action === 'COMPLETE' ? 'Đã phê duyệt' : 'Đã từ chối'}
                         </span>
@@ -317,11 +311,10 @@ export default function TaskApprovalModal({
                   }
                 }}
                 placeholder="Nhập ý kiến phê duyệt hoặc lý do (bắt buộc khi từ chối)..."
-                className={`w-full rounded-xl border p-3 text-sm focus:outline-none focus:ring-2 ${
-                  showRejectWarning
+                className={`w-full rounded-xl border p-3 text-sm focus:outline-none focus:ring-2 ${showRejectWarning
                     ? 'border-rose-400 bg-rose-50/50 focus:ring-rose-200 text-rose-900'
                     : 'border-gray-300 focus:border-blue-500 focus:ring-blue-100'
-                }`}
+                  }`}
               />
               {showRejectWarning && (
                 <p className="flex items-center gap-1 text-xs font-semibold text-rose-600">

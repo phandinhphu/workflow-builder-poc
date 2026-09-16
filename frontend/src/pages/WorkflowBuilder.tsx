@@ -109,61 +109,78 @@ function runtimeNodeType(t: unknown): NodeType {
 
 function buildWorkflowNodes(wf?: ReturnType<typeof getWorkflow>): { nodes: Node[]; edges: Edge[] } {
   const triggerType = wf?.trigger?.type ?? 'manual';
-  const startNode: Node = { id: 'start-1', type: 'custom', data: { label: 'Bắt đầu', nodeType: 'start', subLabel: triggerTypeLabel(triggerType), triggerType }, position: { x: 300, y: 50 }, deletable: false };
-  const endNode: Node = { id: 'end-1', type: 'custom', data: { label: 'Kết thúc', nodeType: 'end' }, position: { x: 300, y: 50 }, deletable: false };
-
   const persisted = wf?.nodes ?? [];
-  const persistedStart = persisted.find(node => node.type === 'START');
-  const persistedEnd = persisted.find(node => node.type === 'END');
-  const defs = persisted.filter(node => !['START', 'END'].includes(node.type));
-  if (persistedStart) { startNode.id = persistedStart.id; startNode.position = persistedStart.position; startNode.data = { label: persistedStart.name, nodeType: 'start', subLabel: triggerTypeLabel(triggerType), triggerType, ...persistedStart.config }; }
-  if (persistedEnd) { endNode.id = persistedEnd.id; endNode.position = persistedEnd.position; endNode.data = { label: persistedEnd.name, nodeType: 'end', ...persistedEnd.config }; }
-  if (defs.length === 0) {
-    endNode.position = { x: 300, y: 210 };
+
+  if (persisted.length === 0) {
+    const startNode: Node = {
+      id: 'start-1',
+      type: 'custom',
+      data: { label: 'Bắt đầu', nodeType: 'start', subLabel: triggerTypeLabel(triggerType), triggerType },
+      position: { x: 300, y: 50 },
+      deletable: false,
+    };
+    const endNode: Node = {
+      id: 'end-1',
+      type: 'custom',
+      data: { label: 'Kết thúc', nodeType: 'end' },
+      position: { x: 300, y: 210 },
+      deletable: false,
+    };
     return {
       nodes: [startNode, endNode],
-      edges: [{ id: 'e-1', source: startNode.id, target: endNode.id, sourceHandle: 'SUCCESS', animated: true, data: { label: '' } }],
+      edges: [{ id: 'e-1', source: 'start-1', target: 'end-1', sourceHandle: 'SUCCESS', animated: true, data: { label: '' } }],
     };
   }
 
-  const lastDef = defs[defs.length - 1];
-  endNode.position = { x: lastDef.position.x, y: lastDef.position.y + 160 };
-  const nodes: Node[] = [
-    startNode,
-    ...defs.map(nd => ({
+  const endCount = persisted.filter(n => n.type === 'END').length;
+  const nodes: Node[] = persisted.map(nd => {
+    const isStart = nd.type === 'START';
+    const isEnd = nd.type === 'END';
+    const dType = isStart ? 'start' : isEnd ? 'end' : designerNodeType(nd.type);
+    return {
       id: nd.id,
       type: 'custom' as const,
       position: nd.position,
-      data: { label: nd.name, nodeType: designerNodeType(nd.type), ...nd.config },
-    })),
-    endNode,
-  ];
+      deletable: isStart ? false : isEnd ? endCount > 1 : true,
+      data: {
+        label: nd.name,
+        nodeType: dType,
+        ...(isStart ? { subLabel: triggerTypeLabel(triggerType), triggerType } : {}),
+        ...nd.config,
+      },
+    };
+  });
 
-  const edges: Edge[] = [];
-  let autoId = 0;
-  const pushEdge = (source: string, target: string, sourcePort?: string, label = '') => {
-    edges.push({ id: `e-${++autoId}`, source, target, sourceHandle: sourcePort, animated: true, data: { condition: '', isDefault: false, label } });
-  };
-
+  const nodeMap = new Map(persisted.map(n => [n.id, n]));
   const conns = wf?.connections ?? [];
-  const targets = new Set(conns.map(c => c.targetNodeId));
-  const sources = new Set(conns.map(c => c.sourceNodeId));
-  if (!targets.has(defs[0].id)) pushEdge(startNode.id, defs[0].id, 'SUCCESS');
-  if (!sources.has(lastDef.id)) pushEdge(lastDef.id, endNode.id);
-  conns.forEach(c => {
-    const srcType = defs.find(d => d.id === c.sourceNodeId)?.type;
+  const edges: Edge[] = conns.map((c, idx) => {
+    const srcNode = nodeMap.get(c.sourceNodeId);
+    const srcType = srcNode?.type;
     const isCondition = srcType === 'CONDITION';
     const isApprovalOrReview = srcType === 'APPROVAL' || srcType === 'REVIEW';
     let port: string | undefined = undefined;
     let label = c.label ?? '';
     if (isCondition) {
       port = c.sourcePort === 'false' ? 'false' : 'true';
-      label = port === 'false' ? 'FALSE' : 'TRUE';
+      label = label || (port === 'false' ? 'FALSE' : 'TRUE');
     } else if (isApprovalOrReview) {
-      port = c.sourcePort?.toUpperCase() === 'REJECTED' ? 'REJECTED' : 'APPROVED';
-      label = port === 'REJECTED' ? 'TỪ CHỐI' : 'DUYỆT';
+      const upper = c.sourcePort?.toUpperCase();
+      if (upper === 'REJECTED') {
+        port = 'REJECTED';
+        label = label || 'TỪ CHỐI';
+      } else {
+        port = 'APPROVED';
+        label = label || 'DUYỆT';
+      }
     }
-    pushEdge(c.sourceNodeId, c.targetNodeId, port, label);
+    return {
+      id: c.id || `e-${idx + 1}`,
+      source: c.sourceNodeId,
+      target: c.targetNodeId,
+      sourceHandle: port,
+      animated: true,
+      data: { condition: '', isDefault: Boolean(c.isDefault), label },
+    };
   });
 
   return { nodes, edges };
@@ -296,7 +313,7 @@ export default function WorkflowBuilder() {
         id: `${type}-${Date.now()}`,
         type: 'custom',
         position,
-        deletable: type !== 'start' && type !== 'end',
+        deletable: type !== 'start',
         data: {
           label: label || 'Bước mới',
           nodeType: type,
@@ -363,17 +380,17 @@ export default function WorkflowBuilder() {
   };
 
   const runValidation = () => {
-    const result = validateWorkflow(nodes, edges, { 
-      trigger, 
-      variables, 
-      workflowType: workflowData.type, 
-      allowedNodes: store.allowedNodes 
+    const result = validateWorkflow(nodes, edges, {
+      trigger,
+      variables,
+      workflowType: workflowData.type,
+      allowedNodes: store.allowedNodes
     });
     setValidationResult(result);
     const errorNodeIds = result.issues
       .filter(i => i.type === 'error' && i.nodeId)
       .map(i => i.nodeId as string);
-    
+
     if (errorNodeIds.length > 0) {
       store.highlightInvalidNodes(errorNodeIds);
     } else {
@@ -462,7 +479,7 @@ export default function WorkflowBuilder() {
   const workflowStatus = workflowData.status;
   const statusBadge =
     workflowStatus === 'PUBLISHED' ? 'bg-green-100 text-green-700' :
-    workflowStatus === 'SUSPENDED' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-700';
+      workflowStatus === 'SUSPENDED' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-700';
 
   return (
     <div className="flex h-full flex-col bg-page">
@@ -524,21 +541,21 @@ export default function WorkflowBuilder() {
             className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${panel === 'trigger-library' ? 'bg-primary/10 text-primary' : 'text-gray-400 hover:text-navy hover:bg-gray-100'}`}
             title="Triggers"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
           </button>
           <button
             onClick={() => setPanel(panel === 'node-library' ? 'none' : 'node-library')}
             className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${panel === 'node-library' ? 'bg-primary/10 text-primary' : 'text-gray-400 hover:text-navy hover:bg-gray-100'}`}
             title="Nodes"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" /></svg>
           </button>
           <button
             onClick={() => setPanel(panel === 'context-explorer' ? 'none' : 'context-explorer')}
             className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${panel === 'context-explorer' ? 'bg-primary/10 text-primary' : 'text-gray-400 hover:text-navy hover:bg-gray-100'}`}
             title="Workflow Context"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3h18v18H3z"/><path d="M9 9h6v6H9z"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3h18v18H3z" /><path d="M9 9h6v6H9z" /></svg>
           </button>
         </div>
 
@@ -569,15 +586,21 @@ export default function WorkflowBuilder() {
           </ReactFlow>
         </main>
 
-        {selectedElement && selectedElementType === 'node' && (
-          <NodeConfigPanel
-            node={selectedElement as Node}
-            onClose={() => setSelectedElement(null, null)}
-            onUpdate={(data) => updateNodeData(selectedElement.id, data)}
-            onDelete={() => removeNode(selectedElement.id)}
-            canDelete={!['start', 'end'].includes(String((selectedElement as Node).data?.nodeType).toLowerCase())}
-          />
-        )}
+        {selectedElement && selectedElementType === 'node' && (() => {
+          const selectedNode = selectedElement as Node;
+          const selectedNodeType = String(selectedNode.data?.nodeType || '').toLowerCase();
+          const endNodeCount = nodes.filter(n => String(n.data?.nodeType || '').toLowerCase() === 'end').length;
+          const canDeleteNode = selectedNodeType !== 'start' && (selectedNodeType !== 'end' || endNodeCount > 1);
+          return (
+            <NodeConfigPanel
+              node={selectedNode}
+              onClose={() => setSelectedElement(null, null)}
+              onUpdate={(data) => updateNodeData(selectedElement.id, data)}
+              onDelete={() => removeNode(selectedElement.id)}
+              canDelete={canDeleteNode}
+            />
+          );
+        })()}
         {selectedElement && selectedElementType === 'edge' && (
           <EdgeConfigPanel
             edge={selectedElement as Edge}

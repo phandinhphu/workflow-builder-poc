@@ -333,9 +333,10 @@ public class RuntimeEngineService {
     private void route(String instanceId, String peId, JsonNode node, ObjectNode definition, String port, int depth) {
         List<JsonNode> routes = router.outgoing(definition, node.path("id").asText(), port);
         if (routes.isEmpty()) {
-            if ("END".equalsIgnoreCase(node.path("type").asText()))
-                completeParticipant(instanceId, peId);
-            else if ("REJECTED".equalsIgnoreCase(port) || "REJECT".equalsIgnoreCase(port))
+            if ("END".equalsIgnoreCase(node.path("type").asText())) {
+                String configuredOutcome = node.path("config").path("endType").asText(node.path("config").path("outcome").asText("APPROVED")).toUpperCase(Locale.ROOT);
+                completeParticipant(instanceId, peId, configuredOutcome);
+            } else if ("REJECTED".equalsIgnoreCase(port) || "REJECT".equalsIgnoreCase(port))
                 rejectParticipant(instanceId, peId, "Yêu cầu bị từ chối phê duyệt");
             else
                 failParticipant(instanceId, peId, "DEAD_END", "Node không có route cho outcome " + port);
@@ -721,6 +722,10 @@ public class RuntimeEngineService {
     }
 
     public void completeParticipant(String instanceId, String peId) {
+        completeParticipant(instanceId, peId, "APPROVED");
+    }
+
+    public void completeParticipant(String instanceId, String peId, String outcome) {
         ParticipantExecutionEntity pe = participants.findById(peId).orElseThrow();
         if (!"IN_PROGRESS".equals(pe.status))
             return;
@@ -729,9 +734,9 @@ public class RuntimeEngineService {
         pe.completedAt = Instant.now();
         participants.saveAndFlush(pe);
         eventLogger.logEvent(instanceId, peId, null, "PARTICIPANT_COMPLETED", "Hoàn thành workflow",
-                "Participant đã đi tới END",
-                "SUCCESS", null, Map.of());
-        finishInstanceIfDone(instanceId);
+                "Participant đã đi tới END (Outcome: " + outcome + ")",
+                "SUCCESS", null, Map.of("outcome", String.valueOf(outcome)));
+        finishInstanceIfDone(instanceId, outcome);
     }
 
     public boolean hasRejectedApproval(String instanceId, String peId) {
@@ -758,7 +763,7 @@ public class RuntimeEngineService {
         participants.saveAndFlush(pe);
         eventLogger.logEvent(instanceId, peId, null, "PARTICIPANT_REJECTED", "Yêu cầu bị từ chối", message,
                 "FAILED", null, Map.of());
-        finishInstanceIfDone(instanceId);
+        finishInstanceIfDone(instanceId, "REJECTED");
     }
 
     private void failParticipant(String instanceId, String peId, String code, String message) {
@@ -768,26 +773,41 @@ public class RuntimeEngineService {
         participants.save(pe);
         WorkflowInstanceEntity instance = instances.findById(instanceId).orElseThrow();
         instance.status = "FAILED";
+        instance.failureReason = message;
         instance.updatedAt = Instant.now();
         instances.save(instance);
         eventLogger.logEvent(instanceId, peId, null, "EXECUTION_FAILED", "Thực thi thất bại", message, "FAILED", null,
                 Map.of("code", code));
-        eventLogger.publishInstanceCompleted(instanceId, "FAILED", Instant.now());
+        eventLogger.publishInstanceCompleted(instanceId, "FAILED", null, Instant.now(), message);
     }
 
     private void finishInstanceIfDone(String instanceId) {
+        finishInstanceIfDone(instanceId, null);
+    }
+
+    private void finishInstanceIfDone(String instanceId, String outcome) {
         if (participants.countByInstanceIdAndStatusIn(instanceId, List.of("NOT_STARTED", "IN_PROGRESS")) == 0) {
             WorkflowInstanceEntity instance = instances.findById(instanceId).orElseThrow();
-            instance.status = participants.countByInstanceIdAndStatus(instanceId, "FAILED") > 0 ? "FAILED"
-                    : participants.countByInstanceIdAndStatus(instanceId, "REJECTED") > 0 ? "REJECTED" : "COMPLETED";
-            instance.businessOutcome = instance.status;
+            boolean hasFailed = participants.countByInstanceIdAndStatus(instanceId, "FAILED") > 0;
+            boolean hasRejected = participants.countByInstanceIdAndStatus(instanceId, "REJECTED") > 0;
+
+            if (hasFailed) {
+                instance.status = "FAILED";
+                instance.businessOutcome = "FAILED";
+            } else if (hasRejected) {
+                instance.status = "COMPLETED";
+                instance.businessOutcome = "REJECTED";
+            } else {
+                instance.status = "COMPLETED";
+                instance.businessOutcome = (outcome != null && !outcome.isBlank()) ? outcome : "APPROVED";
+            }
             instance.completedAt = Instant.now();
             instance.updatedAt = instance.completedAt;
             instances.save(instance);
-            eventLogger.logEvent(instanceId, null, null, "INSTANCE_COMPLETED", "Workflow đã kết thúc", instance.status,
-                    "SUCCESS",
-                    null, Map.of());
-            eventLogger.publishInstanceCompleted(instanceId, instance.status, instance.completedAt);
+            eventLogger.logEvent(instanceId, null, null, "INSTANCE_COMPLETED", "Workflow đã kết thúc",
+                    "Status: " + instance.status + ", Outcome: " + instance.businessOutcome,
+                    "SUCCESS", null, Map.of("status", instance.status, "businessOutcome", String.valueOf(instance.businessOutcome)));
+            eventLogger.publishInstanceCompleted(instanceId, instance.status, instance.businessOutcome, instance.completedAt, instance.failureReason);
         }
     }
 
@@ -823,7 +843,7 @@ public class RuntimeEngineService {
         eventLogger.logEvent(instanceId, null, null, "INSTANCE_CANCELLED", "Workflow đã bị hủy", "Hủy bởi " + actor,
                 "CANCELLED",
                 actor, Map.of());
-        eventLogger.publishInstanceCompleted(instanceId, "CANCELLED", now);
+        eventLogger.publishInstanceCompleted(instanceId, "CANCELLED", "CANCELLED", now, null);
         audit.append(actor, "CANCEL", "INSTANCE", instanceId, null, null, Map.of("status", "CANCELLED"), null);
         return Map.of("id", instanceId, "status", "CANCELLED");
     }

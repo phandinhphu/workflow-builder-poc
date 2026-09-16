@@ -13,6 +13,7 @@ public class WorkflowInstanceEntity {
     @Column(name="creator_id",nullable=false,length=36) public String creatorId;
     @Column(nullable=false,length=20) public String status;
     @Column(name="business_outcome",length=50) public String businessOutcome;
+    @Column(name="failure_reason",length=2000) public String failureReason;
     @Lob @Column(name="trigger_data",nullable=false,columnDefinition="LONGTEXT") public String triggerData;
     @Lob @Column(name="variables_data",nullable=false,columnDefinition="LONGTEXT") public String variablesData;
     @Lob @Column(name="context_data",nullable=false,columnDefinition="LONGTEXT") public String contextData="{}";

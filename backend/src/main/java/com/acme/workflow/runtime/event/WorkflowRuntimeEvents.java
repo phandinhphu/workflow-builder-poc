@@ -16,6 +16,12 @@ public class WorkflowRuntimeEvents {
     public record InstanceCompletedEvent(
             String instanceId,
             String status,
-            Instant completedAt
-    ) {}
+            String result,
+            Instant completedAt,
+            String failureReason
+    ) {
+        public InstanceCompletedEvent(String instanceId, String status, Instant completedAt) {
+            this(instanceId, status, status, completedAt, null);
+        }
+    }
 }

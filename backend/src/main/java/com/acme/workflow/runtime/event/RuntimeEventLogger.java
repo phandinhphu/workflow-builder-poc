@@ -54,9 +54,13 @@ public class RuntimeEventLogger {
     }
 
     public void publishInstanceCompleted(String instanceId, String status, Instant completedAt) {
+        publishInstanceCompleted(instanceId, status, status, completedAt, null);
+    }
+
+    public void publishInstanceCompleted(String instanceId, String status, String result, Instant completedAt, String failureReason) {
         if (eventPublisher != null) {
             eventPublisher.publishEvent(new WorkflowRuntimeEvents.InstanceCompletedEvent(
-                    instanceId, status, completedAt));
+                    instanceId, status, result, completedAt, failureReason));
         }
     }
 }

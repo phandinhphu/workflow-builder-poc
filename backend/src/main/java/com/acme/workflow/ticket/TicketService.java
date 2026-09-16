@@ -207,12 +207,27 @@ public class TicketService {
             // synchronously
             workflowInstanceRepository.findById(ticket.workflowInstanceId).ifPresent(instance -> {
                 if ("COMPLETED".equalsIgnoreCase(instance.status)) {
-                    ticket.status = "APPROVED";
-                    ticket.currentStepName = "Hoàn tất";
+                    String outcome = instance.businessOutcome != null ? instance.businessOutcome.toUpperCase() : "APPROVED";
+                    if ("REJECTED".equalsIgnoreCase(outcome)) {
+                        ticket.status = "REJECTED";
+                        ticket.currentStepName = "Từ chối";
+                    } else if ("PAID".equalsIgnoreCase(outcome) || "DISBURSED".equalsIgnoreCase(outcome)) {
+                        ticket.status = "PAID";
+                        ticket.currentStepName = "Đã giải ngân";
+                    } else if ("AUTO_APPROVED".equalsIgnoreCase(outcome)) {
+                        ticket.status = "APPROVED";
+                        ticket.currentStepName = "Tự động phê duyệt";
+                    } else if ("COMPLETED".equalsIgnoreCase(outcome) || "RESOLVED".equalsIgnoreCase(outcome)) {
+                        ticket.status = "COMPLETED";
+                        ticket.currentStepName = "Hoàn tất";
+                    } else {
+                        ticket.status = "APPROVED";
+                        ticket.currentStepName = "Hoàn tất";
+                    }
                     ticket.resolvedAt = instance.completedAt != null ? instance.completedAt : Instant.now();
-                } else if ("REJECTED".equalsIgnoreCase(instance.status) || "FAILED".equalsIgnoreCase(instance.status)) {
-                    ticket.status = "REJECTED";
-                    ticket.currentStepName = "Từ chối";
+                } else if ("FAILED".equalsIgnoreCase(instance.status)) {
+                    ticket.status = "PROCESSING_ERROR";
+                    ticket.currentStepName = "Lỗi xử lý hệ thống";
                     ticket.resolvedAt = instance.completedAt != null ? instance.completedAt : Instant.now();
                 } else if ("CANCELLED".equalsIgnoreCase(instance.status)) {
                     ticket.status = "CANCELLED";
@@ -303,7 +318,7 @@ public class TicketService {
             throw ApiException.forbidden("Bạn chỉ có thể hủy yêu cầu do chính mình tạo");
         }
 
-        if (Set.of("APPROVED", "REJECTED", "CANCELLED").contains(ticket.status)) {
+        if (Set.of("APPROVED", "REJECTED", "CANCELLED", "PAID", "COMPLETED", "RESOLVED").contains(ticket.status)) {
             throw ApiException.badRequest("TICKET_ALREADY_RESOLVED", "Không thể hủy yêu cầu đã hoàn tất hoặc đã đóng");
         }
 

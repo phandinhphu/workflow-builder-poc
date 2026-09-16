@@ -14,6 +14,7 @@ import {
   Tag,
   Layers,
   Sparkles,
+  AlertCircle,
 } from 'lucide-react';
 import { api } from '../api/client';
 import type { TicketSummary, TicketStatus } from '../types/ticket';
@@ -110,10 +111,30 @@ export default function TicketHub() {
             <CheckCircle2 className="w-3 h-3" /> Đã phê duyệt
           </span>
         );
+      case 'PAID':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+            <CheckCircle2 className="w-3 h-3" /> Đã giải ngân
+          </span>
+        );
+      case 'COMPLETED':
+      case 'RESOLVED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+            <CheckCircle2 className="w-3 h-3" /> Hoàn tất
+          </span>
+        );
       case 'REJECTED':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
             <XCircle className="w-3 h-3" /> Từ chối
+          </span>
+        );
+      case 'PROCESSING_ERROR':
+      case 'FAILED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+            <AlertCircle className="w-3 h-3" /> Lỗi xử lý
           </span>
         );
       case 'CANCELLED':
@@ -123,7 +144,11 @@ export default function TicketHub() {
           </span>
         );
       default:
-        return null;
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300">
+            <CheckCircle2 className="w-3 h-3" /> {status}
+          </span>
+        );
     }
   };
 
@@ -299,7 +324,7 @@ export default function TicketHub() {
             </div>
 
             <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto">
-              {['ALL', 'SUBMITTED', 'IN_REVIEW', 'APPROVED', 'REJECTED', 'CANCELLED'].map((st) => (
+              {['ALL', 'SUBMITTED', 'IN_REVIEW', 'APPROVED', 'PAID', 'COMPLETED', 'REJECTED', 'CANCELLED'].map((st) => (
                 <button
                   key={st}
                   onClick={() => setStatusFilter(st)}
@@ -313,6 +338,8 @@ export default function TicketHub() {
                   {st === 'SUBMITTED' && 'Mới gửi'}
                   {st === 'IN_REVIEW' && 'Đang xử lý'}
                   {st === 'APPROVED' && 'Đã duyệt'}
+                  {st === 'PAID' && 'Đã giải ngân'}
+                  {st === 'COMPLETED' && 'Hoàn tất'}
                   {st === 'REJECTED' && 'Từ chối'}
                   {st === 'CANCELLED' && 'Đã hủy'}
                 </button>
