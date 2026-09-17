@@ -74,9 +74,11 @@ export default function TaskApprovalModal({
     CLAIMED: 'bg-blue-100 text-blue-800 border-blue-200',
     COMPLETED: 'bg-emerald-100 text-emerald-800 border-emerald-200',
     REJECTED: 'bg-rose-100 text-rose-800 border-rose-200',
+    CANCELLED: 'bg-gray-100 text-gray-700 border-gray-200',
   };
 
-  const isCompleted = task.status === 'COMPLETED' || task.status === 'REJECTED';
+  const isCancelled = task.status === 'CANCELLED';
+  const isClosed = task.status === 'COMPLETED' || task.status === 'REJECTED' || isCancelled;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
@@ -294,8 +296,17 @@ export default function TaskApprovalModal({
             </div>
           )}
 
-          {/* ACTION COMMENT AREA (IF NOT COMPLETED) */}
-          {!isCompleted && (
+          {/* CANCELLED BANNER */}
+          {isCancelled && (
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-center">
+              <p className="text-sm font-semibold text-gray-600">
+                Nhiệm vụ này đã bị hủy theo phiếu yêu cầu. Bạn chỉ có thể xem lại thông tin.
+              </p>
+            </div>
+          )}
+
+          {/* ACTION COMMENT AREA (IF NOT CLOSED) */}
+          {!isClosed && (
             <div className="space-y-2 border-t border-gray-100 pt-4">
               <label htmlFor="approval-comment" className="block text-xs font-bold text-gray-700 uppercase">
                 Ý kiến / Nhận xét của Người duyệt:
@@ -337,7 +348,7 @@ export default function TaskApprovalModal({
             Đóng
           </button>
 
-          {!isCompleted && isApprovalOrReview && (
+          {!isClosed && isApprovalOrReview && (
             <div className="flex items-center gap-3">
               <button
                 type="button"

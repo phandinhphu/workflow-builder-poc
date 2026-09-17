@@ -119,17 +119,22 @@ function buildWorkflowNodes(wf?: ReturnType<typeof getWorkflow>): { nodes: Node[
       position: { x: 300, y: 50 },
       deletable: false,
     };
-    const endNode: Node = {
-      id: 'end-1',
-      type: 'custom',
-      data: { label: 'Kết thúc', nodeType: 'end' },
-      position: { x: 300, y: 210 },
-      deletable: false,
-    };
+    // const endNode: Node = {
+    //   id: 'end-1',
+    //   type: 'custom',
+    //   data: { label: 'Kết thúc', nodeType: 'end' },
+    //   position: { x: 300, y: 210 },
+    //   deletable: false,
+    // };
+    // return {
+    //   nodes: [startNode, endNode],
+    //   edges: [{ id: 'e-1', source: 'start-1', target: 'end-1', sourceHandle: 'SUCCESS', animated: true, data: { label: '' } }],
+    // };
+
     return {
-      nodes: [startNode, endNode],
-      edges: [{ id: 'e-1', source: 'start-1', target: 'end-1', sourceHandle: 'SUCCESS', animated: true, data: { label: '' } }],
-    };
+      nodes: [startNode],
+      edges: [],
+    }
   }
 
   const endCount = persisted.filter(n => n.type === 'END').length;

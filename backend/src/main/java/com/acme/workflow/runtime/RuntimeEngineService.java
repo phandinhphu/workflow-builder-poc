@@ -828,6 +828,13 @@ public class RuntimeEngineService {
                     t.completedAt = now;
                     tasks.save(t);
                 });
+        executions.findByInstanceIdOrderByExecutionOrderAsc(instanceId).stream()
+                .filter(ne -> Set.of("WAITING", "RUNNING").contains(ne.state))
+                .forEach(ne -> {
+                    ne.state = "CANCELLED";
+                    ne.completedAt = now;
+                    executions.save(ne);
+                });
         participants.findByInstanceIdOrderByStartedAtAsc(instanceId).stream()
                 .filter(p -> Set.of("NOT_STARTED", "IN_PROGRESS").contains(p.status)).forEach(p -> {
                     p.status = "CANCELLED";

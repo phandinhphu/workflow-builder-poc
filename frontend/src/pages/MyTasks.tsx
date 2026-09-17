@@ -10,6 +10,7 @@ const STATUS_BADGES: Record<string, { label: string; color: string }> = {
   IN_PROGRESS: { label: 'In Progress', color: 'bg-purple-100 text-purple-700' },
   COMPLETED: { label: 'Completed', color: 'bg-green-100 text-green-700' },
   REJECTED: { label: 'Rejected', color: 'bg-red-100 text-red-700' },
+  CANCELLED: { label: 'Cancelled', color: 'bg-gray-100 text-gray-500 border border-gray-200' },
 };
 
 const PRIORITY_BADGES: Record<string, { label: string; color: string }> = {
@@ -116,7 +117,7 @@ export default function MyTasksPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <div className="bg-white border rounded-lg p-4">
           <p className="text-2xl font-bold text-gray-900">{total}</p>
           <p className="text-xs text-gray-500">Total Tasks</p>
@@ -133,6 +134,10 @@ export default function MyTasksPage() {
           <p className="text-2xl font-bold text-red-600">{(tasks as any[]).filter((t: any) => t.status === 'REJECTED').length}</p>
           <p className="text-xs text-gray-500">Rejected</p>
         </div>
+        <div className="bg-white border rounded-lg p-4">
+          <p className="text-2xl font-bold text-gray-500">{(tasks as any[]).filter((t: any) => t.status === 'CANCELLED').length}</p>
+          <p className="text-xs text-gray-500">Cancelled</p>
+        </div>
       </div>
 
       <div className="bg-white border rounded-lg p-4 mb-6">
@@ -146,6 +151,7 @@ export default function MyTasksPage() {
               <option value="IN_PROGRESS">In Progress</option>
               <option value="COMPLETED">Completed</option>
               <option value="REJECTED">Rejected</option>
+              <option value="CANCELLED">Cancelled</option>
             </select>
           </div>
           <div>
@@ -200,8 +206,9 @@ export default function MyTasksPage() {
           </thead>
           <tbody className="divide-y divide-gray-200">
             {filteredTasks.map((task: any, index: number) => {
-              const isOverdue = task.dueAt && new Date(task.dueAt) < new Date() && task.status !== 'COMPLETED';
+              const isOverdue = task.dueAt && new Date(task.dueAt) < new Date() && task.status !== 'COMPLETED' && task.status !== 'CANCELLED';
               const isApproval = task.taskType === 'APPROVAL' || task.taskType === 'REVIEW';
+              const isClosedOrCancelled = task.status === 'COMPLETED' || task.status === 'REJECTED' || task.status === 'CANCELLED';
               return (
                 <tr key={task.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
@@ -260,19 +267,23 @@ export default function MyTasksPage() {
                       {isApproval ? (
                         <button
                           onClick={() => openTask(task)}
-                          className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-md text-xs font-bold inline-flex items-center gap-1 transition-colors"
-                          title="Mở form xem và duyệt"
+                          className={`px-2.5 py-1 border rounded-md text-xs font-bold inline-flex items-center gap-1 transition-colors ${
+                            task.status === 'CANCELLED'
+                              ? 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200'
+                              : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200'
+                          }`}
+                          title={task.status === 'CANCELLED' ? 'Xem chi tiết (Đã hủy)' : isClosedOrCancelled ? 'Xem lại kết quả' : 'Mở form xem và duyệt'}
                         >
                           <Eye className="w-3.5 h-3.5" />
-                          {task.status === 'COMPLETED' || task.status === 'REJECTED' ? 'Xem lại' : 'Duyệt'}
+                          {isClosedOrCancelled ? 'Xem lại' : 'Duyệt'}
                         </button>
                       ) : (
                         <>
-                          {(hasTaskBeenClaimed(task) || task.status === 'PENDING') && (
+                          {(hasTaskBeenClaimed(task) || task.status === 'PENDING' || task.status === 'CANCELLED') && (
                             <button
                               onClick={() => openTask(task)}
                               className="p-1 hover:bg-gray-100 rounded text-gray-600"
-                              title="Mở task để xử lý"
+                              title={task.status === 'CANCELLED' ? 'Xem task đã hủy' : 'Mở task để xử lý'}
                             >
                               <Eye className="w-4 h-4" />
                             </button>

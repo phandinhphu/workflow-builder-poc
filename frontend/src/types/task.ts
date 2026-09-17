@@ -8,7 +8,7 @@ import type { CompletionPolicyConfig } from './workflow';
 import type { JSONSchema } from './schema';
 import type { SlaConfig, DurationUnit } from './sla';
 
-export type TaskStatus = 'PENDING' | 'CLAIMED' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'EXPIRED' | 'EXPIRING';
+export type TaskStatus = 'PENDING' | 'CLAIMED' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'EXPIRED' | 'EXPIRING' | 'CANCELLED';
 
 export type TaskPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 

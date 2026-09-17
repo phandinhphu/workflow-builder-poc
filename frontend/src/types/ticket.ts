@@ -35,7 +35,7 @@ export interface TicketTimelineNode {
   nodeId: string;
   nodeName: string;
   nodeType: string;
-  state: 'COMPLETED' | 'RUNNING' | 'FAILED' | 'PENDING';
+  state: 'COMPLETED' | 'RUNNING' | 'FAILED' | 'PENDING' | 'CANCELLED' | 'WAITING' | string;
   outcomePort?: string;
   startedAt: string;
   completedAt?: string;

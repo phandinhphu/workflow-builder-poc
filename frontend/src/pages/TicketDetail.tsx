@@ -301,13 +301,17 @@ export default function TicketDetailPage() {
                 {ticket.timeline.map((item, idx) => {
                   const isRejected = item.action === 'REJECTED' || item.outcomePort === 'REJECTED';
                   const isFailed = item.state === 'FAILED';
-                  const isRunning = item.state === 'RUNNING';
-                  const isCompleted = item.state === 'COMPLETED' && !isRejected;
+                  const isCancelled = item.action === 'CANCELLED' || item.state === 'CANCELLED' || (ticket.status === 'CANCELLED' && (item.state === 'WAITING' || item.state === 'RUNNING'));
+                  const isRunning = item.state === 'RUNNING' && !isCancelled;
+                  const isCompleted = item.state === 'COMPLETED' && !isRejected && !isCancelled;
 
                   let badgeText = item.state as string;
                   let badgeClass = 'bg-gray-200 text-gray-700';
 
-                  if (isRejected) {
+                  if (isCancelled) {
+                    badgeText = 'ĐÃ HỦY';
+                    badgeClass = 'bg-gray-100 text-gray-600 border border-gray-200 font-semibold';
+                  } else if (isRejected) {
                     badgeText = 'TỪ CHỐI';
                     badgeClass = 'bg-rose-100 text-rose-800 border border-rose-200 font-bold';
                   } else if (item.action === 'APPROVED' || item.outcomePort === 'APPROVED') {
@@ -335,7 +339,9 @@ export default function TicketDetailPage() {
                       {/* Node Icon Circle */}
                       <div
                         className={`absolute -left-6 top-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ring-4 ring-white ${
-                          isRejected
+                          isCancelled
+                            ? 'bg-gray-300 text-gray-600'
+                            : isRejected
                             ? 'bg-rose-500 text-white'
                             : isCompleted
                             ? 'bg-emerald-500 text-white'
@@ -346,10 +352,11 @@ export default function TicketDetailPage() {
                             : 'bg-gray-200 text-gray-600'
                         }`}
                       >
-                        {isRejected && <X className="w-3 h-3 stroke-[3]" />}
-                        {!isRejected && isCompleted && <Check className="w-3 h-3 stroke-[2.5]" />}
-                        {isRunning && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
-                        {isFailed && !isRejected && <span className="text-xs">×</span>}
+                        {isCancelled && <Ban className="w-3 h-3 stroke-[2.5]" />}
+                        {!isCancelled && isRejected && <X className="w-3 h-3 stroke-[3]" />}
+                        {!isCancelled && !isRejected && isCompleted && <Check className="w-3 h-3 stroke-[2.5]" />}
+                        {!isCancelled && isRunning && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
+                        {!isCancelled && isFailed && !isRejected && <span className="text-xs">×</span>}
                       </div>
 
                       <div className="bg-gray-50/70 p-3.5 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors">

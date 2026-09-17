@@ -510,6 +510,10 @@ public class TicketService {
                             .map(u -> u.displayName).orElse(task.assigneeId);
                 }
                 item.action = task.status;
+                if ("CANCELLED".equalsIgnoreCase(task.status) || "CANCELLED".equalsIgnoreCase(ne.state)) {
+                    item.state = "CANCELLED";
+                    item.action = "CANCELLED";
+                }
                 if (ne.outputData != null && !ne.outputData.isBlank()) {
                     JsonNode out = jsons.read(ne.outputData);
                     if (out.has("comment")) {
@@ -518,7 +522,9 @@ public class TicketService {
                 }
             } else {
                 item.nodeName = resolveFriendlyNodeName(ne.nodeId, ne.nodeType, nodeNamesFromDef);
-                if ("REJECTED".equalsIgnoreCase(ne.outcomePort)) {
+                if ("CANCELLED".equalsIgnoreCase(ne.state)) {
+                    item.action = "CANCELLED";
+                } else if ("REJECTED".equalsIgnoreCase(ne.outcomePort)) {
                     item.action = "REJECTED";
                 } else if ("COMPLETED".equalsIgnoreCase(ne.state)) {
                     item.action = "COMPLETED";
