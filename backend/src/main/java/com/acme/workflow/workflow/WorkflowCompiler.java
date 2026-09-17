@@ -20,6 +20,7 @@ public class WorkflowCompiler {
             "NOTIFICATION", "SYSTEM", "HTTP", "DATA", "DATA_TRANSFORM", "TIMER",
             "WAIT_EVENT", "PARALLEL_SPLIT", "JOIN", "SUBWORKFLOW");
 
+    @org.springframework.beans.factory.annotation.Autowired
     public WorkflowCompiler(com.acme.workflow.workflowtype.validator.WorkflowTypeRuleEngine typeRuleEngine) {
         this.typeRuleEngine = typeRuleEngine;
     }

@@ -84,10 +84,30 @@ export default function TicketDetailPage() {
             <CheckCircle2 className="w-3.5 h-3.5" /> Đã phê duyệt
           </span>
         );
+      case 'PAID':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+            <CheckCircle2 className="w-3.5 h-3.5" /> Đã giải ngân
+          </span>
+        );
+      case 'COMPLETED':
+      case 'RESOLVED':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-teal-100 text-teal-800 border border-teal-200">
+            <CheckCircle2 className="w-3.5 h-3.5" /> Hoàn tất
+          </span>
+        );
       case 'REJECTED':
         return (
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
             <XCircle className="w-3.5 h-3.5" /> Từ chối
+          </span>
+        );
+      case 'PROCESSING_ERROR':
+      case 'FAILED':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
+            <AlertCircle className="w-3.5 h-3.5" /> Lỗi xử lý
           </span>
         );
       case 'CANCELLED':
@@ -97,7 +117,11 @@ export default function TicketDetailPage() {
           </span>
         );
       default:
-        return null;
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-800 border border-slate-300">
+            <CheckCircle2 className="w-3.5 h-3.5" /> {status}
+          </span>
+        );
     }
   };
 
@@ -286,9 +310,15 @@ export default function TicketDetailPage() {
                   if (isRejected) {
                     badgeText = 'TỪ CHỐI';
                     badgeClass = 'bg-rose-100 text-rose-800 border border-rose-200 font-bold';
-                  } else if (item.action === 'APPROVED') {
+                  } else if (item.action === 'APPROVED' || item.outcomePort === 'APPROVED') {
                     badgeText = 'ĐÃ DUYỆT';
                     badgeClass = 'bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold';
+                  } else if (item.action === 'PAID' || item.outcomePort === 'PAID') {
+                    badgeText = 'ĐÃ GIẢI NGÂN';
+                    badgeClass = 'bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold';
+                  } else if (item.action === 'AUTO_APPROVED' || item.outcomePort === 'AUTO_APPROVED') {
+                    badgeText = 'TỰ ĐỘNG DUYỆT';
+                    badgeClass = 'bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold';
                   } else if (isCompleted) {
                     badgeText = 'HOÀN THÀNH';
                     badgeClass = 'bg-emerald-50 text-emerald-700 border border-emerald-100';

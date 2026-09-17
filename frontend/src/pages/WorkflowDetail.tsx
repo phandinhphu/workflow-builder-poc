@@ -5,8 +5,10 @@ import clsx from 'clsx';
 import VersionHistoryModal from '../components/VersionHistoryModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Toast, { useToasts } from '../components/Toast';
+import AccessDeniedState from '../components/AccessDeniedState';
 import { getWorkflow, getInstancesByWorkflow, userDisplayName, hasRunningInstances, workflowVersions, scopeDescription } from '../data/mockData';
 import { api } from '../api/client';
+import { getModuleBadgeStyle, getModuleName, normalizeModuleId } from '../utils/moduleUtils';
 
 export default function WorkflowDetail() {
   const { id } = useParams();
@@ -20,12 +22,18 @@ export default function WorkflowDetail() {
 
   if (!workflow) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-6 text-gray-500">
-        <p className="text-sm mb-4">Không tìm thấy workflow</p>
-        <Link to="/workflows" className="text-sm font-medium text-primary hover:underline">Quay lại danh sách</Link>
-      </div>
+      <AccessDeniedState
+        title="Không tìm thấy Workflow"
+        message="Workflow không tồn tại hoặc bạn không có quyền truy cập theo phân quyền Module."
+        backUrl="/workflows"
+        backLabel="Quay lại danh sách Workflow"
+      />
     );
   }
+
+  const modId = normalizeModuleId(workflow.module);
+  const modName = getModuleName(modId);
+  const modBadgeStyle = getModuleBadgeStyle(modId);
 
   const statusLabel = workflow.status === 'PUBLISHED' ? 'Published' : workflow.status === 'SUSPENDED' ? 'Suspended' : 'Draft';
   const statusBadge =
@@ -139,7 +147,9 @@ export default function WorkflowDetail() {
                   </div>
                   <div>
                     <span className="block text-xs text-muted mb-1 uppercase tracking-wide">Module</span>
-                    <span className="text-sm font-medium text-navy">{workflow.module || '—'}</span>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${modBadgeStyle}`}>
+                      {modName} ({modId})
+                    </span>
                   </div>
                   <div>
                     <span className="block text-xs text-muted mb-1 uppercase tracking-wide">Người sở hữu</span>

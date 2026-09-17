@@ -5,7 +5,12 @@ export type TicketStatus =
   | 'IN_REVIEW'
   | 'APPROVED'
   | 'REJECTED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'PAID'
+  | 'COMPLETED'
+  | 'RESOLVED'
+  | 'PROCESSING_ERROR'
+  | string;
 
 export interface TicketSummary {
   id: string;

@@ -82,8 +82,8 @@ const initialState: DesignerPanelState = {
   workflowData: {
     name: '',
     description: '',
-    type: 'Approval',
-    module: 'Operations',
+    type: 'APPROVAL',
+    module: 'MOD_GENERAL',
     owner: '',
     version: '1.0',
     status: 'DRAFT',

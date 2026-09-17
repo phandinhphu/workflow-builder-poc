@@ -31,6 +31,50 @@ function executionLabel(executions: any[]): string {
 function buildFlowNodes(instanceStatus: string, workflow?: WorkflowDefinition, nodeExecutions: any[] = []): { nodes: Node[]; edges: Edge[] } {
   if (!workflow?.nodes?.length) return { nodes: [], edges: [] };
 
+  const hasExplicitStart = workflow.nodes.some(node => node.type === 'START');
+  const hasExplicitEnd = workflow.nodes.some(node => node.type === 'END');
+
+  if (hasExplicitStart && hasExplicitEnd) {
+    const nodes: Node[] = workflow.nodes.map(node => {
+      const execs = nodeExecutions.filter(execution => execution.nodeId === node.id);
+      let subLabel = executionLabel(execs);
+      if (node.type === 'START' && execs.length === 0) {
+        subLabel = 'Hoàn tất';
+      }
+      return {
+        id: node.id,
+        type: 'custom',
+        position: node.position,
+        data: {
+          label: node.name,
+          nodeType: designerNodeType(node.type),
+          subLabel,
+          ...node.config,
+        },
+      };
+    });
+
+    const edges: Edge[] = workflow.connections.map(connection => {
+      const sourceExecution = nodeExecutions.filter(execution => execution.nodeId === connection.sourceNodeId).at(-1);
+      const active = ['WAITING', 'RUNNING'].includes(sourceExecution?.state);
+      return {
+        id: connection.id,
+        source: connection.sourceNodeId,
+        target: connection.targetNodeId,
+        sourceHandle: connection.sourcePort?.toLowerCase() === 'false' ? 'false' :
+                      connection.sourcePort?.toLowerCase() === 'true' ? 'true' :
+                      connection.sourcePort?.toUpperCase() === 'APPROVED' ? 'APPROVED' :
+                      connection.sourcePort?.toUpperCase() === 'REJECTED' ? 'REJECTED' :
+                      undefined,
+        label: connection.label,
+        animated: active,
+        style: { strokeDasharray: active ? '5 5' : undefined },
+      };
+    });
+
+    return { nodes, edges };
+  }
+
   const minY = Math.min(...workflow.nodes.map(node => node.position.y));
   const maxY = Math.max(...workflow.nodes.map(node => node.position.y));
   const averageX = workflow.nodes.reduce((sum, node) => sum + node.position.x, 0) / workflow.nodes.length;

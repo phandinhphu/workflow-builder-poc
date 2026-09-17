@@ -88,13 +88,15 @@ public class RuntimeQueryService {
     private Map<String,Object>participantMap(ParticipantExecutionEntity p){Map<String,Object>m=new LinkedHashMap<>();var user=users.findById(p.userId).orElse(null);List<WorkflowTaskEntity>history=tasks.findByParticipantExecutionIdOrderByCreatedAtDesc(p.id);WorkflowTaskEntity latest=history.isEmpty()?null:history.getFirst();WorkflowTaskEntity active=history.stream().filter(t->OPEN.contains(t.status)).findFirst().orElse(null);m.put("id",p.id);m.put("userId",p.userId);m.put("displayName",user==null?p.userId:user.displayName);m.put("department",user==null?null:organizations.findById(user.organizationUnitId).map(o->o.name).orElse(null));m.put("status",p.status);m.put("currentNodeId",p.currentNodeId);m.put("currentStepLabel",latest==null?null:latest.title);m.put("currentAssignee",active==null?null:users.findById(active.assigneeId).map(u->u.displayName).orElse(active.assigneeId));m.put("iterationNo",p.iterationNo);m.put("startedAt",p.startedAt);m.put("completedAt",p.completedAt);return m;}
     public List<Map<String,Object>>tasks(String status,String workflowId,String assigneeId){
         String actor=current.id();
+        boolean hasManageAll = permissions.has(actor,"TASK_MANAGE_ALL",null);
         String target=actor;
-        if(assigneeId!=null&&!assigneeId.isBlank()&&permissions.has(actor,"TASK_MANAGE_ALL",null)){
+        if(assigneeId!=null&&!assigneeId.isBlank()&&hasManageAll){
             target=assigneeId;
         }
         final String filterUserId=target;
+        final boolean viewAll = hasManageAll && (assigneeId == null || assigneeId.isBlank());
         List<WorkflowTaskEntity>source=tasks.findAllByOrderByCreatedAtDesc();
-        return source.stream().filter(t->filterUserId.equals(t.assigneeId)||filterUserId.equals(t.claimantId)||candidates.existsByTaskIdAndUserId(t.id,filterUserId)).filter(t->status==null||status.isBlank()||status.equals(t.status)).filter(t->workflowId==null||workflowId.isBlank()||instances.findById(t.instanceId).map(i->workflowId.equals(i.workflowId)).orElse(false)).sorted(Comparator.comparing((WorkflowTaskEntity t)->OPEN.contains(t.status)?0:1).thenComparing(t->t.dueAt,Comparator.nullsLast(Comparator.naturalOrder()))).map(this::taskMap).toList();
+        return source.stream().filter(t->viewAll || filterUserId.equals(t.assigneeId)||filterUserId.equals(t.claimantId)||candidates.existsByTaskIdAndUserId(t.id,filterUserId)).filter(t->status==null||status.isBlank()||status.equals(t.status)).filter(t->workflowId==null||workflowId.isBlank()||instances.findById(t.instanceId).map(i->workflowId.equals(i.workflowId)).orElse(false)).sorted(Comparator.comparing((WorkflowTaskEntity t)->OPEN.contains(t.status)?0:1).thenComparing(t->t.dueAt,Comparator.nullsLast(Comparator.naturalOrder()))).map(this::taskMap).toList();
     }
     private Map<String,Object>taskMap(WorkflowTaskEntity t){
         WorkflowInstanceEntity i = instances.findById(t.instanceId).orElseThrow();

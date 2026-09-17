@@ -3,25 +3,32 @@ import { XMarkIcon } from '@heroicons/react/24/outline';
 import { useNavigate } from 'react-router-dom';
 import { orgUsers } from '../data/mockData';
 import { useAuthStore } from '../stores/authStore';
-import { api, type WorkflowTypeResponse } from '../api/client';
+import { api, type WorkflowTypeResponse, type ModuleResponse, type UserModuleAccessResponse } from '../api/client';
 import { FALLBACK_WORKFLOW_TYPES } from '../utils/workflowTypeUtils';
+import { FALLBACK_MODULES } from '../utils/moduleUtils';
 
 export default function CreateWorkflowModal({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const currentUser = useAuthStore((s) => s.currentUser);
+  const isAdmin = useAuthStore((s) => s.isAdmin());
+
   const [workflowTypes, setWorkflowTypes] = useState<WorkflowTypeResponse[]>(FALLBACK_WORKFLOW_TYPES);
   const [loadingTypes, setLoadingTypes] = useState(false);
+
+  const [modules, setModules] = useState<(ModuleResponse | UserModuleAccessResponse)[]>(FALLBACK_MODULES as any);
+  const [loadingModules, setLoadingModules] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     type: 'APPROVAL',
-    module: 'Operations',
+    module: 'MOD_GENERAL',
     owner: currentUser?.id ?? (orgUsers[0]?.id || 'U000'),
     version: '1.0',
     executionPattern: 'ON_DEMAND',
   });
 
+  // Load workflow types
   useEffect(() => {
     let mounted = true;
     setLoadingTypes(true);
@@ -30,9 +37,8 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
         if (mounted && types && types.length > 0) {
           const sorted = [...types].sort((a, b) => a.sortOrder - b.sortOrder);
           setWorkflowTypes(sorted);
-          // Default to first non-CUSTOM type if available, else first type
-          const firstNonCustom = sorted.find(t => t.id !== 'CUSTOM') || sorted[0];
-          setFormData(prev => ({
+          const firstNonCustom = sorted.find((t) => t.id !== 'CUSTOM') || sorted[0];
+          setFormData((prev) => ({
             ...prev,
             type: prev.type || firstNonCustom.id,
           }));
@@ -49,6 +55,47 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
       mounted = false;
     };
   }, []);
+
+  // Load accessible modules
+  useEffect(() => {
+    let mounted = true;
+    setLoadingModules(true);
+    const fetchModulesPromise = isAdmin ? api.modules.list() : api.modules.myModules();
+
+    fetchModulesPromise
+      .then((data) => {
+        if (mounted && data && data.length > 0) {
+          // Filter to modules where user can create/edit workflows (EDITOR or MANAGER, or all if Admin)
+          const editableModules = isAdmin
+            ? data
+            : (data as UserModuleAccessResponse[]).filter(
+                (m) => m.accessLevel === 'EDITOR' || m.accessLevel === 'MANAGER'
+              );
+
+          const finalModules = editableModules.length > 0 ? editableModules : data;
+          setModules(finalModules);
+
+          const firstModId =
+            'moduleId' in finalModules[0] ? finalModules[0].moduleId : finalModules[0].id;
+          setFormData((prev) => ({
+            ...prev,
+            module: prev.module && finalModules.some((m) => ('moduleId' in m ? m.moduleId : m.id) === prev.module)
+              ? prev.module
+              : firstModId,
+          }));
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load modules from API, using fallback:', err);
+      })
+      .finally(() => {
+        if (mounted) setLoadingModules(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [isAdmin]);
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,7 +130,7 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const selectedTypeObj = workflowTypes.find(t => t.id === formData.type);
+  const selectedTypeObj = workflowTypes.find((t) => t.id === formData.type);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
@@ -159,17 +206,26 @@ export default function CreateWorkflowModal({ onClose }: { onClose: () => void }
                 )}
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Phân loại bộ phận</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Module áp dụng <span className="text-danger">*</span>
+                </label>
                 <select
                   name="module"
+                  required
                   value={formData.module}
                   onChange={handleChange}
+                  disabled={loadingModules}
                   className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
                 >
-                  <option value="Operations">Vận hành (Operations)</option>
-                  <option value="HR">Nhân sự (HR)</option>
-                  <option value="Finance">Tài chính (Finance)</option>
-                  <option value="IT">Công nghệ thông tin (IT)</option>
+                  {modules.map((m) => {
+                    const id = 'moduleId' in m ? m.moduleId : m.id;
+                    const name = 'moduleName' in m ? m.moduleName : m.name;
+                    return (
+                      <option key={id} value={id}>
+                        {name} ({id})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             </div>

@@ -16,6 +16,7 @@ import {
   Layers,
   Sparkles,
   ShieldCheck,
+  StopCircle,
 } from 'lucide-react';
 import { useDesignerStore } from '../stores/designerStore';
 import { toBackendNodeType } from '../utils/workflowTypeUtils';
@@ -45,6 +46,7 @@ const ALL_NODE_CATEGORIES = [
       { type: 'condition', label: 'Điều kiện (IF / ELSE)', description: 'Chuyển hướng luồng dữ liệu theo điều kiện', icon: GitBranch },
       { type: 'parallel_split', label: 'Phân nhánh song song', description: 'Kích hoạt nhiều path xử lý song song từ cùng 1 điểm', icon: ArrowLeftRight },
       { type: 'join', label: 'Đồng bộ nhánh', description: 'Đợi tất cả nhánh song song hoàn thành rồi tiếp tục', icon: ArrowRightLeft },
+      { type: 'end', label: 'Kết thúc (End)', description: 'Điểm kết thúc quy trình với kết quả cụ thể (Phê duyệt, Từ chối, Giải ngân,...)', icon: StopCircle },
     ]
   },
   {

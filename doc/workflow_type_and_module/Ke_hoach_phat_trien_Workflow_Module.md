@@ -62,9 +62,9 @@ graph TD
    - Cấp quyền truy cập Module tương ứng cho các user quản lý nghiệp vụ hiện hữu.
 
 #### 1.3. Tiêu chí hoàn thành (DoD)
-- [ ] Schema database mới được áp dụng hoàn tất.
-- [ ] 100% bản ghi workflow cũ được chuyển đổi thành công từ text sang `module_id` hợp lệ.
-- [ ] Script migration chạy an toàn, có khả năng rollback nếu có sự cố.
+- [x] Schema database mới được áp dụng hoàn tất.
+- [x] 100% bản ghi workflow cũ được chuyển đổi thành công từ text sang `module_id` hợp lệ.
+- [x] Script migration chạy an toàn, có khả năng rollback nếu có sự cố.
 
 ---
 
@@ -92,9 +92,9 @@ graph TD
    - **Xoá Workflow (`DELETE /api/workflows/{id}`)**: Chỉ cho phép khi có quyền xóa theo cả 2 lớp.
 
 #### 2.3. Tiêu chí hoàn thành (DoD)
-- [ ] User chỉ thấy các workflow thuộc Module mình được phân quyền khi gọi API danh sách.
-- [ ] User không thể truy cập trái phép workflow của Module khác thông qua việc truyền thẳng Workflow ID vào API chi tiết.
-- [ ] Admin có toàn quyền xem và quản trị workflow trên mọi Module.
+- [x] User chỉ thấy các workflow thuộc Module mình được phân quyền khi gọi API danh sách.
+- [x] User không thể truy cập trái phép workflow của Module khác thông qua việc truyền thẳng Workflow ID vào API chi tiết.
+- [x] Admin có toàn quyền xem và quản trị workflow trên mọi Module.
 
 ---
 
@@ -120,9 +120,9 @@ graph TD
    - Hiển thị màn hình thông báo thân thiện (403 Forbidden / Empty State) khi người dùng cố truy cập workflow thuộc Module mà mình không có quyền thông qua đường dẫn trực tiếp.
 
 #### 3.3. Tiêu chí hoàn thành (DoD)
-- [ ] Không còn ô nhập free-text cho trường Module trên toàn bộ ứng dụng Frontend.
-- [ ] Bộ lọc Module hoạt động mượt mà, phân trang và tìm kiếm kết hợp chính xác với bộ lọc Module.
-- [ ] Giao diện trực quan, rõ ràng, hiển thị badge module chuẩn theo thiết kế.
+- [x] Không còn ô nhập free-text cho trường Module trên toàn bộ ứng dụng Frontend.
+- [x] Bộ lọc Module hoạt động mượt mà, phân trang và tìm kiếm kết hợp chính xác với bộ lọc Module.
+- [x] Giao diện trực quan, rõ ràng, hiển thị badge module chuẩn theo thiết kế.
 
 ---
 

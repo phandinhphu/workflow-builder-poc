@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -74,21 +75,55 @@ public class TicketWorkflowEventListener {
         }
     }
 
+    private static final Map<String, TicketStatusMapping> OUTCOME_MAPPING = Map.of(
+            "APPROVED", new TicketStatusMapping("APPROVED", "Đã phê duyệt"),
+            "AUTO_APPROVED", new TicketStatusMapping("APPROVED", "Tự động phê duyệt"),
+            "SUCCESS", new TicketStatusMapping("APPROVED", "Hoàn tất"),
+            "REJECTED", new TicketStatusMapping("REJECTED", "Bị từ chối"),
+            "PAID", new TicketStatusMapping("PAID", "Đã giải ngân"),
+            "DISBURSED", new TicketStatusMapping("PAID", "Đã giải ngân"),
+            "COMPLETED", new TicketStatusMapping("COMPLETED", "Hoàn tất"),
+            "RESOLVED", new TicketStatusMapping("RESOLVED", "Đã xử lý"),
+            "CANCELLED", new TicketStatusMapping("CANCELLED", "Đã hủy")
+    );
+
+    record TicketStatusMapping(String ticketStatus, String stepLabel) {}
+
+    private boolean isFinalStatus(String status) {
+        return Set.of("APPROVED", "REJECTED", "CANCELLED", "PAID", "COMPLETED", "RESOLVED").contains(status);
+    }
+
     @EventListener
     @Transactional
     public void onInstanceCompleted(WorkflowRuntimeEvents.InstanceCompletedEvent event) {
         try {
             resolveTicket(event.instanceId()).ifPresent(ticket -> {
-                String outcome = event.status();
-                if ("COMPLETED".equalsIgnoreCase(outcome)) {
-                    ticket.status = "APPROVED";
-                    ticket.currentStepName = "Hoàn tất";
-                } else if ("REJECTED".equalsIgnoreCase(outcome) || "FAILED".equalsIgnoreCase(outcome)) {
-                    ticket.status = "REJECTED";
-                    ticket.currentStepName = "Từ chối";
-                } else if ("CANCELLED".equalsIgnoreCase(outcome)) {
+                if (isFinalStatus(ticket.status)) {
+                    log.debug("[TicketWorkflowEventListener] Ticket {} already in final status ({}), skip finalize",
+                            ticket.ticketCode, ticket.status);
+                    return;
+                }
+
+                String status = event.status() != null ? event.status().toUpperCase() : "COMPLETED";
+                String result = event.result() != null ? event.result().toUpperCase() : status;
+
+                if ("FAILED".equalsIgnoreCase(status)) {
+                    ticket.status = "PROCESSING_ERROR";
+                    ticket.currentStepName = "Lỗi xử lý hệ thống";
+                    log.warn("[TicketWorkflowEventListener] Instance {} failed with reason: {}",
+                            event.instanceId(), event.failureReason());
+                } else if ("CANCELLED".equalsIgnoreCase(status)) {
                     ticket.status = "CANCELLED";
                     ticket.currentStepName = "Đã hủy";
+                } else {
+                    TicketStatusMapping mapping = OUTCOME_MAPPING.get(result);
+                    if (mapping != null) {
+                        ticket.status = mapping.ticketStatus();
+                        ticket.currentStepName = mapping.stepLabel();
+                    } else {
+                        ticket.status = result;
+                        ticket.currentStepName = "Hoàn tất";
+                    }
                 }
                 ticket.resolvedAt = event.completedAt() != null ? event.completedAt() : Instant.now();
                 ticketRepository.save(ticket);

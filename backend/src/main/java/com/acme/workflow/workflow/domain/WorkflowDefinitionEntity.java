@@ -10,7 +10,7 @@ public class WorkflowDefinitionEntity {
     @Column(nullable=false) public String name;
     @Column(length=2000) public String description;
     @Column(name="workflow_type",nullable=false,length=100) public String workflowType;
-    @Column(name="module_name",length=100) public String moduleName;
+    @Column(name="module_id",nullable=false,length=50) public String moduleId;
     @Column(name="owner_id",nullable=false,length=36) public String ownerId;
     @Column(nullable=false,length=20) public String status;
     @Column(name="draft_version",nullable=false,length=30) public String draftVersion;

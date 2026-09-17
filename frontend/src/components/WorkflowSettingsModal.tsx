@@ -3,11 +3,13 @@ import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon, UsersIcon, CheckCircleIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 import { useDesignerStore } from '../stores/designerStore';
-import { getModuleOptions, orgUsers, resolveParticipantScope } from '../data/mockData';
+import { useAuthStore } from '../stores/authStore';
+import { orgUsers, resolveParticipantScope } from '../data/mockData';
 import type { WorkflowVariable } from '../types/workflow';
-import { api, type WorkflowTypeResponse } from '../api/client';
+import { api, type WorkflowTypeResponse, type ModuleResponse, type UserModuleAccessResponse } from '../api/client';
 import TypeSwitchWarningModal, { type ViolatingNodeItem } from './TypeSwitchWarningModal';
 import { FALLBACK_WORKFLOW_TYPES, toBackendNodeType } from '../utils/workflowTypeUtils';
+import { FALLBACK_MODULES, normalizeModuleId } from '../utils/moduleUtils';
 
 interface WorkflowSettingsModalProps {
   isOpen: boolean;
@@ -29,6 +31,9 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
   const [pendingTypeId, setPendingTypeId] = useState<string>('');
   const [violatingNodes, setViolatingNodes] = useState<ViolatingNodeItem[]>([]);
 
+  const isAdmin = useAuthStore((s) => s.isAdmin());
+  const [modules, setModules] = useState<(ModuleResponse | UserModuleAccessResponse)[]>(FALLBACK_MODULES as any);
+
   useEffect(() => {
     let mounted = true;
     api.workflowTypes.list(true)
@@ -40,8 +45,20 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
       .catch((err) => {
         console.warn('Could not load workflow types:', err);
       });
+
+    const fetchModulesPromise = isAdmin ? api.modules.list() : api.modules.myModules();
+    fetchModulesPromise
+      .then((data) => {
+        if (mounted && data && data.length > 0) {
+          setModules(data);
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load modules:', err);
+      });
+
     return () => { mounted = false; };
-  }, []);
+  }, [isAdmin]);
 
   const handleTypeSelect = async (targetTypeId: string) => {
     const upperTarget = targetTypeId.toUpperCase();
@@ -265,10 +282,18 @@ export default function WorkflowSettingsModal({ isOpen, onClose }: WorkflowSetti
                           <label className="block text-sm font-medium text-gray-700 mb-1">Module</label>
                           <select
                             className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary bg-white"
-                            value={workflowData.module || ''}
+                            value={normalizeModuleId(workflowData.module) || 'MOD_GENERAL'}
                             onChange={e => setWorkflowData({ module: e.target.value })}
                           >
-                            {getModuleOptions().map(m => <option key={m} value={m}>{m}</option>)}
+                            {modules.map((m) => {
+                              const id = 'moduleId' in m ? m.moduleId : m.id;
+                              const name = 'moduleName' in m ? m.moduleName : m.name;
+                              return (
+                                <option key={id} value={id}>
+                                  {name} ({id})
+                                </option>
+                              );
+                            })}
                           </select>
                         </div>
                       </div>

@@ -1088,18 +1088,33 @@ export default function NodeConfigPanel({
                     value={String(data.endType || 'SUCCESS')}
                     onChange={e => onUpdate({ endType: e.target.value })}
                   >
-                    <option value="SUCCESS">Thành công / Phê duyệt hoàn tất (APPROVED)</option>
+                    <option value="SUCCESS">Thành công / Phê duyệt (APPROVED)</option>
+                    <option value="AUTO_APPROVED">Tự động phê duyệt (AUTO_APPROVED)</option>
                     <option value="REJECTED">Từ chối / Hủy bỏ đơn (REJECTED)</option>
+                    <option value="PAID">Đã giải ngân / Chi tiền (PAID)</option>
+                    <option value="COMPLETED">Hoàn tất tác vụ (COMPLETED)</option>
                   </select>
                 </div>
 
                 {data.endType === 'REJECTED' ? (
                   <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
-                    ⚠️ <strong>Kết thúc Từ chối:</strong> Khi luồng xử lý tới Node này, Ticket liên kết sẽ được tự động cập nhật trạng thái là <strong>REJECTED</strong>.
+                    ⚠️ <strong>Kết thúc Từ chối:</strong> Khi luồng xử lý tới Node này, Ticket liên kết sẽ được tự động cập nhật trạng thái là <strong>REJECTED</strong> (Bị từ chối).
+                  </div>
+                ) : data.endType === 'PAID' ? (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
+                    💰 <strong>Kết thúc Đã giải ngân:</strong> Khi luồng xử lý tới Node này (sau bước chi tiền), Ticket sẽ được cập nhật trạng thái là <strong>PAID</strong> (Đã giải ngân).
+                  </div>
+                ) : data.endType === 'AUTO_APPROVED' ? (
+                  <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-800">
+                    ⚡ <strong>Tự động phê duyệt:</strong> Khi luồng rẽ nhánh điều kiện tự động duyệt, Ticket sẽ được đánh dấu hoàn tất với nhãn <strong>Tự động phê duyệt</strong>.
+                  </div>
+                ) : data.endType === 'COMPLETED' ? (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800">
+                    📋 <strong>Hoàn tất tác vụ:</strong> Khi luồng xử lý tới Node này, Ticket liên kết sẽ được cập nhật trạng thái là <strong>COMPLETED</strong> (Hoàn tất).
                   </div>
                 ) : (
                   <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800">
-                    ✅ <strong>Kết thúc Thành công:</strong> Khi luồng xử lý tới Node này, Ticket liên kết sẽ được hoàn tất và cập nhật trạng thái là <strong>APPROVED</strong>.
+                    ✅ <strong>Kết thúc Thành công:</strong> Khi luồng xử lý tới Node này, Ticket liên kết sẽ được hoàn tất và cập nhật trạng thái là <strong>APPROVED</strong> (Đã phê duyệt).
                   </div>
                 )}
               </div>
